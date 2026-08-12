@@ -1,7 +1,31 @@
 import SwiftUI
 
+enum PageBackground: String, CaseIterable, Identifiable {
+    case automatic
+    case black
+    case white
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .automatic: "Automatico"
+        case .black: "Nero"
+        case .white: "Bianco"
+        }
+    }
+}
+
 struct ColorThemeView: View {
     @ObservedObject private var theme = AppTheme.shared
+    @AppStorage("pageBackground") private var pageBackgroundRawValue = PageBackground.black.rawValue
+
+    private var pageBackground: Binding<PageBackground> {
+        Binding(
+            get: { PageBackground(rawValue: pageBackgroundRawValue) ?? .black },
+            set: { pageBackgroundRawValue = $0.rawValue }
+        )
+    }
 
     var body: some View {
         Form {
@@ -9,6 +33,17 @@ struct ColorThemeView: View {
                 colorRow(title: "Sfondo", hex: $theme.backgroundHex)
                 colorRow(title: "Testo", hex: $theme.textHex)
                 colorRow(title: "Colore evidenziazione", hex: $theme.accentHex)
+            }
+
+            Section(
+                header: Text("Lettura"),
+                footer: Text("Lo sfondo dietro le pagine nel lettore. \"Automatico\" segue la modalità chiara/scura di sistema.")
+            ) {
+                Picker("Sfondo pagina", selection: pageBackground) {
+                    ForEach(PageBackground.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
             }
 
             Section(

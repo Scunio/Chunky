@@ -59,6 +59,8 @@ private struct ReaderContentView: View {
     @State private var isToolsPresented = false
     @State private var isToolsICloudPresented = false
     @State private var isNowReadingPresented = false
+    @AppStorage("pageBackground") private var pageBackgroundRawValue = PageBackground.black.rawValue
+    @Environment(\.colorScheme) private var colorScheme
 
     /// Due pagine verticali affiancate su uno schermo stretto di iPhone lasciano un vuoto enorme
     /// sopra e sotto (l'immagine combinata è troppo larga rispetto all'altezza disponibile):
@@ -78,9 +80,31 @@ private struct ReaderContentView: View {
         Array(stride(from: 0, to: pageCount, by: pageStep))
     }
 
+    private var readerBackground: Color {
+        switch PageBackground(rawValue: pageBackgroundRawValue) ?? .black {
+        case .black: return .black
+        case .white: return .white
+        case .automatic: return colorScheme == .dark ? .black : .white
+        }
+    }
+
+    private var isBackgroundDark: Bool {
+        switch PageBackground(rawValue: pageBackgroundRawValue) ?? .black {
+        case .black: return true
+        case .white: return false
+        case .automatic: return colorScheme == .dark
+        }
+    }
+
+    /// L'header/footer/menu del reader erano pensati per uno sfondo sempre nero (testo/icone
+    /// bianche su pillole scure): con "Sfondo pagina" ora selezionabile anche bianco, questi
+    /// colori devono adattarsi o diventano illeggibili (bianco su bianco).
+    private var chromeForeground: Color { isBackgroundDark ? .white : .black }
+    private var chromePillBackground: Color { isBackgroundDark ? Color.black.opacity(0.45) : Color.white.opacity(0.75) }
+
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            readerBackground.ignoresSafeArea()
 
             if let provider = provider {
                 #if os(iOS)
@@ -94,12 +118,12 @@ private struct ReaderContentView: View {
                         .font(.largeTitle)
                         .foregroundColor(.yellow)
                     Text(loadError)
-                        .foregroundColor(.white)
+                        .foregroundColor(chromeForeground)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
                 }
             } else {
-                ProgressView().accentColor(.white)
+                ProgressView().accentColor(chromeForeground)
             }
 
             #if os(iOS)
@@ -127,7 +151,7 @@ private struct ReaderContentView: View {
                         Image(systemName: "arrowtriangle.right")
                     }
                     .font(.title2)
-                    .foregroundColor(.white.opacity(0.35))
+                    .foregroundColor(chromeForeground.opacity(0.35))
                     .padding(.horizontal, 14)
                     .allowsHitTesting(false)
                 }
@@ -407,10 +431,10 @@ private struct ReaderContentView: View {
                         .lineLimit(1)
                         .fixedSize()
                 }
-                .foregroundColor(.white)
+                .foregroundColor(chromeForeground)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Capsule().fill(Color.black.opacity(0.45)))
+                .background(Capsule().fill(chromePillBackground))
             }
             Menu {
                 Button(action: {
@@ -439,43 +463,43 @@ private struct ReaderContentView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis.bubble")
-                    .foregroundColor(.white)
+                    .foregroundColor(chromeForeground)
                     .padding(10)
-                    .background(Circle().fill(Color.black.opacity(0.45)))
+                    .background(Circle().fill(chromePillBackground))
             }
             Spacer()
             Text(comic.title ?? "")
                 .font(.subheadline.bold())
-                .foregroundColor(.white)
+                .foregroundColor(chromeForeground)
                 .lineLimit(1)
             Spacer()
             // Busta: apre la selezione riquadro, l'unico modo per condividere nell'originale
             // (si seleziona sempre un'area, non c'è un tasto "condividi tutta la pagina" a parte).
             Button(action: { isPanelSelectionPresented = true }) {
                 Image(systemName: "envelope")
-                    .foregroundColor(.white)
+                    .foregroundColor(chromeForeground)
                     .padding(10)
-                    .background(Circle().fill(Color.black.opacity(0.45)))
+                    .background(Circle().fill(chromePillBackground))
             }
             if isDoublePageAllowed {
                 Button(action: { isDoublePageEnabled.toggle() }) {
                     Image(systemName: isDoublePageEnabled ? "book.fill" : "book")
-                        .foregroundColor(.white)
+                        .foregroundColor(chromeForeground)
                         .padding(10)
-                        .background(Circle().fill(Color.black.opacity(0.45)))
+                        .background(Circle().fill(chromePillBackground))
                 }
             }
             Button(action: { isToolsICloudPresented = true }) {
                 Image(systemName: "icloud")
-                    .foregroundColor(.white)
+                    .foregroundColor(chromeForeground)
                     .padding(10)
-                    .background(Circle().fill(Color.black.opacity(0.45)))
+                    .background(Circle().fill(chromePillBackground))
             }
             Button(action: { isToolsPresented = true }) {
                 Image(systemName: "wrench.and.screwdriver")
-                    .foregroundColor(.white)
+                    .foregroundColor(chromeForeground)
                     .padding(10)
-                    .background(Circle().fill(Color.black.opacity(0.45)))
+                    .background(Circle().fill(chromePillBackground))
             }
         }
         .padding()
@@ -493,11 +517,11 @@ private struct ReaderContentView: View {
                         : "\(currentPage + 1) / \(provider.pageCount)"
                     Text(label)
                         .font(.caption.monospacedDigit())
-                        .foregroundColor(.white)
+                        .foregroundColor(chromeForeground)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
-                .background(Capsule().fill(Color.black.opacity(0.45)))
+                .background(Capsule().fill(chromePillBackground))
                 .padding(.horizontal, 40)
                 .padding(.bottom, 24)
             }
@@ -521,8 +545,8 @@ private struct ReaderContentView: View {
             GeometryReader { proxy in
                 let progress = maxValue > 0 ? CGFloat(currentPage) / CGFloat(maxValue) : 0
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.25))
-                    Capsule().fill(Color.white).frame(width: proxy.size.width * progress)
+                    Capsule().fill(chromeForeground.opacity(0.25))
+                    Capsule().fill(chromeForeground).frame(width: proxy.size.width * progress)
                 }
                 .frame(height: 4)
                 .frame(maxHeight: .infinity, alignment: .center)
