@@ -151,11 +151,15 @@ private struct ReaderContentView: View {
         ZStack {
             readerBackground.ignoresSafeArea()
 
+            // Ignora la safe area anche qui: altrimenti la dimensione misurata cambia insieme
+            // alla status bar quando i controlli vengono mostrati/nascosti, facendo scattare
+            // inutilmente effectiveDoublePage e spostando/ridimensionando la pagina.
             GeometryReader { proxy in
                 Color.clear
                     .onAppear { viewportSize = proxy.size }
                     .onChange(of: proxy.size) { viewportSize = $0 }
             }
+            .ignoresSafeArea()
             .allowsHitTesting(false)
 
             if let provider = provider {
@@ -189,7 +193,7 @@ private struct ReaderContentView: View {
             }
             #endif
 
-            if isControlsVisible {
+            if isControlsVisible && !isPanelSelectionPresented {
                 VStack {
                     header
                     Spacer()
@@ -233,7 +237,14 @@ private struct ReaderContentView: View {
             }
         }
         #if os(iOS)
-        .statusBar(hidden: !isControlsVisible)
+        // Su iPad uno swipe orizzontale che parte vicino al bordo inferiore rischia di essere
+        // rubato dal gesto di sistema (Dock/App Switcher). defersSystemGestures dà priorità
+        // alla nostra DragGesture di cambio pagina finché il tocco è in corso su quel bordo.
+        .modifier(DefersBottomSystemGesturesIfAvailable())
+        // Sempre nascosta, non legata a isControlsVisible: altrimenti la sua comparsa/scomparsa
+        // anima la safe area proprio mentre la pagina (sotto .ignoresSafeArea()) dovrebbe restare
+        // ferma, causando lo spostamento verticale visibile al mostrare/nascondere i controlli.
+        .statusBar(hidden: true)
         #endif
         .onAppear {
             loadComic()
@@ -248,6 +259,7 @@ private struct ReaderContentView: View {
         }
         .onChange(of: isDoublePageEnabled) { _ in realignCurrentPageToSpreadStart() }
         .onChange(of: isDoublePageAutoMode) { _ in realignCurrentPageToSpreadStart() }
+        .onChange(of: viewportSize) { _ in realignCurrentPageToSpreadStart() }
         #if os(iOS)
         .sheet(isPresented: $isSharePresented) {
             if let shareImage = shareImage {
@@ -722,15 +734,21 @@ private struct ReaderContentView: View {
                     ? "\(currentPage + 1)–\(upperBound) / \(provider.pageCount)"
                     : "\(currentPage + 1) / \(provider.pageCount)"
                 HStack(spacing: 4) {
-                    Text(label)
-                        .font(.caption.monospacedDigit())
-                    // Scambia quale metà (sopra/sotto) avanza/retrocede in modalità una mano.
-                    Button(action: { isOneHandedZonesReversed.toggle() }) {
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.bold))
-                            .rotationEffect(.degrees(isOneHandedZonesReversed ? 180 : 0))
-                            .frame(width: 20, height: 24)
+                    // Colonna a larghezza fissa: la larghezza del numero di pagina varia
+                    // (es. "1 / 20" vs "10–11 / 20") e senza pre-allocare lo spazio lo
+                    // slider accanto si sposterebbe ogni volta che cambia pagina.
+                    VStack(spacing: 0) {
+                        Text(label)
+                            .font(.caption.monospacedDigit())
+                        // Scambia quale metà (sopra/sotto) avanza/retrocede in modalità una mano.
+                        Button(action: { isOneHandedZonesReversed.toggle() }) {
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.bold))
+                                .rotationEffect(.degrees(isOneHandedZonesReversed ? 180 : 0))
+                                .frame(width: 20, height: 24)
+                        }
                     }
+                    .frame(width: 70)
                     pageSlider(provider: provider)
                     if isDoublePageAllowed {
                         // Cicla singola → doppia → automatica pagina.
@@ -1022,7 +1040,10 @@ private struct PageView: View {
                             .blur(radius: motionBlurRadius)
                             .overlay(tintOverlay)
                             .gesture(magnifyGesture)
-                            .gesture(dragGesture)
+                            // Attivo solo da zoomata: a scale 1 non deve intercettare il drag,
+                            // altrimenti ruba il tocco allo swipe-pagina sottostante (TabView
+                            // nativo o pager manuale) anche se poi non fa nulla (guard scale > 1).
+                            .gesture(dragGesture, including: scale > 1 ? .all : .subviews)
                             .onTapGesture(count: 2) { toggleZoom() }
                     }
                 } else {
@@ -1128,26 +1149,20 @@ private struct ActivityShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-/// Intercetta un pan a due dita (ignorando quelli a un dito, così non ruba i tap per cambiare
-/// pagina) per regolare la luminosità dello schermo, come "Two-finger-swipe brightness"
-/// nell'app originale.
+/// Intercetta un pan a due dita per regolare la luminosità dello schermo, come
+/// "Two-finger-swipe brightness" nell'app originale — senza rubare tocchi alle viste
+/// sottostanti (swipe pagina, tap zone, pinch-to-zoom).
 private struct TwoFingerBrightnessView: UIViewRepresentable {
     /// Delta verticale normalizzato (-1...1) da sommare alla luminosità corrente.
     let onChange: (CGFloat) -> Void
 
-    func makeUIView(context: Context) -> UIView {
-        let view = PassthroughUnlessTwoTouchesView()
-        view.backgroundColor = .clear
-        let recognizer = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
-        recognizer.minimumNumberOfTouches = 2
-        recognizer.maximumNumberOfTouches = 2
-        recognizer.cancelsTouchesInView = false
-        recognizer.delegate = context.coordinator
-        view.addGestureRecognizer(recognizer)
+    func makeUIView(context: Context) -> WindowPanRelayView {
+        let view = WindowPanRelayView()
+        view.coordinator = context.coordinator
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
+    func updateUIView(_ uiView: WindowPanRelayView, context: Context) {
         context.coordinator.onChange = onChange
     }
 
@@ -1166,7 +1181,7 @@ private struct TwoFingerBrightnessView: UIViewRepresentable {
             recognizer.setTranslation(.zero, in: view)
         }
 
-        /// Lascia passare anche i gesture di SwiftUI sotto (tap zone, swipe pagina):
+        /// Lascia passare anche i gesture di SwiftUI sotto (tap zone, swipe pagina, pinch):
         /// questo riconoscitore deve coesistere con quelli, non sostituirli.
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
@@ -1175,15 +1190,57 @@ private struct TwoFingerBrightnessView: UIViewRepresentable {
     }
 }
 
-/// Una UIView a schermo intero, se coperta da hit-testing normale, intercetta OGNI tocco
-/// (anche a un dito) perché è la vista più in alto: pur non avendo un gesture che riconosce
-/// un solo dito, il tocco resta comunque "catturato" qui e non arriva mai al TabView sotto
-/// (niente swipe pagina, niente tap zone). Restituendo nil da hitTest per i tocchi singoli,
-/// li lasciamo passare attraverso; solo con 2+ dita questa vista li intercetta davvero.
-private final class PassthroughUnlessTwoTouchesView: UIView {
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard let touches = event?.allTouches, touches.count >= 2 else { return nil }
-        return super.hitTest(point, with: event)
+/// Non intercetta mai l'hit-testing: un `hitTest` che a volte restituisce sé stesso e a volte
+/// nil (come faceva prima in base al numero di dita già premute) non funziona, perché un tocco
+/// viene assegnato in modo definitivo alla vista risultante dall'hit-test al suo `touchesBegan`
+/// — se il primo dito è già stato instradato al pager sottostante, "rubare" il secondo dito qui
+/// lo isola dal primo e nessun recognizer arriva mai a vedere entrambi i tocchi insieme (né
+/// questo pan, né il pinch-to-zoom della pagina sotto).
+///
+/// Il pan a due dita viene quindi agganciato alla finestra invece che a questa vista: la
+/// finestra è antenata di qualunque vista venga colpita dall'hit-test (pager, tap zone,
+/// immagine), quindi il suo recognizer riceve comunque entrambi i tocchi.
+private final class WindowPanRelayView: UIView {
+    weak var coordinator: TwoFingerBrightnessView.Coordinator?
+    private weak var recognizer: UIPanGestureRecognizer?
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { nil }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if let recognizer = recognizer {
+            recognizer.view?.removeGestureRecognizer(recognizer)
+            self.recognizer = nil
+        }
+        guard let window = window, let coordinator = coordinator else { return }
+        let recognizer = UIPanGestureRecognizer(
+            target: coordinator,
+            action: #selector(TwoFingerBrightnessView.Coordinator.handlePan(_:))
+        )
+        recognizer.minimumNumberOfTouches = 2
+        recognizer.maximumNumberOfTouches = 2
+        recognizer.cancelsTouchesInView = false
+        recognizer.delegate = coordinator
+        window.addGestureRecognizer(recognizer)
+        self.recognizer = recognizer
+    }
+
+    deinit {
+        if let recognizer = recognizer {
+            recognizer.view?.removeGestureRecognizer(recognizer)
+        }
+    }
+}
+
+/// `defersSystemGestures(on:)` esiste solo da iOS 16: sotto, nessun-op (l'unico effetto perso
+/// è la precedenza dello swipe-pagina sul gesto di sistema del Dock/App Switcher su iPad).
+private struct DefersBottomSystemGesturesIfAvailable: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 16.0, *) {
+            content.defersSystemGestures(on: .bottom)
+        } else {
+            content
+        }
     }
 }
 #endif

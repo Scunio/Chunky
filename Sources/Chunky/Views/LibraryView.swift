@@ -61,8 +61,33 @@ struct LibraryView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     leadingToolbarContent
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    trailingToolbarContent
+                // Ogni pulsante deve comparire come statement separato dentro il ViewBuilder di
+                // ToolbarItemGroup (non delegato a una singola "some View" come trailingToolbarContent):
+                // solo così iOS lo riconosce come item nativo distinto. Su iPhone, se non c'è
+                // spazio, iOS raggruppa gli item nel menu di overflow "•••" — funziona solo con
+                // item nativi distinti, non con un'unica view opaca (altrimenti il menu appare
+                // ma non apre nulla, il bug segnalato).
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    if isEditing {
+                        statusMenu
+                            .disabled(selectedIDs.isEmpty)
+                        groupMenu
+                            .disabled(selectedIDs.isEmpty)
+                        Button(action: deleteSelected) {
+                            Image(systemName: "trash")
+                        }
+                        .disabled(selectedIDs.isEmpty)
+                    } else {
+                        searchButton
+                        newComicsButton
+                        nowReadingButton
+                        if !isKioskModeEnabled {
+                            accountsLink
+                            toolsMenu
+                        } else {
+                            settingsLink
+                        }
+                    }
                 }
                 #else
                 ToolbarItem {

@@ -5,6 +5,7 @@ struct ChunkyApp: App {
     let persistenceController = PersistenceController.shared
     @StateObject private var libraryViewModel = LibraryViewModel()
     @ObservedObject private var lock = ParentalLock.shared
+    @ObservedObject private var theme = AppTheme.shared
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -31,6 +32,7 @@ struct ChunkyApp: App {
                             .background(BackgroundMaterialCompat().ignoresSafeArea())
                     }
                 }
+                .preferredColorScheme(theme.colorSchemeMode.colorScheme)
             }
         }
         .onChange(of: scenePhase) { phase in
