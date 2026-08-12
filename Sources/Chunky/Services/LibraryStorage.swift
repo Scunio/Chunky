@@ -10,6 +10,12 @@ enum LibraryStorage {
 
     nonisolated(unsafe) private static var cachedRootURL: URL?
 
+    /// True se l'utente ha iCloud Drive attivo e il container ubiquity dell'app è raggiungibile:
+    /// in tal caso i fumetti importati sincronizzano automaticamente su tutti i dispositivi.
+    static var isICloudAvailable: Bool {
+        FileManager.default.url(forUbiquityContainerIdentifier: ubiquityContainerID) != nil
+    }
+
     static func rootFolderURL() -> URL {
         if let cached = cachedRootURL {
             return cached

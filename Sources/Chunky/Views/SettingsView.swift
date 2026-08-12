@@ -107,6 +107,7 @@ struct SettingsView: View {
                 footer: Text("Se disattivato, la cartella dei fumetti non viene inclusa nei backup di iCloud/iTunes — utile per risparmiare spazio se hai già una copia altrove.")
             ) {
                 NavigationLink("Diagnostica", destination: DiagnosticsView())
+                NavigationLink("Stato iCloud", destination: ICloudStatusView())
                 Toggle("Includi fumetti nel backup", isOn: Binding(
                     get: { isIncludedInBackup },
                     set: { newValue in

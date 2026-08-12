@@ -23,6 +23,7 @@ struct LibraryView: View {
     @State private var isEditing = false
     @State private var selectedIDs: Set<NSManagedObjectID> = []
     @State private var collapsedGroups: Set<String> = []
+    @State private var isNowReadingPresented = false
 
     private static let ungroupedSectionTitle = "Altri fumetti"
 
@@ -110,6 +111,7 @@ struct LibraryView: View {
         } else {
             HStack {
                 displayModeButton
+                nowReadingButton
                 if !isKioskModeEnabled {
                     importButton
                     Button("Modifica") { isEditing = true }
@@ -129,6 +131,28 @@ struct LibraryView: View {
             displayMode = displayMode == .grouped ? .alphabetical : .grouped
         } label: {
             Image(systemName: displayMode == .grouped ? "square.grid.2x2" : "list.bullet")
+        }
+    }
+
+    /// Il fumetto aperto più di recente, se ce n'è almeno uno: alimenta il popover "Ora in lettura".
+    private var lastReadComic: ComicEntity? {
+        comics
+            .filter { $0.dateLastOpened != nil }
+            .max { ($0.dateLastOpened ?? .distantPast) < ($1.dateLastOpened ?? .distantPast) }
+    }
+
+    @ViewBuilder
+    private var nowReadingButton: some View {
+        if let comic = lastReadComic {
+            Button(action: { isNowReadingPresented = true }) {
+                Image(systemName: "book")
+            }
+            .popover(isPresented: $isNowReadingPresented) {
+                NowReadingView(comic: comic) {
+                    isNowReadingPresented = false
+                    selectedComic = comic
+                }
+            }
         }
     }
 
