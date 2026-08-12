@@ -16,7 +16,7 @@ enum FolderToComicError: LocalizedError {
 /// Trasforma una cartella di immagini in un CBZ, così una serie di scan sciolti (jpg/png) può
 /// entrare in libreria come un fumetto vero e proprio — la stessa funzione dell'app originale.
 enum FolderToComicConverter {
-    private static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp"]
+    private static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif"]
 
     static func makeComic(fromFolder folderURL: URL) throws -> URL {
         let needsSecurityScope = folderURL.startAccessingSecurityScopedResource()
@@ -32,6 +32,12 @@ enum FolderToComicConverter {
             .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
 
         guard !images.isEmpty else { throw FolderToComicError.noImagesFound }
+
+        // Su iCloud Drive i file di una cartella non ancora aperta possono essere solo
+        // segnaposto non scaricati: senza aspettarli, finirebbero archiviati vuoti/troncati.
+        for imageURL in images {
+            try? LibraryStorage.ensureDownloaded(imageURL)
+        }
 
         let comicName = folderURL.lastPathComponent.isEmpty ? "Fumetto" : folderURL.lastPathComponent
         let destination = FileManager.default.temporaryDirectory.appendingPathComponent("\(comicName).cbz")

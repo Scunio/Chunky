@@ -52,10 +52,9 @@ struct AccountsView: View {
     var body: some View {
         List {
             Section {
-                Button(action: { activeImporter = .comics }) {
+                NavigationLink(destination: DownloadsView()) {
                     Label("Downloads", systemImage: "arrow.down.circle")
                 }
-                .foregroundColor(.primary)
                 NavigationLink(destination: LocalUploadView()) {
                     Label("Web", systemImage: "globe")
                 }
@@ -109,6 +108,14 @@ struct AccountsView: View {
                     }
                     if let folderConversionError = folderConversionError {
                         Text(folderConversionError)
+                            .foregroundColor(.red)
+                            .font(.footnote)
+                    }
+                    // Mostrato anche qui (non solo nell'alert di LibraryView) perché quell'alert,
+                    // legato alla view che presenta questo sheet, può restare invisibile finché
+                    // il pannello Accounts non viene chiuso.
+                    if let importError = viewModel.importError {
+                        Text(importError)
                             .foregroundColor(.red)
                             .font(.footnote)
                     }
