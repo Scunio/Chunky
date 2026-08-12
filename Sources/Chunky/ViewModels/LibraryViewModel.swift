@@ -76,10 +76,12 @@ final class LibraryViewModel: ObservableObject {
             metadata?.number.map { "\(series) #\($0)" } ?? series
         } ?? fallbackTitle
 
+        let seriesName = metadata?.series ?? Self.deriveSeriesName(fromFallbackTitle: fallbackTitle)
+
         context.performAndWait {
             let comic = ComicEntity.create(
                 title: title,
-                seriesName: metadata?.series,
+                seriesName: seriesName,
                 relativePath: relativePath,
                 format: format,
                 readingDirection: defaultDirection,
@@ -90,6 +92,16 @@ final class LibraryViewModel: ObservableObject {
             try? context.save()
         }
         DiagnosticLog.log("Importato \"\(title)\" (\(format.rawValue), \(pageCount) pagine)")
+    }
+
+    /// Molti CBZ/CBR scansionati non hanno un ComicInfo.xml con la serie: senza un fallback,
+    /// finirebbero tutti ammassati in "Altri fumetti" invece che raggruppati per testata come
+    /// nell'originale. Se il titolo finisce con un numero (es. "Topolino 3595"), lo togliamo e
+    /// usiamo il resto come nome serie ("Topolino").
+    private static func deriveSeriesName(fromFallbackTitle title: String) -> String? {
+        guard let range = title.range(of: #"\s+#?\d+\s*$"#, options: .regularExpression) else { return nil }
+        let series = String(title[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+        return series.isEmpty ? nil : series
     }
 
     private func reportError(_ message: String) {
