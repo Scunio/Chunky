@@ -10,6 +10,7 @@ struct ChunkyApp: App {
     init() {
         let includeInBackup = UserDefaults.standard.object(forKey: "includeInBackup") as? Bool ?? true
         LibraryStorage.setExcludedFromBackup(!includeInBackup)
+        CrashReportManager.configure()
     }
 
     var body: some Scene {

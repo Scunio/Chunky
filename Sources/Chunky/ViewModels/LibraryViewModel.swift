@@ -132,7 +132,7 @@ final class LibraryViewModel: ObservableObject {
             var knownPaths: Set<String> = []
             backgroundContext.performAndWait {
                 let request = ComicEntity.fetchRequest()
-                guard let comics = try? backgroundContext.fetch(request) as? [ComicEntity] else { return }
+                guard let comics = try? backgroundContext.fetch(request) else { return }
                 for comic in comics {
                     let path = comic.relativePath ?? ""
                     let url = LibraryStorage.fileURL(forRelativePath: path)

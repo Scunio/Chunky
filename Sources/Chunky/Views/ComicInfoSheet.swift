@@ -1,9 +1,15 @@
 import SwiftUI
 
-/// Scheda informativa del fumetto, raggiungibile dal menu "..." del reader.
+/// Scheda informativa del fumetto, raggiungibile dall'icona "info" del reader. Ospita anche
+/// le azioni che prima stavano in un Menu a tendina nell'header: su questo target i Menu con
+/// contenuti interattivi si sono già dimostrati inaffidabili (vedi commento in ToolsPanelView),
+/// quindi qui usiamo una vera List, coerente col resto dell'app.
 struct ComicInfoSheet: View {
     @ObservedObject var comic: ComicEntity
     let loadedPageCount: Int?
+    var onJumpToPage: (() -> Void)?
+    var onToggleFavorite: (() -> Void)?
+    var onToggleReadingDirection: (() -> Void)?
     @Environment(\.presentationMode) private var presentationMode
 
     private static let dateFormatter: DateFormatter = {
@@ -34,6 +40,35 @@ struct ComicInfoSheet: View {
                     if let lastOpened = comic.dateLastOpened {
                         row("Ultima lettura", Self.dateFormatter.string(from: lastOpened))
                     }
+                }
+                if onJumpToPage != nil || onToggleFavorite != nil || onToggleReadingDirection != nil {
+                    Section {
+                        if let onJumpToPage {
+                            Button(action: {
+                                presentationMode.wrappedValue.dismiss()
+                                onJumpToPage()
+                            }) {
+                                Label("Vai a pagina...", systemImage: "number")
+                            }
+                        }
+                        if let onToggleFavorite {
+                            Button(action: onToggleFavorite) {
+                                Label(
+                                    comic.isFavorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti",
+                                    systemImage: comic.isFavorite ? "star.fill" : "star"
+                                )
+                            }
+                        }
+                        if let onToggleReadingDirection {
+                            Button(action: onToggleReadingDirection) {
+                                Label(
+                                    comic.readingDirection == .rightToLeft ? "Direzione: occidentale" : "Direzione: manga",
+                                    systemImage: comic.readingDirection == .rightToLeft ? "arrow.right" : "arrow.left"
+                                )
+                            }
+                        }
+                    }
+                    .foregroundColor(.primary)
                 }
             }
             .navigationTitle("Info fumetto")

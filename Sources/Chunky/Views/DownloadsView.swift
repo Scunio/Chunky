@@ -1,0 +1,50 @@
+import SwiftUI
+
+/// Schermata "Downloads" raggiunta dalla riga omonima del pannello Accounts: elenca i fumetti
+/// in scaricamento da un account remoto (WebDAV/OPDS), con avanzamento per ciascuno e "Stop all"
+/// per annullarli tutti. Il contenuto di ogni riga (titolo + barra di avanzamento) non è
+/// confermato da uno screenshot dell'originale con un download attivo: da rivedere se non
+/// corrisponde.
+struct DownloadsView: View {
+    @ObservedObject private var downloadManager = DownloadManager.shared
+
+    var body: some View {
+        VStack(spacing: 0) {
+            List(downloadManager.activeDownloads) { item in
+                DownloadRow(item: item)
+            }
+            .listStyle(.plain)
+
+            Button(action: { downloadManager.stopAll() }) {
+                Text("Stop all")
+                    .frame(maxWidth: .infinity)
+            }
+            .padding()
+            .foregroundColor(.red)
+            .disabled(downloadManager.activeDownloads.isEmpty)
+        }
+        .navigationTitle("Downloads")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+    }
+}
+
+private struct DownloadRow: View {
+    @ObservedObject var item: DownloadItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(item.title)
+                    .lineLimit(1)
+                Spacer()
+                Text("\(Int(item.fractionCompleted * 100))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.secondary)
+            }
+            ProgressView(value: item.fractionCompleted)
+        }
+        .padding(.vertical, 4)
+    }
+}
