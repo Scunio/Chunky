@@ -1,0 +1,9 @@
+.DS_Store
+Chunky.xcodeproj/
+build/
+build_*/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+.build/
