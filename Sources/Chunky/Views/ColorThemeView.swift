@@ -29,6 +29,21 @@ struct ColorThemeView: View {
 
     var body: some View {
         Form {
+            Section(
+                header: Text("Modalità"),
+                footer: Text("\"Automatica\" segue la modalità chiara/scura del sistema. Chiara/Scura la forzano in tutta l'app, libreria inclusa, indipendentemente dal sistema.")
+            ) {
+                Picker("Modalità", selection: Binding(
+                    get: { theme.colorSchemeMode },
+                    set: { theme.colorSchemeMode = $0 }
+                )) {
+                    ForEach(AppColorSchemeMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
             Section(footer: Text("Personalizza i colori della libreria. Lascia \"Automatico\" per seguire la modalità chiara/scura di sistema.")) {
                 colorRow(title: "Sfondo", hex: $theme.backgroundHex)
                 colorRow(title: "Testo", hex: $theme.textHex)

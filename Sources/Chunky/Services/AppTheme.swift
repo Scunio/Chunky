@@ -5,6 +5,33 @@ import UIKit
 import AppKit
 #endif
 
+/// Modalità chiara/scura dell'intera app (libreria + lettore). "Automatica" segue l'impostazione
+/// di sistema; le altre due la forzano indipendentemente dal sistema.
+enum AppColorSchemeMode: String, CaseIterable, Identifiable {
+    case automatic
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .automatic: "Automatica"
+        case .light: "Chiara"
+        case .dark: "Scura"
+        }
+    }
+
+    /// Valore da passare a `.preferredColorScheme`: nil lascia decidere al sistema.
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .automatic: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
 /// Colori personalizzabili della libreria, persistiti come stringhe esadecimali. Un valore
 /// nil/non impostato ricade sui colori di sistema (Dark/Light Mode automatico).
 final class AppTheme: ObservableObject {
@@ -15,11 +42,17 @@ final class AppTheme: ObservableObject {
     @AppStorage("theme.accentHex") var accentHex: String = ""
     @AppStorage("theme.pageTintHex") var pageTintHex: String = ""
     @AppStorage("theme.pageTintOpacity") var pageTintOpacity: Double = 0.25
+    @AppStorage("theme.colorSchemeMode") var colorSchemeModeRawValue: String = AppColorSchemeMode.automatic.rawValue
 
     var background: Color? { Color(hex: backgroundHex) }
     var text: Color? { Color(hex: textHex) }
     var accent: Color? { Color(hex: accentHex) }
     var pageTint: Color? { Color(hex: pageTintHex) }
+
+    var colorSchemeMode: AppColorSchemeMode {
+        get { AppColorSchemeMode(rawValue: colorSchemeModeRawValue) ?? .automatic }
+        set { colorSchemeModeRawValue = newValue.rawValue }
+    }
 
     func reset() {
         backgroundHex = ""
