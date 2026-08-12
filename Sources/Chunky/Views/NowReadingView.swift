@@ -1,34 +1,52 @@
 import SwiftUI
 
-/// Popover con l'anteprima rapida dell'ultimo fumetto aperto: copertina, titolo, pagina
-/// corrente, e un tocco per riprendere subito la lettura senza cercarlo in libreria.
+/// Popover con l'anteprima rapida dell'ultimo fumetto aperto: titolo centrato in alto,
+/// copertina con badge di pagina sovrapposto in basso (non testo a lato, come nell'originale),
+/// tocco sulla copertina per riprendere subito la lettura.
 struct NowReadingView: View {
     @ObservedObject var comic: ComicEntity
     let onResume: () -> Void
 
     var body: some View {
-        Button(action: onResume) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Ora in lettura")
-                    .font(.subheadline.bold())
-                    .foregroundColor(.secondary)
-                HStack(spacing: 12) {
-                    ComicGridItemView(comic: comic)
-                        .frame(width: 70, height: 105)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(comic.title ?? "")
-                            .font(.headline)
-                            .lineLimit(2)
-                        Text("\(min(Int(comic.lastReadPage) + 1, max(Int(comic.pageCount), 1))) / \(comic.pageCount)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    Spacer(minLength: 0)
-                }
+        VStack(spacing: 12) {
+            Text("Ora in lettura")
+                .font(.headline)
+
+            Button(action: onResume) {
+                coverImage
+                    .aspectRatio(2/3, contentMode: .fit)
+                    .cornerRadius(6)
+                    .overlay(pageBadge, alignment: .bottom)
             }
+            .buttonStyle(PlainButtonStyle())
         }
-        .buttonStyle(PlainButtonStyle())
         .padding()
-        .frame(width: 280)
+        .frame(width: 220)
+    }
+
+    private var pageBadge: some View {
+        Text("\(min(Int(comic.lastReadPage) + 1, max(Int(comic.pageCount), 1))) / \(comic.pageCount)")
+            .font(.subheadline.bold())
+            .foregroundColor(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(Color.black.opacity(0.75)))
+            .padding(.bottom, 10)
+    }
+
+    @ViewBuilder
+    private var coverImage: some View {
+        if let data = comic.coverImageData, let platformImage = PlatformImage.from(data: data) {
+            platformImage.asSwiftUIImage
+                .resizable()
+        } else {
+            Rectangle()
+                .fill(Color.secondary.opacity(0.2))
+                .overlay(
+                    Image(systemName: "book.closed")
+                        .font(.title)
+                        .foregroundColor(.secondary)
+                )
+        }
     }
 }
