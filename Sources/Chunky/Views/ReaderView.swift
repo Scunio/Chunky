@@ -60,6 +60,7 @@ private struct ReaderContentView: View {
     @State private var isToolsSettingsPresented = false
     @State private var isToolsParentalLockPresented = false
     @State private var isToolsICloudPresented = false
+    @State private var isNowReadingPresented = false
 
     /// Due pagine verticali affiancate su uno schermo stretto di iPhone lasciano un vuoto enorme
     /// sopra e sotto (l'immagine combinata è troppo larga rispetto all'altezza disponibile):
@@ -182,6 +183,9 @@ private struct ReaderContentView: View {
         }
         .sheet(isPresented: $isToolsICloudPresented) {
             NavigationView { ICloudStatusView().toolbarDoneButton { isToolsICloudPresented = false } }
+        }
+        .sheet(isPresented: $isNowReadingPresented) {
+            NowReadingView(comic: comic) { isNowReadingPresented = false }
         }
     }
 
@@ -423,6 +427,9 @@ private struct ReaderContentView: View {
                         comic.readingDirection == .rightToLeft ? "Direzione: occidentale" : "Direzione: manga",
                         systemImage: comic.readingDirection == .rightToLeft ? "arrow.right" : "arrow.left"
                     )
+                }
+                Button(action: { isNowReadingPresented = true }) {
+                    Label("Ora in lettura", systemImage: "book")
                 }
             } label: {
                 Image(systemName: "ellipsis.bubble")
