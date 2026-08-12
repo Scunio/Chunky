@@ -56,9 +56,7 @@ private struct ReaderContentView: View {
     @State private var isPageJumpPresented = false
     @State private var jumpPageNumber = 1
     @State private var isInfoPresented = false
-    @State private var isToolsColorsPresented = false
-    @State private var isToolsSettingsPresented = false
-    @State private var isToolsParentalLockPresented = false
+    @State private var isToolsPresented = false
     @State private var isToolsICloudPresented = false
     @State private var isNowReadingPresented = false
 
@@ -172,14 +170,8 @@ private struct ReaderContentView: View {
         .sheet(isPresented: $isInfoPresented) {
             ComicInfoSheet(comic: comic, loadedPageCount: provider?.pageCount)
         }
-        .sheet(isPresented: $isToolsColorsPresented) {
-            NavigationView { ColorThemeView().toolbarDoneButton { isToolsColorsPresented = false } }
-        }
-        .sheet(isPresented: $isToolsSettingsPresented) {
-            NavigationView { SettingsView().toolbarDoneButton { isToolsSettingsPresented = false } }
-        }
-        .sheet(isPresented: $isToolsParentalLockPresented) {
-            NavigationView { ParentalLockSettingsView().toolbarDoneButton { isToolsParentalLockPresented = false } }
+        .sheet(isPresented: $isToolsPresented) {
+            ToolsPanelView()
         }
         .sheet(isPresented: $isToolsICloudPresented) {
             NavigationView { ICloudStatusView().toolbarDoneButton { isToolsICloudPresented = false } }
@@ -465,17 +457,7 @@ private struct ReaderContentView: View {
                     .padding(10)
                     .background(Circle().fill(Color.black.opacity(0.45)))
             }
-            Menu {
-                Button(action: { isToolsColorsPresented = true }) {
-                    Label("Colori", systemImage: "paintpalette")
-                }
-                Button(action: { isToolsSettingsPresented = true }) {
-                    Label("Impostazioni", systemImage: "gearshape")
-                }
-                Button(action: { isToolsParentalLockPresented = true }) {
-                    Label("Blocco genitori", systemImage: "lock")
-                }
-            } label: {
+            Button(action: { isToolsPresented = true }) {
                 Image(systemName: "wrench.and.screwdriver")
                     .foregroundColor(.white)
                     .padding(10)
