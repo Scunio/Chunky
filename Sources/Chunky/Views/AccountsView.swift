@@ -24,6 +24,9 @@ struct AccountsView: View {
     @State private var isShowingFolderPicker = false
     @State private var isShowingFileImporter = false
     @State private var folderConversionError: String?
+    /// Come nell'originale: "+" non apre un altro schermo, rivela la sezione "Add account" in
+    /// coda alla stessa lista e diventa "Done" per richiuderla — non è un secondo passo separato.
+    @State private var isAddingAccount = false
 
     private static let openServices: [OpenRemoteService] = [
         OpenRemoteService(name: "Windows / Mac Shared Folder", systemImage: "folder", tintColor: .primary),
@@ -41,9 +44,10 @@ struct AccountsView: View {
     var body: some View {
         List {
             Section {
-                NavigationLink(destination: fileImporterTrigger) {
+                Button(action: { isShowingFileImporter = true }) {
                     Label("Downloads", systemImage: "arrow.down.circle")
                 }
+                .foregroundColor(.primary)
                 NavigationLink(destination: LocalUploadView()) {
                     Label("Web", systemImage: "globe")
                 }
@@ -63,42 +67,48 @@ struct AccountsView: View {
                 }
             }
 
-            Section(header: Text("Add account")) {
-                Button(action: { addAccountKind = .opds; isShowingAddAccount = true }) {
-                    Label("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
-                }
-                .foregroundColor(.primary)
+            if isAddingAccount {
+                Section(header: Text("Add account")) {
+                    Button(action: { addAccountKind = .opds; isShowingAddAccount = true }) {
+                        Label("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
+                    }
+                    .foregroundColor(.primary)
 
-                ForEach(Self.openServices, id: \.name) { service in
-                    Button(action: { isShowingFileImporter = true }) {
-                        Label {
-                            Text(service.name)
-                        } icon: {
-                            Image(systemName: service.systemImage)
-                                .foregroundColor(service.tintColor)
+                    ForEach(Self.openServices, id: \.name) { service in
+                        Button(action: { isShowingFileImporter = true }) {
+                            Label {
+                                Text(service.name)
+                            } icon: {
+                                Image(systemName: service.systemImage)
+                                    .foregroundColor(service.tintColor)
+                            }
                         }
+                        .foregroundColor(.primary)
+                    }
+
+                    Button(action: { addAccountKind = .webdav; isShowingAddAccount = true }) {
+                        Label("Nuovo account WebDAV", systemImage: "plus.circle")
                     }
                     .foregroundColor(.primary)
                 }
-
-                Button(action: { addAccountKind = .webdav; isShowingAddAccount = true }) {
-                    Label("Nuovo account WebDAV", systemImage: "plus.circle")
+            } else {
+                Section(
+                    header: Text("Strumenti"),
+                    footer: Text("Utile per una serie di pagine scansionate come immagini separate: verranno unite in un unico fumetto CBZ.")
+                ) {
+                    Button(action: { isShowingFolderPicker = true }) {
+                        Label("Crea fumetto da cartella di immagini", systemImage: "photo.stack")
+                    }
+                    if let folderConversionError = folderConversionError {
+                        Text(folderConversionError)
+                            .foregroundColor(.red)
+                            .font(.footnote)
+                    }
                 }
-                .foregroundColor(.primary)
             }
 
-            Section(
-                header: Text("Strumenti"),
-                footer: Text("Utile per una serie di pagine scansionate come immagini separate: verranno unite in un unico fumetto CBZ.")
-            ) {
-                Button(action: { isShowingFolderPicker = true }) {
-                    Label("Crea fumetto da cartella di immagini", systemImage: "photo.stack")
-                }
-                if let folderConversionError = folderConversionError {
-                    Text(folderConversionError)
-                        .foregroundColor(.red)
-                        .font(.footnote)
-                }
+            Section(footer: Text("Server web spento")) {
+                EmptyView()
             }
         }
         .navigationTitle("Accounts")
@@ -106,8 +116,12 @@ struct AccountsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: { addAccountKind = .opds; isShowingAddAccount = true }) {
-                    Image(systemName: "plus")
+                Button(action: { withAnimation { isAddingAccount.toggle() } }) {
+                    if isAddingAccount {
+                        Text("Done")
+                    } else {
+                        Image(systemName: "plus")
+                    }
                 }
             }
         }
@@ -132,14 +146,6 @@ struct AccountsView: View {
                 folderConversionError = error.localizedDescription
             }
         }
-    }
-
-    /// "Downloads" apre direttamente il selettore file di sistema, come il vecchio pulsante a
-    /// busta rimosso dalla toolbar (era duplicato: l'unico punto d'ingresso per l'import "a mano"
-    /// resta qui, dentro Accounts).
-    private var fileImporterTrigger: some View {
-        Color.clear
-            .onAppear { isShowingFileImporter = true }
     }
 
     private func deleteAccounts(at offsets: IndexSet) {
