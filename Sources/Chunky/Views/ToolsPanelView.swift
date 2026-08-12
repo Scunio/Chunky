@@ -46,7 +46,7 @@ struct ToolsPanelView: View {
                 }
 
                 Section {
-                    NavigationLink("Informazioni", destination: SettingsView())
+                    NavigationLink("Informazioni", destination: AboutView())
                 }
             }
             .navigationTitle("Tools")
