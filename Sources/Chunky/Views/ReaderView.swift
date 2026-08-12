@@ -117,6 +117,20 @@ private struct ReaderContentView: View {
                     footer
                 }
                 .allowsHitTesting(true)
+
+                // Suggeriscono dove sono le zone di tap per cambiare pagina (altrimenti
+                // completamente invisibili): non intercettano tocchi, sono solo un indizio visivo.
+                if isTapToTurnEnabled && !isOneHandedModeEnabled {
+                    HStack {
+                        Image(systemName: "arrowtriangle.left")
+                        Spacer()
+                        Image(systemName: "arrowtriangle.right")
+                    }
+                    .font(.title2)
+                    .foregroundColor(.white.opacity(0.35))
+                    .padding(.horizontal, 14)
+                    .allowsHitTesting(false)
+                }
             }
 
             if let next = pendingNextComic {
