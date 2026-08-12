@@ -24,6 +24,8 @@ struct LibraryView: View {
     @State private var selectedIDs: Set<NSManagedObjectID> = []
     @State private var collapsedGroups: Set<String> = []
     @State private var isNowReadingPresented = false
+    @State private var isNewComicsPresented = false
+    @AppStorage("newTrayClearedAt") private var newTrayClearedAtTimestamp: Double = 0
 
     private static let ungroupedSectionTitle = "Altri fumetti"
 
@@ -111,6 +113,7 @@ struct LibraryView: View {
         } else {
             HStack {
                 displayModeButton
+                newComicsButton
                 nowReadingButton
                 if !isKioskModeEnabled {
                     importButton
@@ -215,7 +218,6 @@ struct LibraryView: View {
     private var libraryGrid: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 8) {
-                newTray
                 switch displayMode {
                 case .grouped:
                     ForEach(groupedSections, id: \.title) { section in
@@ -238,34 +240,33 @@ struct LibraryView: View {
         }
     }
 
-    /// Fumetti importati negli ultimi 7 giorni, in un tray orizzontale in cima alla libreria.
+    /// Fumetti importati negli ultimi 7 giorni e non ancora "smarcati" con Cancella: alimentano
+    /// il popover "Nuovi", non una sezione fissa in libreria (coerente con l'originale, dove i
+    /// nuovi arrivi si consultano da un pannello dedicato, non restano incollati in cima).
     private var recentComics: [ComicEntity] {
-        guard searchText.isEmpty else { return [] }
         let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? .distantPast
+        let clearedAt = Date(timeIntervalSince1970: newTrayClearedAtTimestamp)
+        let effectiveCutoff = max(cutoff, clearedAt)
         return comics
-            .filter { ($0.dateAdded ?? .distantPast) >= cutoff }
+            .filter { ($0.dateAdded ?? .distantPast) > effectiveCutoff }
             .sorted { ($0.dateAdded ?? .distantPast) > ($1.dateAdded ?? .distantPast) }
     }
 
     @ViewBuilder
-    private var newTray: some View {
+    private var newComicsButton: some View {
         if !recentComics.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("NUOVI")
-                    .font(.subheadline.bold())
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 16) {
-                        ForEach(recentComics) { comic in
-                            cell(for: comic)
-                                .frame(width: 130)
-                        }
-                    }
-                    .padding(.horizontal)
+            Button(action: { isNewComicsPresented = true }) {
+                Image(systemName: "tray.and.arrow.down")
+            }
+            .popover(isPresented: $isNewComicsPresented) {
+                NewComicsView(comics: recentComics) {
+                    selectedComic = $0
+                    isNewComicsPresented = false
+                } onClear: {
+                    newTrayClearedAtTimestamp = Date().timeIntervalSince1970
+                    isNewComicsPresented = false
                 }
             }
-            .padding(.bottom, 8)
         }
     }
 
