@@ -48,7 +48,7 @@ struct AccountsView: View {
 
             Section(
                 header: Text("Aggiungi account"),
-                footer: Text("Dropbox, Google Drive e OneDrive si possono già importare tramite \"Importa\" nella libreria, se hai le rispettive app installate: compaiono automaticamente nel selettore file di sistema.")
+                footer: Text("Dropbox, Google Drive e OneDrive si possono già importare da qui, se hai le rispettive app installate: compaiono automaticamente nel selettore file di sistema.")
             ) {
                 Button(action: { isShowingAddAccount = true }) {
                     Label("Nuovo account OPDS o WebDAV", systemImage: "plus.circle")

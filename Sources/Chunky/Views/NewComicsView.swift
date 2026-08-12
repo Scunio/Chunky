@@ -16,27 +16,46 @@ struct NewComicsView: View {
                 Spacer()
                 Button("Cancella", action: onClear)
                     .foregroundColor(.red)
+                    .disabled(comics.isEmpty)
             }
             .padding()
 
             Divider()
 
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(comics) { comic in
-                        Button(action: { onSelect(comic) }) {
-                            coverImage(for: comic)
-                                .aspectRatio(2/3, contentMode: .fit)
-                                .frame(maxWidth: .infinity)
-                                .cornerRadius(6)
+            if comics.isEmpty {
+                emptyState
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(comics) { comic in
+                            Button(action: { onSelect(comic) }) {
+                                coverImage(for: comic)
+                                    .aspectRatio(2/3, contentMode: .fit)
+                                    .frame(maxWidth: .infinity)
+                                    .cornerRadius(6)
+                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
-                        .buttonStyle(PlainButtonStyle())
                     }
+                    .padding()
                 }
-                .padding()
             }
         }
         .frame(width: 280, height: 420)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: "envelope")
+                .font(.system(size: 32))
+                .foregroundColor(.secondary)
+            Text("Nessun fumetto nuovo")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder

@@ -27,6 +27,7 @@ struct LibraryView: View {
     @State private var isNewComicsPresented = false
     @AppStorage("newTrayClearedAt") private var newTrayClearedAtTimestamp: Double = 0
     @State private var isToolsPresented = false
+    @State private var isAccountsPresented = false
 
     private static let ungroupedSectionTitle = "Altri fumetti"
 
@@ -80,6 +81,9 @@ struct LibraryView: View {
             .sheet(isPresented: $isToolsPresented) {
                 ToolsPanelView()
             }
+            .sheet(isPresented: $isAccountsPresented) {
+                NavigationView { AccountsView().toolbarDoneButton { isAccountsPresented = false } }
+            }
             .overlay(importingOverlay)
             .background((theme.background ?? Color.clear).ignoresSafeArea())
             .foregroundColor(theme.text)
@@ -115,9 +119,6 @@ struct LibraryView: View {
         } else {
             HStack(spacing: 16) {
                 newComicsButton
-                if !isKioskModeEnabled {
-                    importButton
-                }
                 nowReadingButton
                 if !isKioskModeEnabled {
                     accountsLink
@@ -129,17 +130,13 @@ struct LibraryView: View {
         }
     }
 
-    /// Icona a busta ("inbox"), come nell'originale: apre l'importazione di nuovi fumetti.
-    private var importButton: some View {
-        Button {
-            isShowingFileImporter = true
-        } label: {
-            Image(systemName: "envelope")
-        }
-    }
-
+    /// Un pannello ("Done"/"Accounts") come nell'originale, non una push a tutto schermo.
+    /// È anche il punto in cui si importano i fumetti (Downloads / Web / iCloud Drive / altri
+    /// servizi cloud): non esiste un pulsante "Importa" separato, confermato dallo screenshot
+    /// dell'originale — niente busta duplicata.
+    /// stesso trattamento di Tools, raggiunto dall'icona accanto.
     private var accountsLink: some View {
-        NavigationLink(destination: AccountsView()) {
+        Button(action: { isAccountsPresented = true }) {
             Image(systemName: "cloud")
         }
     }
@@ -274,20 +271,19 @@ struct LibraryView: View {
             .sorted { ($0.dateAdded ?? .distantPast) > ($1.dateAdded ?? .distantPast) }
     }
 
-    @ViewBuilder
+    /// Sempre visibile, anche senza fumetti nuovi (confermato dall'utente): a differenza
+    /// dell'implementazione precedente, non si nasconde più quando `recentComics` è vuoto.
     private var newComicsButton: some View {
-        if !recentComics.isEmpty {
-            Button(action: { isNewComicsPresented = true }) {
-                Image(systemName: "tray.and.arrow.down")
-            }
-            .popover(isPresented: $isNewComicsPresented) {
-                NewComicsView(comics: recentComics) {
-                    selectedComic = $0
-                    isNewComicsPresented = false
-                } onClear: {
-                    newTrayClearedAtTimestamp = Date().timeIntervalSince1970
-                    isNewComicsPresented = false
-                }
+        Button(action: { isNewComicsPresented = true }) {
+            Image(systemName: "envelope")
+        }
+        .popover(isPresented: $isNewComicsPresented) {
+            NewComicsView(comics: recentComics) {
+                selectedComic = $0
+                isNewComicsPresented = false
+            } onClear: {
+                newTrayClearedAtTimestamp = Date().timeIntervalSince1970
+                isNewComicsPresented = false
             }
         }
     }
