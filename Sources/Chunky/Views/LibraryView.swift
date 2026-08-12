@@ -92,11 +92,9 @@ struct LibraryView: View {
                 selectedIDs.removeAll()
             }
         } else {
-            HStack {
-                settingsLink
-                if !isKioskModeEnabled {
-                    accountsLink
-                }
+            HStack(spacing: 16) {
+                Button("Modifica") { isEditing = true }
+                displayModeButton
             }
         }
     }
@@ -111,29 +109,59 @@ struct LibraryView: View {
                 .disabled(selectedIDs.isEmpty)
             }
         } else {
-            HStack {
-                displayModeButton
+            HStack(spacing: 16) {
                 newComicsButton
-                nowReadingButton
                 if !isKioskModeEnabled {
                     importButton
-                    Button("Modifica") { isEditing = true }
+                }
+                nowReadingButton
+                if !isKioskModeEnabled {
+                    accountsLink
+                    toolsMenu
+                } else {
+                    settingsLink
                 }
             }
         }
     }
 
-    private var accountsLink: some View {
-        NavigationLink(destination: AccountsView()) {
-            Label("Account", systemImage: "icloud")
+    /// Icona a busta ("inbox"), come nell'originale: apre l'importazione di nuovi fumetti.
+    private var importButton: some View {
+        Button {
+            isShowingFileImporter = true
+        } label: {
+            Image(systemName: "envelope")
         }
     }
 
-    private var displayModeButton: some View {
-        Button {
-            displayMode = displayMode == .grouped ? .alphabetical : .grouped
+    private var accountsLink: some View {
+        NavigationLink(destination: AccountsView()) {
+            Image(systemName: "cloud")
+        }
+    }
+
+    /// Raccoglie Colori/Impostazioni/Blocco genitori dietro l'icona a chiave inglese,
+    /// come nell'originale (dove questi tre pannelli sono tutti dentro "Tools").
+    private var toolsMenu: some View {
+        Menu {
+            NavigationLink(destination: ColorThemeView()) {
+                Label("Colori", systemImage: "paintpalette")
+            }
+            NavigationLink(destination: SettingsView()) {
+                Label("Impostazioni", systemImage: "gearshape")
+            }
+            NavigationLink(destination: ParentalLockSettingsView()) {
+                Label("Blocco genitori", systemImage: "lock")
+            }
         } label: {
-            Image(systemName: displayMode == .grouped ? "square.grid.2x2" : "list.bullet")
+            Image(systemName: "wrench.and.screwdriver")
+        }
+    }
+
+    /// Testo (non icona), come nell'originale: alterna tra vista raggruppata per serie e A-Z.
+    private var displayModeButton: some View {
+        Button(displayMode == .grouped ? "Raggruppato" : "A-Z") {
+            displayMode = displayMode == .grouped ? .alphabetical : .grouped
         }
     }
 
@@ -366,14 +394,6 @@ struct LibraryView: View {
             } else {
                 EmptyView()
             }
-        }
-    }
-
-    private var importButton: some View {
-        Button {
-            isShowingFileImporter = true
-        } label: {
-            Label("Importa", systemImage: "plus")
         }
     }
 
