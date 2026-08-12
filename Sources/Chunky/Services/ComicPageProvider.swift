@@ -5,6 +5,7 @@ enum ComicReadError: LocalizedError {
     case corruptArchive
     case pageOutOfRange
     case notDownloaded
+    case downloadCancelled
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +17,8 @@ enum ComicReadError: LocalizedError {
             return "Pagina non disponibile."
         case .notDownloaded:
             return "Il fumetto non è ancora stato scaricato da iCloud. Controlla la connessione e riprova."
+        case .downloadCancelled:
+            return "Download annullato."
         }
     }
 }

@@ -23,6 +23,7 @@ struct ComicGridItemView: View {
                 .overlay(progressBar, alignment: .bottom)
                 .overlay(finishedBadge, alignment: .topTrailing)
                 .overlay(favoriteBadge, alignment: .topLeading)
+                .overlay(pendingDownloadBadge, alignment: .bottomTrailing)
 
             Text(comic.title ?? "Senza titolo")
                 .font(.caption.bold())
@@ -53,27 +54,40 @@ struct ComicGridItemView: View {
         }
     }
 
+    private func badge(systemImage: String, foreground: Color, background: Color) -> some View {
+        Image(systemName: systemImage)
+            .foregroundColor(foreground)
+            .padding(6)
+            .background(background)
+            .clipShape(Circle())
+            .padding(6)
+    }
+
     @ViewBuilder
     private var finishedBadge: some View {
         if comic.isFinished {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.white)
-                .padding(6)
-                .background(Color.accentColor)
-                .clipShape(Circle())
-                .padding(6)
+            badge(systemImage: "checkmark.circle.fill", foreground: .white, background: .accentColor)
         }
     }
 
     @ViewBuilder
     private var favoriteBadge: some View {
         if comic.isFavorite {
-            Image(systemName: "star.fill")
-                .foregroundColor(.yellow)
-                .padding(6)
-                .background(Color.black.opacity(0.5))
-                .clipShape(Circle())
-                .padding(6)
+            badge(systemImage: "star.fill", foreground: .yellow, background: Color.black.opacity(0.5))
+        }
+    }
+
+    /// Vero se il fumetto è solo un placeholder iCloud, non ancora scaricato in locale —
+    /// prima non c'era alcun indizio in libreria, e aprirlo poteva far comparire un errore
+    /// dopo un lungo caricamento senza che fosse chiaro il motivo.
+    private var isPendingDownload: Bool {
+        LibraryStorage.isPendingDownload(LibraryStorage.fileURL(forRelativePath: comic.relativePath ?? ""))
+    }
+
+    @ViewBuilder
+    private var pendingDownloadBadge: some View {
+        if isPendingDownload {
+            badge(systemImage: "icloud.and.arrow.down", foreground: .white, background: Color.black.opacity(0.5))
         }
     }
 

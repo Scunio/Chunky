@@ -9,6 +9,15 @@ struct RemoteEntry: Identifiable, Hashable {
     let url: URL
 }
 
+/// Incapsula la continuation di `downloadFile`, collegata al completion handler del task solo
+/// dopo la sua creazione (il completion handler va passato alla creazione del task, prima che
+/// la continuation esista). @unchecked Sendable: viene scritta una sola volta prima di
+/// `task.resume()` e letta solo dal completion handler del task, che URLSession garantisce
+/// invocare al più una volta — nessun accesso concorrente reale nonostante il tipo non lo dimostri al compilatore.
+private final class ContinuationHolder: @unchecked Sendable {
+    var continuation: CheckedContinuation<URL, Error>?
+}
+
 enum RemoteBrowsingError: LocalizedError {
     case invalidResponse
     case parsingFailed
@@ -49,33 +58,46 @@ extension RemoteBrowsing {
     /// per restare compatibili con il target minimo dell'app (iOS14/macOS11).
     func downloadFile(from url: URL, account: RemoteAccountEntity, suggestedName: String) async throws -> URL {
         let request = authenticatedRequest(for: url, account: account)
-        let tempURL: URL = try await withCheckedThrowingContinuation { continuation in
-            let task = URLSession.shared.downloadTask(with: request) { location, response, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                if let http = response as? HTTPURLResponse, http.statusCode == 401 {
-                    continuation.resume(throwing: RemoteBrowsingError.unauthorized)
-                    return
-                }
-                guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                      let location = location else {
-                    continuation.resume(throwing: RemoteBrowsingError.invalidResponse)
-                    return
-                }
-                // Il file a `location` viene eliminato subito dopo il ritorno del completion handler:
-                // lo spostiamo sincronamente prima di risolvere la continuation.
-                let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-                do {
-                    try FileManager.default.moveItem(at: location, to: destination)
-                    continuation.resume(returning: destination)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
+        let holder = ContinuationHolder()
+
+        let task = URLSession.shared.downloadTask(with: request) { location, response, error in
+            if let error = error {
+                holder.continuation?.resume(throwing: error)
+                return
             }
-            task.resume()
+            if let http = response as? HTTPURLResponse, http.statusCode == 401 {
+                holder.continuation?.resume(throwing: RemoteBrowsingError.unauthorized)
+                return
+            }
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+                  let location = location else {
+                holder.continuation?.resume(throwing: RemoteBrowsingError.invalidResponse)
+                return
+            }
+            // Il file a `location` viene eliminato subito dopo il ritorno del completion handler:
+            // lo spostiamo sincronamente prima di risolvere la continuation.
+            let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            do {
+                try FileManager.default.moveItem(at: location, to: destination)
+                holder.continuation?.resume(returning: destination)
+            } catch {
+                holder.continuation?.resume(throwing: error)
+            }
         }
+
+        let downloadItem = await MainActor.run { DownloadManager.shared.register(title: suggestedName, task: task) }
+
+        let tempURL: URL
+        do {
+            tempURL = try await withCheckedThrowingContinuation { continuation in
+                holder.continuation = continuation
+                task.resume()
+            }
+        } catch {
+            await MainActor.run { DownloadManager.shared.remove(downloadItem) }
+            throw error
+        }
+        await MainActor.run { DownloadManager.shared.remove(downloadItem) }
 
         let finalDestination = FileManager.default.temporaryDirectory.appendingPathComponent(suggestedName)
         try? FileManager.default.removeItem(at: finalDestination)

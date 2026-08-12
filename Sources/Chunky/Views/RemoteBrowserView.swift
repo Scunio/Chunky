@@ -12,7 +12,7 @@ struct RemoteBrowserView: View {
     @State private var entries: [RemoteEntry] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var downloadingEntryID: RemoteEntry.ID?
+    @State private var downloadingEntryIDs: Set<RemoteEntry.ID> = []
 
     private var browser: RemoteBrowsing { RemoteBrowsingFactory.makeBrowser(for: account.kind) }
     private var url: URL { startURL ?? account.serverURL ?? URL(string: "about:blank")! }
@@ -62,7 +62,7 @@ struct RemoteBrowserView: View {
                     Label(entry.title, systemImage: "book.closed")
                         .foregroundColor(.primary)
                     Spacer()
-                    if downloadingEntryID == entry.id {
+                    if downloadingEntryIDs.contains(entry.id) {
                         ProgressView()
                     } else {
                         Image(systemName: "icloud.and.arrow.down")
@@ -70,7 +70,7 @@ struct RemoteBrowserView: View {
                     }
                 }
             }
-            .disabled(downloadingEntryID != nil)
+            .disabled(downloadingEntryIDs.contains(entry.id))
         }
     }
 
@@ -94,18 +94,18 @@ struct RemoteBrowserView: View {
     }
 
     private func downloadAndImport(_ entry: RemoteEntry) {
-        downloadingEntryID = entry.id
+        downloadingEntryIDs.insert(entry.id)
         Task {
             do {
                 let localURL = try await browser.download(entry, account: account)
                 await MainActor.run {
                     viewModel.importFiles([localURL], into: context)
-                    downloadingEntryID = nil
+                    downloadingEntryIDs.remove(entry.id)
                 }
             } catch {
                 await MainActor.run {
                     viewModel.importError = error.localizedDescription
-                    downloadingEntryID = nil
+                    downloadingEntryIDs.remove(entry.id)
                 }
             }
         }

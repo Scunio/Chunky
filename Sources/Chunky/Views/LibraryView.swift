@@ -103,15 +103,7 @@ struct LibraryView: View {
             .sheet(isPresented: $isAccountsPresented) {
                 NavigationView { AccountsView().toolbarDoneButton { isAccountsPresented = false } }
             }
-            .alert("Nuovo gruppo", isPresented: $isNewGroupPromptPresented) {
-                TextField("Nome gruppo", text: $newGroupName)
-                Button("Annulla", role: .cancel) { newGroupName = "" }
-                Button("Crea") {
-                    let trimmed = newGroupName.trimmingCharacters(in: .whitespaces)
-                    if !trimmed.isEmpty { applyGroup(trimmed) }
-                    newGroupName = ""
-                }
-            }
+            .modifier(NewGroupPromptModifier(isPresented: $isNewGroupPromptPresented, name: $newGroupName, onCreate: applyGroup))
             .overlay(importingOverlay)
             .background((theme.background ?? Color.clear).ignoresSafeArea())
             .foregroundColor(theme.text)
@@ -287,7 +279,7 @@ struct LibraryView: View {
                 if !isSearching { searchText = "" }
             }
         }) {
-            Image(systemName: isSearching ? "magnifyingglass.circle.fill" : "magnifyingglass")
+            Image(systemName: "magnifyingglass")
         }
     }
 
@@ -322,7 +314,7 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var searchField: some View {
-        if isSearching && !comics.isEmpty {
+        if isSearching {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
@@ -624,6 +616,31 @@ private struct ComicCell: View {
                 .foregroundColor(isSelected ? .accentColor : .white)
                 .background(Circle().fill(isSelected ? Color.white : Color.black.opacity(0.4)))
                 .padding(6)
+        }
+    }
+}
+
+/// `.alert(_:isPresented:actions:)` con `TextField`/`Button(role:)` richiede iOS 15+: il target
+/// minimo del progetto è iOS 14, quindi isoliamo qui il ramo `#available` invece di alzarlo
+/// per l'intera app solo per questo prompt.
+private struct NewGroupPromptModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    @Binding var name: String
+    let onCreate: (String) -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 15.0, macOS 12.0, *) {
+            content.alert("Nuovo gruppo", isPresented: $isPresented) {
+                TextField("Nome gruppo", text: $name)
+                Button("Annulla", role: .cancel) { name = "" }
+                Button("Crea") {
+                    let trimmed = name.trimmingCharacters(in: .whitespaces)
+                    if !trimmed.isEmpty { onCreate(trimmed) }
+                    name = ""
+                }
+            }
+        } else {
+            content
         }
     }
 }
