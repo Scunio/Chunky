@@ -26,6 +26,9 @@ struct LibraryView: View {
     @State private var isNowReadingPresented = false
     @State private var isNewComicsPresented = false
     @AppStorage("newTrayClearedAt") private var newTrayClearedAtTimestamp: Double = 0
+    @State private var isToolsColorsPresented = false
+    @State private var isToolsSettingsPresented = false
+    @State private var isToolsParentalLockPresented = false
 
     private static let ungroupedSectionTitle = "Altri fumetti"
 
@@ -76,6 +79,15 @@ struct LibraryView: View {
                 ReaderView(comic: comic, libraryComics: filteredComics)
             }
             #endif
+            .sheet(isPresented: $isToolsColorsPresented) {
+                NavigationView { ColorThemeView().toolbarDoneButton { isToolsColorsPresented = false } }
+            }
+            .sheet(isPresented: $isToolsSettingsPresented) {
+                NavigationView { SettingsView().toolbarDoneButton { isToolsSettingsPresented = false } }
+            }
+            .sheet(isPresented: $isToolsParentalLockPresented) {
+                NavigationView { ParentalLockSettingsView().toolbarDoneButton { isToolsParentalLockPresented = false } }
+            }
             .overlay(importingOverlay)
             .background((theme.background ?? Color.clear).ignoresSafeArea())
             .foregroundColor(theme.text)
@@ -140,17 +152,18 @@ struct LibraryView: View {
         }
     }
 
-    /// Raccoglie Colori/Impostazioni/Blocco genitori dietro l'icona a chiave inglese,
-    /// come nell'originale (dove questi tre pannelli sono tutti dentro "Tools").
+    /// Raccoglie Colori/Impostazioni/Blocco genitori dietro l'icona a chiave inglese, come
+    /// nell'originale. Bottoni + sheet, non NavigationLink: quest'ultimo dentro un Menu non
+    /// spinge nulla (nessuna navigazione avviene al tap, verificato dal vivo sul simulatore).
     private var toolsMenu: some View {
         Menu {
-            NavigationLink(destination: ColorThemeView()) {
+            Button(action: { isToolsColorsPresented = true }) {
                 Label("Colori", systemImage: "paintpalette")
             }
-            NavigationLink(destination: SettingsView()) {
+            Button(action: { isToolsSettingsPresented = true }) {
                 Label("Impostazioni", systemImage: "gearshape")
             }
-            NavigationLink(destination: ParentalLockSettingsView()) {
+            Button(action: { isToolsParentalLockPresented = true }) {
                 Label("Blocco genitori", systemImage: "lock")
             }
         } label: {
@@ -316,7 +329,7 @@ struct LibraryView: View {
                 HStack {
                     Image(systemName: collapsedGroups.contains(title) ? "chevron.right" : "chevron.down")
                         .font(.caption.bold())
-                    Text(title.uppercased())
+                    Text(sectionHeaderText(title: title, comics: comics))
                         .font(.subheadline.bold())
                     Spacer()
                     if comics.contains(where: { $0.progress > 0 }) {
@@ -342,6 +355,22 @@ struct LibraryView: View {
                 .padding(.horizontal)
             }
         }
+    }
+
+    /// "TOPOLINO 3594-3687" come nell'originale quando i titoli finiscono con un numero
+    /// (es. testate periodiche): altrimenti solo il nome della serie.
+    private func sectionHeaderText(title: String, comics: [ComicEntity]) -> String {
+        guard title != Self.ungroupedSectionTitle else { return title.uppercased() }
+        let numbers = comics.compactMap { issueNumber(fromTitle: $0.title ?? "") }
+        guard let min = numbers.min(), let max = numbers.max(), numbers.count == comics.count else {
+            return title.uppercased()
+        }
+        return min == max ? "\(title.uppercased()) \(min)" : "\(title.uppercased()) \(min)-\(max)"
+    }
+
+    private func issueNumber(fromTitle title: String) -> Int? {
+        guard let range = title.range(of: #"\d+\s*$"#, options: .regularExpression) else { return nil }
+        return Int(title[range])
     }
 
     private func cell(for comic: ComicEntity) -> some View {
