@@ -429,19 +429,23 @@ private struct ComicCell: View {
     let onDelete: () -> Void
 
     var body: some View {
-        Button(action: onSelect) {
-            ComicGridItemView(comic: comic)
-                .overlay(selectionBadge, alignment: .topLeading)
-        }
-        .buttonStyle(PlainButtonStyle())
-        .accessibilityLabel(comic.title ?? "Fumetto")
-        .contextMenu {
-            if !isEditing && allowsDeletion {
-                Button(action: onDelete) {
-                    Label("Rimuovi", systemImage: "trash")
+        // Non un vero Button: su iOS il suo gesture recognizer del tap tende a intercettare
+        // anche la pressione prolungata, impedendo al contextMenu sottostante di aprirsi.
+        // L'accessibilità (VoiceOver, test automatici) resta comunque coperta dai trait/label
+        // espliciti qui sotto.
+        ComicGridItemView(comic: comic)
+            .overlay(selectionBadge, alignment: .topLeading)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onSelect)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(comic.title ?? "Fumetto")
+            .contextMenu {
+                if !isEditing && allowsDeletion {
+                    Button(action: onDelete) {
+                        Label("Rimuovi", systemImage: "trash")
+                    }
                 }
             }
-        }
     }
 
     @ViewBuilder
