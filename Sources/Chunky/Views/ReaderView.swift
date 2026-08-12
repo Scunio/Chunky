@@ -59,6 +59,7 @@ private struct ReaderContentView: View {
     @State private var isToolsColorsPresented = false
     @State private var isToolsSettingsPresented = false
     @State private var isToolsParentalLockPresented = false
+    @State private var isToolsICloudPresented = false
 
     /// Due pagine verticali affiancate su uno schermo stretto di iPhone lasciano un vuoto enorme
     /// sopra e sotto (l'immagine combinata è troppo larga rispetto all'altezza disponibile):
@@ -179,6 +180,9 @@ private struct ReaderContentView: View {
         .sheet(isPresented: $isToolsParentalLockPresented) {
             NavigationView { ParentalLockSettingsView().toolbarDoneButton { isToolsParentalLockPresented = false } }
         }
+        .sheet(isPresented: $isToolsICloudPresented) {
+            NavigationView { ICloudStatusView().toolbarDoneButton { isToolsICloudPresented = false } }
+        }
     }
 
     private func presentShareImage(_ image: PlatformImage) {
@@ -269,7 +273,9 @@ private struct ReaderContentView: View {
             } else {
                 Color.clear
                     .contentShape(Rectangle())
-                    .onTapGesture { isControlsVisible.toggle() }
+                    // simultaneousGesture, non .onTapGesture: quest'ultimo reclama il tocco in
+                    // esclusiva e impedisce allo swipe nativo del TabView sottostante di funzionare.
+                    .simultaneousGesture(TapGesture().onEnded { isControlsVisible.toggle() })
             }
         }
     }
@@ -412,14 +418,6 @@ private struct ReaderContentView: View {
                         systemImage: comic.isFavorite ? "star.fill" : "star"
                     )
                 }
-                if isDoublePageAllowed {
-                    Button(action: { isDoublePageEnabled.toggle() }) {
-                        Label(
-                            isDoublePageEnabled ? "Pagina singola" : "Doppia pagina",
-                            systemImage: isDoublePageEnabled ? "rectangle" : "rectangle.split.2x1.fill"
-                        )
-                    }
-                }
                 Button(action: toggleReadingDirection) {
                     Label(
                         comic.readingDirection == .rightToLeft ? "Direzione: occidentale" : "Direzione: manga",
@@ -438,14 +436,24 @@ private struct ReaderContentView: View {
                 .foregroundColor(.white)
                 .lineLimit(1)
             Spacer()
+            // Busta: apre la selezione riquadro, l'unico modo per condividere nell'originale
+            // (si seleziona sempre un'area, non c'è un tasto "condividi tutta la pagina" a parte).
             Button(action: { isPanelSelectionPresented = true }) {
-                Image(systemName: "crop")
+                Image(systemName: "envelope")
                     .foregroundColor(.white)
                     .padding(10)
                     .background(Circle().fill(Color.black.opacity(0.45)))
             }
-            Button(action: shareCurrentPage) {
-                Image(systemName: "square.and.arrow.up")
+            if isDoublePageAllowed {
+                Button(action: { isDoublePageEnabled.toggle() }) {
+                    Image(systemName: isDoublePageEnabled ? "book.fill" : "book")
+                        .foregroundColor(.white)
+                        .padding(10)
+                        .background(Circle().fill(Color.black.opacity(0.45)))
+                }
+            }
+            Button(action: { isToolsICloudPresented = true }) {
+                Image(systemName: "icloud")
                     .foregroundColor(.white)
                     .padding(10)
                     .background(Circle().fill(Color.black.opacity(0.45)))
@@ -529,13 +537,6 @@ private struct ReaderContentView: View {
         try? context.save()
     }
 
-    private func shareCurrentPage() {
-        guard let provider = provider else { return }
-        DispatchQueue.global(qos: .userInitiated).async {
-            guard let image = try? provider.image(atPage: currentPage) else { return }
-            DispatchQueue.main.async { presentShareImage(image) }
-        }
-    }
 
     private func loadComic() {
         guard provider == nil else { return }
@@ -619,9 +620,13 @@ private struct PageTapZones: View {
     }
 
     private func zone(action: @escaping () -> Void) -> some View {
+        // simultaneousGesture, non .onTapGesture: quest'ultimo reclama il tocco in esclusiva,
+        // impedendo allo swipe nativo del TabView(.page) sottostante di funzionare del tutto
+        // (su iOS il cambio pagina via swipe restava morto anche con le zone di tap disattivate,
+        // perché non è questo il gesture ad essere il problema — .onTapGesture in generale sì).
         Color.clear
             .contentShape(Rectangle())
-            .onTapGesture(perform: action)
+            .simultaneousGesture(TapGesture().onEnded(action))
     }
 }
 
@@ -764,7 +769,7 @@ private struct TwoFingerBrightnessView: UIViewRepresentable {
     let onChange: (CGFloat) -> Void
 
     func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+        let view = PassthroughUnlessTwoTouchesView()
         view.backgroundColor = .clear
         let recognizer = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
         recognizer.minimumNumberOfTouches = 2
@@ -800,6 +805,18 @@ private struct TwoFingerBrightnessView: UIViewRepresentable {
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool { true }
+    }
+}
+
+/// Una UIView a schermo intero, se coperta da hit-testing normale, intercetta OGNI tocco
+/// (anche a un dito) perché è la vista più in alto: pur non avendo un gesture che riconosce
+/// un solo dito, il tocco resta comunque "catturato" qui e non arriva mai al TabView sotto
+/// (niente swipe pagina, niente tap zone). Restituendo nil da hitTest per i tocchi singoli,
+/// li lasciamo passare attraverso; solo con 2+ dita questa vista li intercetta davvero.
+private final class PassthroughUnlessTwoTouchesView: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard let touches = event?.allTouches, touches.count >= 2 else { return nil }
+        return super.hitTest(point, with: event)
     }
 }
 #endif
