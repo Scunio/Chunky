@@ -39,6 +39,9 @@ private struct ReaderContentView: View {
     @AppStorage("oneHandedMode") private var isOneHandedModeEnabled = false
     @AppStorage("hotCornersEnabled") private var isHotCornersEnabled = false
     @AppStorage("twoFingerBrightnessEnabled") private var isTwoFingerBrightnessEnabled = true
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     @State private var provider: ComicPageProvider?
     /// Indice della pagina "principale" (la prima, più a sinistra in LTR) dello spread corrente.
@@ -57,7 +60,18 @@ private struct ReaderContentView: View {
     @State private var isToolsSettingsPresented = false
     @State private var isToolsParentalLockPresented = false
 
-    private var pageStep: Int { isDoublePageEnabled ? 2 : 1 }
+    /// Due pagine verticali affiancate su uno schermo stretto di iPhone lasciano un vuoto enorme
+    /// sopra e sotto (l'immagine combinata è troppo larga rispetto all'altezza disponibile):
+    /// la doppia pagina ha senso solo con più spazio orizzontale (iPad, Mac).
+    private var isDoublePageAllowed: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .regular
+        #else
+        true
+        #endif
+    }
+
+    private var pageStep: Int { (isDoublePageEnabled && isDoublePageAllowed) ? 2 : 1 }
 
     /// Indici di inizio di ogni spread (1 o 2 pagine), usati come "tag"/passi di navigazione.
     private func spreadStarts(pageCount: Int) -> [Int] {
@@ -237,7 +251,7 @@ private struct ReaderContentView: View {
         ZStack {
             TabView(selection: $currentPage) {
                 ForEach(spreadStarts(pageCount: provider.pageCount), id: \.self) { start in
-                    PageSpreadView(provider: provider, leadingIndex: start, isDoublePage: isDoublePageEnabled)
+                    PageSpreadView(provider: provider, leadingIndex: start, isDoublePage: isDoublePageEnabled && isDoublePageAllowed)
                         .tag(start)
                 }
             }
@@ -262,7 +276,7 @@ private struct ReaderContentView: View {
     #else
     private func macOSPager(provider: ComicPageProvider) -> some View {
         ZStack {
-            PageSpreadView(provider: provider, leadingIndex: currentPage, isDoublePage: isDoublePageEnabled)
+            PageSpreadView(provider: provider, leadingIndex: currentPage, isDoublePage: isDoublePageEnabled && isDoublePageAllowed)
                 .id(currentPage)
                 .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
 
@@ -398,11 +412,13 @@ private struct ReaderContentView: View {
                         systemImage: comic.isFavorite ? "star.fill" : "star"
                     )
                 }
-                Button(action: { isDoublePageEnabled.toggle() }) {
-                    Label(
-                        isDoublePageEnabled ? "Pagina singola" : "Doppia pagina",
-                        systemImage: isDoublePageEnabled ? "rectangle" : "rectangle.split.2x1.fill"
-                    )
+                if isDoublePageAllowed {
+                    Button(action: { isDoublePageEnabled.toggle() }) {
+                        Label(
+                            isDoublePageEnabled ? "Pagina singola" : "Doppia pagina",
+                            systemImage: isDoublePageEnabled ? "rectangle" : "rectangle.split.2x1.fill"
+                        )
+                    }
                 }
                 Button(action: toggleReadingDirection) {
                     Label(
@@ -486,9 +502,26 @@ private struct ReaderContentView: View {
                 currentPage = nearest
             }
         )
-        return Slider(value: sliderBinding, in: 0...Double(max(provider.pageCount - 1, 0)), step: 1)
-            .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
-            .accentColor(.white)
+        let maxValue = Double(max(provider.pageCount - 1, 0))
+        // Lo Slider di sistema, su uno sfondo scuro, ha una traccia quasi invisibile (resta
+        // visibile solo il pallino): disegniamo una traccia nostra dietro e rendiamo
+        // trasparente quella nativa, mantenendo il pallino bianco di sistema.
+        return ZStack {
+            GeometryReader { proxy in
+                let progress = maxValue > 0 ? CGFloat(currentPage) / CGFloat(maxValue) : 0
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.25))
+                    Capsule().fill(Color.white).frame(width: proxy.size.width * progress)
+                }
+                .frame(height: 4)
+                .frame(maxHeight: .infinity, alignment: .center)
+                .allowsHitTesting(false)
+            }
+            Slider(value: sliderBinding, in: 0...maxValue, step: 1)
+                .accentColor(.clear)
+        }
+        .frame(height: 24)
+        .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
     }
 
     private func toggleReadingDirection() {
