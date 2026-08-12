@@ -98,7 +98,7 @@ final class LibraryViewModel: ObservableObject {
     /// finirebbero tutti ammassati in "Altri fumetti" invece che raggruppati per testata come
     /// nell'originale. Se il titolo finisce con un numero (es. "Topolino 3595"), lo togliamo e
     /// usiamo il resto come nome serie ("Topolino").
-    private static func deriveSeriesName(fromFallbackTitle title: String) -> String? {
+    static func deriveSeriesName(fromFallbackTitle title: String) -> String? {
         guard let range = title.range(of: #"\s+#?\d+\s*$"#, options: .regularExpression) else { return nil }
         let series = String(title[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
         return series.isEmpty ? nil : series

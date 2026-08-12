@@ -7,6 +7,22 @@ private enum LibraryDisplayMode: String {
     case alphabetical
 }
 
+private enum ReadStatus: CaseIterable, Identifiable {
+    case unread
+    case reading
+    case finished
+
+    var id: Self { self }
+
+    var label: String {
+        switch self {
+        case .unread: "Non letto"
+        case .reading: "In lettura"
+        case .finished: "Terminato"
+        }
+    }
+}
+
 struct LibraryView: View {
     @Environment(\.managedObjectContext) private var context
     @FetchRequest(
@@ -20,6 +36,7 @@ struct LibraryView: View {
     @State private var selectedComic: ComicEntity?
     @State private var displayMode: LibraryDisplayMode = .grouped
     @State private var searchText = ""
+    @State private var isSearching = false
     @State private var isEditing = false
     @State private var selectedIDs: Set<NSManagedObjectID> = []
     @State private var collapsedGroups: Set<String> = []
@@ -28,6 +45,8 @@ struct LibraryView: View {
     @AppStorage("newTrayClearedAt") private var newTrayClearedAtTimestamp: Double = 0
     @State private var isToolsPresented = false
     @State private var isAccountsPresented = false
+    @State private var isNewGroupPromptPresented = false
+    @State private var newGroupName = ""
 
     private static let ungroupedSectionTitle = "Altri fumetti"
 
@@ -84,6 +103,15 @@ struct LibraryView: View {
             .sheet(isPresented: $isAccountsPresented) {
                 NavigationView { AccountsView().toolbarDoneButton { isAccountsPresented = false } }
             }
+            .alert("Nuovo gruppo", isPresented: $isNewGroupPromptPresented) {
+                TextField("Nome gruppo", text: $newGroupName)
+                Button("Annulla", role: .cancel) { newGroupName = "" }
+                Button("Crea") {
+                    let trimmed = newGroupName.trimmingCharacters(in: .whitespaces)
+                    if !trimmed.isEmpty { applyGroup(trimmed) }
+                    newGroupName = ""
+                }
+            }
             .overlay(importingOverlay)
             .background((theme.background ?? Color.clear).ignoresSafeArea())
             .foregroundColor(theme.text)
@@ -110,7 +138,11 @@ struct LibraryView: View {
     @ViewBuilder
     private var trailingToolbarContent: some View {
         if isEditing {
-            HStack {
+            HStack(spacing: 16) {
+                statusMenu
+                    .disabled(selectedIDs.isEmpty)
+                groupMenu
+                    .disabled(selectedIDs.isEmpty)
                 Button(action: deleteSelected) {
                     Image(systemName: "trash")
                 }
@@ -118,6 +150,7 @@ struct LibraryView: View {
             }
         } else {
             HStack(spacing: 16) {
+                searchButton
                 newComicsButton
                 nowReadingButton
                 if !isKioskModeEnabled {
@@ -146,6 +179,115 @@ struct LibraryView: View {
     private var toolsMenu: some View {
         Button(action: { isToolsPresented = true }) {
             Image(systemName: "wrench.and.screwdriver")
+        }
+    }
+
+    /// "Mark Selected" come nell'originale: segna i fumetti selezionati come Non letto/In
+    /// lettura/Terminato agendo direttamente su `lastReadPage`, l'unico stato che il modello
+    /// già tiene traccia (non serve un campo dedicato).
+    private var statusMenu: some View {
+        Menu {
+            Picker("Stato", selection: statusBinding) {
+                ForEach(ReadStatus.allCases) { status in
+                    Text(status.label).tag(status)
+                }
+            }
+        } label: {
+            Image(systemName: "flag")
+        }
+    }
+
+    /// "Grouping" come nell'originale: Auto ri-deriva il nome serie dal titolo (stessa euristica
+    /// usata in import), altrimenti si assegna un gruppo esistente o se ne crea uno nuovo.
+    private var groupMenu: some View {
+        Menu {
+            Picker("Gruppo", selection: groupBinding) {
+                Text("Auto").tag(Self.autoGroupTag)
+            }
+            Button("Nuovo gruppo…") { isNewGroupPromptPresented = true }
+            if !existingGroupNames.isEmpty {
+                Picker("Gruppi esistenti", selection: groupBinding) {
+                    ForEach(existingGroupNames, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "rectangle.stack")
+        }
+    }
+
+    private var selectedComics: [ComicEntity] {
+        comics.filter { selectedIDs.contains($0.objectID) }
+    }
+
+    private func status(for comic: ComicEntity) -> ReadStatus {
+        if comic.lastReadPage <= 0 { return .unread }
+        if comic.isFinished { return .finished }
+        return .reading
+    }
+
+    private var statusBinding: Binding<ReadStatus> {
+        Binding(
+            get: {
+                let statuses = Set(selectedComics.map(status(for:)))
+                return statuses.count == 1 ? statuses.first! : .reading
+            },
+            set: applyStatus
+        )
+    }
+
+    private func applyStatus(_ status: ReadStatus) {
+        for comic in selectedComics {
+            switch status {
+            case .unread:
+                comic.lastReadPage = 0
+                comic.dateLastOpened = nil
+            case .reading:
+                let count = comic.pageCount
+                comic.lastReadPage = count > 1 ? min(max(comic.lastReadPage, 1), count - 2) : 0
+                if comic.dateLastOpened == nil { comic.dateLastOpened = Date() }
+            case .finished:
+                comic.lastReadPage = max(comic.pageCount - 1, 0)
+                if comic.dateLastOpened == nil { comic.dateLastOpened = Date() }
+            }
+        }
+        try? context.save()
+    }
+
+    private static let autoGroupTag = "__auto__"
+
+    private var existingGroupNames: [String] {
+        Set(comics.compactMap(\.seriesName))
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    private var groupBinding: Binding<String> {
+        Binding(
+            get: {
+                let names = Set(selectedComics.map { $0.seriesName ?? Self.autoGroupTag })
+                return names.count == 1 ? names.first! : Self.autoGroupTag
+            },
+            set: { applyGroup($0 == Self.autoGroupTag ? nil : $0) }
+        )
+    }
+
+    private func applyGroup(_ name: String?) {
+        for comic in selectedComics {
+            comic.seriesName = name ?? LibraryViewModel.deriveSeriesName(fromFallbackTitle: comic.title ?? "")
+        }
+        try? context.save()
+    }
+
+    /// Icona lente in toolbar, come nell'originale: mostra/nasconde il campo di ricerca.
+    private var searchButton: some View {
+        Button(action: {
+            withAnimation {
+                isSearching.toggle()
+                if !isSearching { searchText = "" }
+            }
+        }) {
+            Image(systemName: isSearching ? "magnifyingglass.circle.fill" : "magnifyingglass")
         }
     }
 
@@ -180,7 +322,7 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var searchField: some View {
-        if !comics.isEmpty {
+        if isSearching && !comics.isEmpty {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)

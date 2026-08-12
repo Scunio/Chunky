@@ -5,12 +5,16 @@ struct AddAccountView: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(\.presentationMode) private var presentationMode
 
-    @State private var kind: RemoteAccountKind = .opds
+    @State private var kind: RemoteAccountKind
     @State private var name = ""
     @State private var serverURLString = ""
     @State private var username = ""
     @State private var password = ""
     @State private var validationError: String?
+
+    init(initialKind: RemoteAccountKind = .opds) {
+        _kind = State(initialValue: initialKind)
+    }
 
     var body: some View {
         NavigationView {

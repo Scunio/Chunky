@@ -2,6 +2,16 @@ import SwiftUI
 import CoreData
 import UniformTypeIdentifiers
 
+/// Servizio elencato in "Add account": qui il tocco apre il picker file di sistema, dove
+/// Dropbox/Google Drive/OneDrive compaiono automaticamente se le rispettive app sono installate
+/// — non essendoci integrazione OAuth diretta in questa ricostruzione, e nessun sistema di
+/// acquisto in-app che richieda di distinguere servizi "PRO" da quelli gratuiti.
+private struct OpenRemoteService {
+    let name: String
+    let systemImage: String
+    let tintColor: Color
+}
+
 struct AccountsView: View {
     @Environment(\.managedObjectContext) private var context
     @EnvironmentObject private var viewModel: LibraryViewModel
@@ -10,11 +20,38 @@ struct AccountsView: View {
     ) private var accounts: FetchedResults<RemoteAccountEntity>
 
     @State private var isShowingAddAccount = false
+    @State private var addAccountKind: RemoteAccountKind = .opds
     @State private var isShowingFolderPicker = false
+    @State private var isShowingFileImporter = false
     @State private var folderConversionError: String?
+
+    private static let openServices: [OpenRemoteService] = [
+        OpenRemoteService(name: "Windows / Mac Shared Folder", systemImage: "folder", tintColor: .primary),
+        OpenRemoteService(name: "FTP / SFTP", systemImage: "network", tintColor: .primary),
+        OpenRemoteService(name: "AFP", systemImage: "folder", tintColor: .primary),
+        OpenRemoteService(name: "ComicStreamer", systemImage: "server.rack", tintColor: .primary),
+        OpenRemoteService(name: "Image Comics", systemImage: "book.closed", tintColor: .primary),
+        OpenRemoteService(name: "Transporter", systemImage: "shippingbox", tintColor: .primary),
+        OpenRemoteService(name: "Dropbox", systemImage: "square.on.square", tintColor: .blue),
+        OpenRemoteService(name: "Google Drive", systemImage: "triangle", tintColor: .green),
+        OpenRemoteService(name: "OneDrive", systemImage: "icloud", tintColor: .blue),
+        OpenRemoteService(name: "Amazon Cloud Drive", systemImage: "cloud", tintColor: .orange),
+    ]
 
     var body: some View {
         List {
+            Section {
+                NavigationLink(destination: fileImporterTrigger) {
+                    Label("Downloads", systemImage: "arrow.down.circle")
+                }
+                NavigationLink(destination: LocalUploadView()) {
+                    Label("Web", systemImage: "globe")
+                }
+                NavigationLink(destination: ICloudSyncFolderView()) {
+                    Label("iCloud Drive", systemImage: "icloud")
+                }
+            }
+
             if !accounts.isEmpty {
                 Section(header: Text("I tuoi account")) {
                     ForEach(accounts) { account in
@@ -26,10 +63,28 @@ struct AccountsView: View {
                 }
             }
 
-            Section(header: Text("Rete locale")) {
-                NavigationLink(destination: LocalUploadView()) {
-                    Label("Upload dalla rete (Web)", systemImage: "wifi")
+            Section(header: Text("Add account")) {
+                Button(action: { addAccountKind = .opds; isShowingAddAccount = true }) {
+                    Label("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
                 }
+                .foregroundColor(.primary)
+
+                ForEach(Self.openServices, id: \.name) { service in
+                    Button(action: { isShowingFileImporter = true }) {
+                        Label {
+                            Text(service.name)
+                        } icon: {
+                            Image(systemName: service.systemImage)
+                                .foregroundColor(service.tintColor)
+                        }
+                    }
+                    .foregroundColor(.primary)
+                }
+
+                Button(action: { addAccountKind = .webdav; isShowingAddAccount = true }) {
+                    Label("Nuovo account WebDAV", systemImage: "plus.circle")
+                }
+                .foregroundColor(.primary)
             }
 
             Section(
@@ -45,22 +100,29 @@ struct AccountsView: View {
                         .font(.footnote)
                 }
             }
-
-            Section(
-                header: Text("Aggiungi account"),
-                footer: Text("Dropbox, Google Drive e OneDrive si possono già importare da qui, se hai le rispettive app installate: compaiono automaticamente nel selettore file di sistema.")
-            ) {
-                Button(action: { isShowingAddAccount = true }) {
-                    Label("Nuovo account OPDS o WebDAV", systemImage: "plus.circle")
+        }
+        .navigationTitle("Accounts")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: { addAccountKind = .opds; isShowingAddAccount = true }) {
+                    Image(systemName: "plus")
                 }
             }
         }
-        .navigationTitle("Account")
-        #if os(iOS)
-        .toolbar { EditButton() }
         #endif
         .sheet(isPresented: $isShowingAddAccount) {
-            AddAccountView()
+            AddAccountView(initialKind: addAccountKind)
+        }
+        .fileImporter(
+            isPresented: $isShowingFileImporter,
+            allowedContentTypes: [.cbz, .cbr, .pdf],
+            allowsMultipleSelection: true
+        ) { result in
+            if case .success(let urls) = result {
+                viewModel.importFiles(urls, into: context)
+            }
         }
         .fileImporter(isPresented: $isShowingFolderPicker, allowedContentTypes: [.folder]) { result in
             switch result {
@@ -70,6 +132,14 @@ struct AccountsView: View {
                 folderConversionError = error.localizedDescription
             }
         }
+    }
+
+    /// "Downloads" apre direttamente il selettore file di sistema, come il vecchio pulsante a
+    /// busta rimosso dalla toolbar (era duplicato: l'unico punto d'ingresso per l'import "a mano"
+    /// resta qui, dentro Accounts).
+    private var fileImporterTrigger: some View {
+        Color.clear
+            .onAppear { isShowingFileImporter = true }
     }
 
     private func deleteAccounts(at offsets: IndexSet) {
