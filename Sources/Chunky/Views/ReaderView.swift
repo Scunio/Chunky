@@ -53,6 +53,9 @@ private struct ReaderContentView: View {
     @State private var isPageJumpPresented = false
     @State private var jumpPageNumber = 1
     @State private var isInfoPresented = false
+    @State private var isToolsColorsPresented = false
+    @State private var isToolsSettingsPresented = false
+    @State private var isToolsParentalLockPresented = false
 
     private var pageStep: Int { isDoublePageEnabled ? 2 : 1 }
 
@@ -152,6 +155,15 @@ private struct ReaderContentView: View {
         }
         .sheet(isPresented: $isInfoPresented) {
             ComicInfoSheet(comic: comic, loadedPageCount: provider?.pageCount)
+        }
+        .sheet(isPresented: $isToolsColorsPresented) {
+            NavigationView { ColorThemeView().toolbarDoneButton { isToolsColorsPresented = false } }
+        }
+        .sheet(isPresented: $isToolsSettingsPresented) {
+            NavigationView { SettingsView().toolbarDoneButton { isToolsSettingsPresented = false } }
+        }
+        .sheet(isPresented: $isToolsParentalLockPresented) {
+            NavigationView { ParentalLockSettingsView().toolbarDoneButton { isToolsParentalLockPresented = false } }
         }
     }
 
@@ -359,10 +371,16 @@ private struct ReaderContentView: View {
     private var header: some View {
         HStack {
             Button(action: { presentationMode.wrappedValue.dismiss() }) {
-                Image(systemName: "chevron.down")
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(Circle().fill(Color.black.opacity(0.45)))
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                    Text("Libreria")
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(Color.black.opacity(0.45)))
             }
             Menu {
                 Button(action: {
@@ -378,6 +396,18 @@ private struct ReaderContentView: View {
                     Label(
                         comic.isFavorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti",
                         systemImage: comic.isFavorite ? "star.fill" : "star"
+                    )
+                }
+                Button(action: { isDoublePageEnabled.toggle() }) {
+                    Label(
+                        isDoublePageEnabled ? "Pagina singola" : "Doppia pagina",
+                        systemImage: isDoublePageEnabled ? "rectangle" : "rectangle.split.2x1.fill"
+                    )
+                }
+                Button(action: toggleReadingDirection) {
+                    Label(
+                        comic.readingDirection == .rightToLeft ? "Direzione: occidentale" : "Direzione: manga",
+                        systemImage: comic.readingDirection == .rightToLeft ? "arrow.right" : "arrow.left"
                     )
                 }
             } label: {
@@ -404,14 +434,18 @@ private struct ReaderContentView: View {
                     .padding(10)
                     .background(Circle().fill(Color.black.opacity(0.45)))
             }
-            Button(action: { isDoublePageEnabled.toggle() }) {
-                Image(systemName: isDoublePageEnabled ? "rectangle.split.2x1.fill" : "rectangle")
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(Circle().fill(Color.black.opacity(0.45)))
-            }
-            Button(action: toggleReadingDirection) {
-                Image(systemName: comic.readingDirection == .rightToLeft ? "arrow.left" : "arrow.right")
+            Menu {
+                Button(action: { isToolsColorsPresented = true }) {
+                    Label("Colori", systemImage: "paintpalette")
+                }
+                Button(action: { isToolsSettingsPresented = true }) {
+                    Label("Impostazioni", systemImage: "gearshape")
+                }
+                Button(action: { isToolsParentalLockPresented = true }) {
+                    Label("Blocco genitori", systemImage: "lock")
+                }
+            } label: {
+                Image(systemName: "wrench.and.screwdriver")
                     .foregroundColor(.white)
                     .padding(10)
                     .background(Circle().fill(Color.black.opacity(0.45)))
