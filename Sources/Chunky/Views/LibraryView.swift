@@ -26,9 +26,7 @@ struct LibraryView: View {
     @State private var isNowReadingPresented = false
     @State private var isNewComicsPresented = false
     @AppStorage("newTrayClearedAt") private var newTrayClearedAtTimestamp: Double = 0
-    @State private var isToolsColorsPresented = false
-    @State private var isToolsSettingsPresented = false
-    @State private var isToolsParentalLockPresented = false
+    @State private var isToolsPresented = false
 
     private static let ungroupedSectionTitle = "Altri fumetti"
 
@@ -79,14 +77,8 @@ struct LibraryView: View {
                 ReaderView(comic: comic, libraryComics: filteredComics)
             }
             #endif
-            .sheet(isPresented: $isToolsColorsPresented) {
-                NavigationView { ColorThemeView().toolbarDoneButton { isToolsColorsPresented = false } }
-            }
-            .sheet(isPresented: $isToolsSettingsPresented) {
-                NavigationView { SettingsView().toolbarDoneButton { isToolsSettingsPresented = false } }
-            }
-            .sheet(isPresented: $isToolsParentalLockPresented) {
-                NavigationView { ParentalLockSettingsView().toolbarDoneButton { isToolsParentalLockPresented = false } }
+            .sheet(isPresented: $isToolsPresented) {
+                ToolsPanelView()
             }
             .overlay(importingOverlay)
             .background((theme.background ?? Color.clear).ignoresSafeArea())
@@ -152,21 +144,10 @@ struct LibraryView: View {
         }
     }
 
-    /// Raccoglie Colori/Impostazioni/Blocco genitori dietro l'icona a chiave inglese, come
-    /// nell'originale. Bottoni + sheet, non NavigationLink: quest'ultimo dentro un Menu non
-    /// spinge nulla (nessuna navigazione avviene al tap, verificato dal vivo sul simulatore).
+    /// Apre il pannello "Tools" (Colori/Impostazioni/Blocco genitori/Feedback/Informazioni),
+    /// come nell'originale.
     private var toolsMenu: some View {
-        Menu {
-            Button(action: { isToolsColorsPresented = true }) {
-                Label("Colori", systemImage: "paintpalette")
-            }
-            Button(action: { isToolsSettingsPresented = true }) {
-                Label("Impostazioni", systemImage: "gearshape")
-            }
-            Button(action: { isToolsParentalLockPresented = true }) {
-                Label("Blocco genitori", systemImage: "lock")
-            }
-        } label: {
+        Button(action: { isToolsPresented = true }) {
             Image(systemName: "wrench.and.screwdriver")
         }
     }
