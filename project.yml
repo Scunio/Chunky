@@ -1,0 +1,95 @@
+name: Chunky
+options:
+  bundleIdPrefix: com.scunio
+  deploymentTarget:
+    iOS: "14.0"
+    macOS: "11.0"
+  createIntermediateGroups: true
+
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    from: 0.9.19
+  Unrar:
+    url: https://github.com/mtgto/Unrar.swift.git
+    from: 0.3.15
+
+targets:
+  Chunky:
+    type: application
+    platform: [iOS, macOS]
+    deploymentTarget:
+      iOS: "14.0"
+      macOS: "11.0"
+    sources:
+      - path: Sources/Chunky
+    resources:
+      - path: Sources/Chunky/Resources
+    dependencies:
+      - package: ZIPFoundation
+      - package: Unrar
+    info:
+      path: Sources/Chunky/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Chunky
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSUbiquitousContainers:
+          iCloud.com.scunio.Chunky:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerSupportedFolderLevels: Any
+            NSUbiquitousContainerName: Chunky
+        LSSupportsOpeningDocumentsInPlace: true
+        UIBackgroundModes:
+          - remote-notification
+        NSFaceIDUsageDescription: "Usa Face ID per sbloccare Chunky quando il blocco genitori è attivo."
+        NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Comic Archive
+            LSItemContentTypes:
+              - com.scunio.chunky.cbz
+              - com.scunio.chunky.cbr
+              - com.adobe.pdf
+            LSHandlerRank: Owner
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.scunio.chunky.cbz
+            UTTypeDescription: Comic Book Zip Archive
+            UTTypeConformsTo: [public.zip-archive]
+            UTTypeTagSpecification:
+              public.filename-extension: [cbz]
+          - UTTypeIdentifier: com.scunio.chunky.cbr
+            UTTypeDescription: Comic Book RAR Archive
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [cbr]
+    entitlements:
+      path: Sources/Chunky/Resources/Chunky.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.network.client: true
+        com.apple.security.network.server: true
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.com.scunio.Chunky
+        com.apple.developer.icloud-services:
+          - CloudDocuments
+          - CloudKit
+        com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)com.scunio.Chunky"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.scunio.Chunky
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        ENABLE_PREVIEWS: true
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
