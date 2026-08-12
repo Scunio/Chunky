@@ -19,10 +19,18 @@ struct AccountsView: View {
         sortDescriptors: [NSSortDescriptor(keyPath: \RemoteAccountEntity.dateAdded, ascending: true)]
     ) private var accounts: FetchedResults<RemoteAccountEntity>
 
+    /// Due `.fileImporter` distinti sulla stessa view vanno in conflitto in SwiftUI (uno dei due
+    /// resta a metà presentazione, con un artefatto visivo del picker di sistema che non si apre
+    /// mai del tutto) — un solo importer, con il tipo di contenuto scelto in base a questo stato.
+    private enum ActiveImporter: Identifiable {
+        case comics
+        case folder
+        var id: Self { self }
+    }
+
     @State private var isShowingAddAccount = false
     @State private var addAccountKind: RemoteAccountKind = .opds
-    @State private var isShowingFolderPicker = false
-    @State private var isShowingFileImporter = false
+    @State private var activeImporter: ActiveImporter?
     @State private var folderConversionError: String?
     /// Come nell'originale: "+" non apre un altro schermo, rivela la sezione "Add account" in
     /// coda alla stessa lista e diventa "Done" per richiuderla — non è un secondo passo separato.
@@ -44,7 +52,7 @@ struct AccountsView: View {
     var body: some View {
         List {
             Section {
-                Button(action: { isShowingFileImporter = true }) {
+                Button(action: { activeImporter = .comics }) {
                     Label("Downloads", systemImage: "arrow.down.circle")
                 }
                 .foregroundColor(.primary)
@@ -75,7 +83,7 @@ struct AccountsView: View {
                     .foregroundColor(.primary)
 
                     ForEach(Self.openServices, id: \.name) { service in
-                        Button(action: { isShowingFileImporter = true }) {
+                        Button(action: { activeImporter = .comics }) {
                             Label {
                                 Text(service.name)
                             } icon: {
@@ -96,7 +104,7 @@ struct AccountsView: View {
                     header: Text("Strumenti"),
                     footer: Text("Utile per una serie di pagine scansionate come immagini separate: verranno unite in un unico fumetto CBZ.")
                 ) {
-                    Button(action: { isShowingFolderPicker = true }) {
+                    Button(action: { activeImporter = .folder }) {
                         Label("Crea fumetto da cartella di immagini", systemImage: "photo.stack")
                     }
                     if let folderConversionError = folderConversionError {
@@ -130,20 +138,22 @@ struct AccountsView: View {
             AddAccountView(initialKind: addAccountKind)
         }
         .fileImporter(
-            isPresented: $isShowingFileImporter,
-            allowedContentTypes: [.cbz, .cbr, .pdf],
-            allowsMultipleSelection: true
+            isPresented: Binding(
+                get: { activeImporter != nil },
+                set: { if !$0 { activeImporter = nil } }
+            ),
+            allowedContentTypes: activeImporter == .folder ? [.folder] : [.cbz, .cbr, .pdf],
+            allowsMultipleSelection: activeImporter != .folder
         ) { result in
-            if case .success(let urls) = result {
-                viewModel.importFiles(urls, into: context)
-            }
-        }
-        .fileImporter(isPresented: $isShowingFolderPicker, allowedContentTypes: [.folder]) { result in
-            switch result {
-            case .success(let folderURL):
-                convertFolder(folderURL)
-            case .failure(let error):
+            switch (activeImporter, result) {
+            case (.folder, .success(let urls)):
+                if let folderURL = urls.first { convertFolder(folderURL) }
+            case (.folder, .failure(let error)):
                 folderConversionError = error.localizedDescription
+            case (_, .success(let urls)):
+                viewModel.importFiles(urls, into: context)
+            case (_, .failure):
+                break
             }
         }
     }
