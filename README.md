@@ -5,7 +5,6 @@
 
   **A fast, native comic book reader for iOS and macOS — CBZ, CBR, and PDF, with iCloud sync, remote libraries, and a reading experience tuned for long series.**
 
-  [![Version](https://img.shields.io/badge/version-1.0-brightgreen)](project.yml)
   [![Platform](https://img.shields.io/badge/platform-iOS%2017%2B%20%7C%20macOS%2014%2B-lightgrey)](#requirements)
   [![Swift](https://img.shields.io/badge/Swift-5-orange)](#requirements)
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)

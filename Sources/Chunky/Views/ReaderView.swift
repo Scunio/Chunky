@@ -147,16 +147,9 @@ private struct ReaderContentView: View {
     /// colori devono adattarsi o diventano illeggibili (bianco su bianco).
     private var chromeForeground: Color { isBackgroundDark ? .white : .black }
 
-    /// Materiale traslucido di sistema, come il `.toolbar` nativo di Libreria: il deployment
-    /// target dell'app (iOS 14) è precedente a `Material`, quindi su iOS 14 resta il vecchio
-    /// riempimento a tinta piena.
-    @ViewBuilder
+    /// Materiale traslucido di sistema, come il `.toolbar` nativo di Libreria.
     private var chromeBackground: some View {
-        if #available(iOS 15.0, macOS 12.0, *) {
-            Rectangle().fill(.bar)
-        } else {
-            Rectangle().fill(isBackgroundDark ? Color(white: 88.0 / 255.0) : Color(white: 0.93))
-        }
+        Rectangle().fill(.bar)
     }
 
     var body: some View {
@@ -254,7 +247,7 @@ private struct ReaderContentView: View {
         // Su iPad uno swipe orizzontale che parte vicino al bordo inferiore rischia di essere
         // rubato dal gesto di sistema (Dock/App Switcher). defersSystemGestures dà priorità
         // alla nostra DragGesture di cambio pagina finché il tocco è in corso su quel bordo.
-        .modifier(DefersBottomSystemGesturesIfAvailable())
+        .defersSystemGestures(on: .bottom)
         // Sempre nascosta, non legata a isControlsVisible: altrimenti la sua comparsa/scomparsa
         // anima la safe area proprio mentre la pagina (sotto .ignoresSafeArea()) dovrebbe restare
         // ferma, causando lo spostamento verticale visibile al mostrare/nascondere i controlli.
@@ -1458,18 +1451,6 @@ private struct PageTurnPager<Content: View>: UIViewControllerRepresentable {
             // differenze e non rianima un cambio pagina che il dito ha già fatto.
             currentIndex = index
             parent.selection = index
-        }
-    }
-}
-
-/// `defersSystemGestures(on:)` esiste solo da iOS 16: sotto, nessun-op (l'unico effetto perso
-/// è la precedenza dello swipe-pagina sul gesto di sistema del Dock/App Switcher su iPad).
-private struct DefersBottomSystemGesturesIfAvailable: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 16.0, *) {
-            content.defersSystemGestures(on: .bottom)
-        } else {
-            content
         }
     }
 }
