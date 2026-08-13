@@ -5,7 +5,8 @@
 
   **A fast, native comic book reader for iOS and macOS — CBZ, CBR, and PDF, with iCloud sync, remote libraries, and a reading experience tuned for long series.**
 
-  [![Platform](https://img.shields.io/badge/platform-iOS%2014%2B%20%7C%20macOS%2011%2B-lightgrey)](#requirements)
+  [![Version](https://img.shields.io/badge/version-1.0-brightgreen)](project.yml)
+  [![Platform](https://img.shields.io/badge/platform-iOS%2017%2B%20%7C%20macOS%2014%2B-lightgrey)](#requirements)
   [![Swift](https://img.shields.io/badge/Swift-5-orange)](#requirements)
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -47,8 +48,8 @@ Chunky is a from-scratch SwiftUI rebuild of an earlier iOS-only app of the same 
 
 ## 🧰 Requirements
 
-- Xcode 15+
-- iOS 14+ / macOS 11+ deployment targets
+- Xcode 16+
+- iOS 17+ / macOS 14+ deployment targets
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) to generate the `.xcodeproj` (not checked into the repo — see below)
 
 ## 🚀 Getting started
@@ -63,7 +64,9 @@ xcodegen generate
 open Chunky.xcodeproj
 ```
 
-The project is defined in [`project.yml`](project.yml) and the `.xcodeproj` is generated from it (and gitignored), so the repo stays diff-friendly. Re-run `xcodegen generate` any time `project.yml` changes.
+The project is defined in [`project.yml`](project.yml) and the `.xcodeproj` is generated from it (and gitignored), so the repo stays diff-friendly. The per-platform `Info.plist` and `.entitlements` files under `Support/` are generated the same way and are likewise gitignored. **Re-run `xcodegen generate` any time `project.yml` changes** — and before opening the project after a fresh clone or a `git pull`, since targets (including the test targets) exist only in `project.yml`.
+
+`Chunky_iOS` and `Chunky_macOS` are two separate targets rather than one multiplatform target, so each ships only the Info.plist keys and entitlements that apply to it. `Scripts/verify-plists.sh <derived-data-path> [macos|ios|both]` checks that, and runs in CI.
 
 Once open in Xcode, pick the `Chunky_iOS` or `Chunky_macOS` scheme and run. No signing team is configured by default — set your own in Xcode's Signing & Capabilities tab before running on a device or enabling iCloud sync.
 
@@ -77,10 +80,28 @@ Sources/Chunky/
 ├── ViewModels/  Import/library orchestration
 ├── Services/    Archive readers, iCloud, remote clients, image processing…
 ├── Models/      Core Data model extensions
-└── Resources/   Assets, Info.plist, entitlements, Core Data model
+└── Resources/   Assets, Core Data model, acknowledgements
 ```
 
+`Support/` (generated) holds the per-platform `Info.plist` and `.entitlements`; `Scripts/` holds build-verification scripts.
+
 The reader supports CBZ/CBR/PDF via a shared `ComicPageProvider` protocol (see `Sources/Chunky/Services/ComicPageProvider.swift`), so adding a new archive format is a matter of implementing one more provider.
+
+## 🧪 Tests
+
+```bash
+xcodegen generate
+xcodebuild test -scheme Chunky_macOS -destination 'platform=macOS'
+xcodebuild test -scheme Chunky_iOS -destination 'platform=iOS Simulator,name=iPhone 16'
+```
+
+Unit tests use **Swift Testing** (`@Test` / `#expect`); UI tests use **XCTest**, since XCUITest has no Swift Testing equivalent — don't try to unify them.
+
+The unit test bundles are *not* hosted in the app: they compile the sources under test directly (everything except `ChunkyApp.swift`). Hosting them would mean signing the app, and the iCloud entitlements need a provisioning profile that CI doesn't have. The trade-off is that tests live in the same module as the code, so there is no `@testable import Chunky`.
+
+UI tests need the real app, so they live in the separate `ChunkyUI_iOS` / `ChunkyUI_macOS` schemes and run nightly rather than on every PR.
+
+Fixtures under `Tests/ChunkyTests/Fixtures` are committed, not generated at test time: `Unrar.swift` only decompresses, so a `.cbr` has to be checked in regardless, and one source of truth beats two. Regenerate the images and the PDF with `swift Scripts/make-fixtures.swift <output-dir>`, then re-zip.
 
 ## 🤝 Contributing
 

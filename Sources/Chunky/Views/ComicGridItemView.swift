@@ -2,6 +2,11 @@ import SwiftUI
 
 struct ComicGridItemView: View {
     @ObservedObject var comic: ComicEntity
+    /// Unica fonte di verità per il badge "da scaricare": una `NSMetadataQuery` viva a livello
+    /// di libreria. Prima lo stato veniva letto dal filesystem dentro `body`, quindi non si
+    /// aggiornava mai da solo — il badge restava visibile a download concluso finché la griglia
+    /// non si ridisegnava per altri motivi.
+    @ObservedObject private var downloadTracker = ICloudDownloadTracker.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -30,6 +35,11 @@ struct ComicGridItemView: View {
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var isPendingDownload: Bool {
+        guard let relativePath = comic.relativePath else { return false }
+        return downloadTracker.pendingRelativePaths.contains(relativePath)
     }
 
     @ViewBuilder
@@ -77,13 +87,9 @@ struct ComicGridItemView: View {
         }
     }
 
-    /// Vero se il fumetto è solo un placeholder iCloud, non ancora scaricato in locale —
+    /// Mostrato se il fumetto è solo un placeholder iCloud, non ancora scaricato in locale —
     /// prima non c'era alcun indizio in libreria, e aprirlo poteva far comparire un errore
     /// dopo un lungo caricamento senza che fosse chiaro il motivo.
-    private var isPendingDownload: Bool {
-        LibraryStorage.isPendingDownload(LibraryStorage.fileURL(forRelativePath: comic.relativePath ?? ""))
-    }
-
     @ViewBuilder
     private var pendingDownloadBadge: some View {
         if isPendingDownload {

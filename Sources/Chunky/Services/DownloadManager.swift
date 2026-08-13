@@ -44,23 +44,41 @@ final class DownloadManager: ObservableObject {
 
     @Published private(set) var activeDownloads: [DownloadItem] = []
 
+    /// Download già attivi indicizzati per `key` (es. il percorso del fumetto iCloud): riaprire
+    /// lo stesso fumetto mentre si sta scaricando deve agganciarsi al download in corso, non
+    /// avviarne un secondo con una seconda riga nella schermata Downloads.
+    private var itemsByKey: [String: DownloadItem] = [:]
+
     private init() {}
 
     /// `task` è nil per i download senza `URLSessionTask` sotto (es. un fumetto iCloud non
-    /// ancora scaricato).
-    func register(title: String, task: URLSessionTask? = nil) -> DownloadItem {
+    /// ancora scaricato). `key` identifica la risorsa scaricata: se è già in corso un download
+    /// con la stessa chiave viene restituito quello esistente. Con `key` nil non c'è deduplica
+    /// (due download distinti senza chiave restano due voci separate).
+    func register(title: String, task: URLSessionTask? = nil, key: String? = nil) -> DownloadItem {
+        if let key = key, let existing = itemsByKey[key] {
+            return existing
+        }
         let item = DownloadItem(title: title, task: task)
         activeDownloads.append(item)
+        if let key = key {
+            itemsByKey[key] = item
+        }
         return item
     }
 
     func remove(_ item: DownloadItem) {
         activeDownloads.removeAll { $0.id == item.id }
+        // Va tolto anche dalla mappa, altrimenti un download annullato resterebbe in cache e
+        // la successiva apertura dello stesso fumetto riceverebbe un item già `isCancelled`,
+        // fallendo subito senza aver mai ricominciato a scaricare.
+        itemsByKey = itemsByKey.filter { $0.value.id != item.id }
     }
 
     func stopAll() {
         for item in activeDownloads {
             item.cancel()
         }
+        itemsByKey.removeAll()
     }
 }

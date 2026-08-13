@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Il .xcodeproj è gitignored e rigenerato a ogni run: la CI è l'unico posto in cui
+  # è garantito che il progetto corrisponda davvero a project.yml.
+  DERIVED_DATA: ${{ github.workspace }}/DerivedData
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            scheme: Chunky_macOS
+            destination: platform=macOS,arch=arm64
+            testDestination: platform=macOS,arch=arm64
+            require: macos
+          - name: iOS
+            scheme: Chunky_iOS
+            # Destinazione generica: i nomi dei simulatori cambiano tra le immagini dei
+            # runner. Quando arriveranno i test (P2) servirà un device concreto.
+            destination: generic/platform=iOS Simulator
+            # I test hanno bisogno di un simulatore concreto, non di una destinazione generica.
+            testDestination: platform=iOS Simulator,name=iPhone 16,OS=latest
+            require: ios
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Seleziona Xcode
+        run: |
+          ls -1 /Applications | grep -i '^Xcode' || true
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+
+      - name: Installa XcodeGen
+        run: brew install xcodegen
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('project.yml') }}
+          restore-keys: ${{ runner.os }}-spm-
+
+      - name: Genera il progetto
+        run: xcodegen generate
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Chunky.xcodeproj \
+            -scheme "${{ matrix.scheme }}" \
+            -configuration Debug \
+            -destination "${{ matrix.destination }}" \
+            -derivedDataPath "$DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verifica Info.plist
+        run: Scripts/verify-plists.sh "$DERIVED_DATA" "${{ matrix.require }}"
+
+      # Lo schema principale esegue solo i test unitari, che non sono ospitati nell'app:
+      # niente firma, niente avvio della UI. Gli UI test stanno in nightly.yml.
+      - name: Test unitari
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Chunky.xcodeproj \
+            -scheme "${{ matrix.scheme }}" \
+            -configuration Debug \
+            -destination "${{ matrix.testDestination }}" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -resultBundlePath "build/${{ matrix.name }}.xcresult" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Copertura
+        if: always()
+        run: xcrun xccov view --report --only-targets "build/${{ matrix.name }}.xcresult" || true
+
+      - name: Salva il result bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult-${{ matrix.name }}
+          path: build/${{ matrix.name }}.xcresult
+
+  lint:
+    name: SwiftLint
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installa SwiftLint
+        run: brew install swiftlint
+      - name: Lint
+        # Volutamente senza --strict: `file_length` e `type_body_length` su ReaderView.swift e
+        # LibraryView.swift sono warning di promemoria (la loro scomposizione è P3/P4), mentre
+        # force_cast / force_try / force_unwrapping sono error e bloccano la CI.
+        run: swiftlint --reporter github-actions-logging

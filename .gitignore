@@ -1,5 +1,8 @@
 .DS_Store
 Chunky.xcodeproj/
+# Info.plist ed entitlements sono generati da XcodeGen a partire da project.yml.
+# Lo slash iniziale è necessario: senza, il pattern prenderebbe anche Tests/ChunkyTests/Support.
+/Support/
 build/
 build_*/
 DerivedData/
@@ -7,3 +10,4 @@ DerivedData/
 xcuserdata/
 .swiftpm/
 .build/
+*.profraw

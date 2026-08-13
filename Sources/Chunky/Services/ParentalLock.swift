@@ -80,6 +80,9 @@ final class ParentalLock: ObservableObject {
     /// UUID fisso e stabile usato come "account" nel Keychain condiviso: il passcode non è
     /// legato a un fumetto o account remoto, quindi non serve generarne uno nuovo ogni volta.
     private var passcodeUUID: UUID {
+        // Letterale costante e valido per costruzione. Un `?? UUID()` qui sarebbe peggio:
+        // renderebbe silenziosamente irrecuperabile il passcode invece di fallire subito.
+        // swiftlint:disable:next force_unwrapping
         UUID(uuidString: "5D6A9B7E-0000-4000-8000-000000000001")!
     }
 }

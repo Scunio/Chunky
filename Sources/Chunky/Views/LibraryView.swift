@@ -248,7 +248,9 @@ struct LibraryView: View {
         Binding(
             get: {
                 let statuses = Set(selectedComics.map(status(for:)))
-                return statuses.count == 1 ? statuses.first! : .reading
+                // Selezione mista (o vuota): il picker mostra "In lettura" senza applicare nulla.
+                guard statuses.count == 1, let onlyStatus = statuses.first else { return .reading }
+                return onlyStatus
             },
             set: applyStatus
         )
@@ -283,7 +285,8 @@ struct LibraryView: View {
         Binding(
             get: {
                 let names = Set(selectedComics.map { $0.seriesName ?? Self.autoGroupTag })
-                return names.count == 1 ? names.first! : Self.autoGroupTag
+                guard names.count == 1, let onlyName = names.first else { return Self.autoGroupTag }
+                return onlyName
             },
             set: { applyGroup($0 == Self.autoGroupTag ? nil : $0) }
         )
@@ -390,7 +393,7 @@ struct LibraryView: View {
             if lhs == Self.ungroupedSectionTitle { return false }
             if rhs == Self.ungroupedSectionTitle { return true }
             return lhs.localizedStandardCompare(rhs) == .orderedAscending
-        }.map { key in (title: key, comics: groups[key]!.sorted { ($0.title ?? "") < ($1.title ?? "") }) }
+        }.map { key in (title: key, comics: (groups[key] ?? []).sorted { ($0.title ?? "") < ($1.title ?? "") }) }
     }
 
     private var libraryGrid: some View {
@@ -645,27 +648,20 @@ private struct ComicCell: View {
     }
 }
 
-/// `.alert(_:isPresented:actions:)` con `TextField`/`Button(role:)` richiede iOS 15+: il target
-/// minimo del progetto è iOS 14, quindi isoliamo qui il ramo `#available` invece di alzarlo
-/// per l'intera app solo per questo prompt.
 private struct NewGroupPromptModifier: ViewModifier {
     @Binding var isPresented: Bool
     @Binding var name: String
     let onCreate: (String) -> Void
 
     func body(content: Content) -> some View {
-        if #available(iOS 15.0, macOS 12.0, *) {
-            content.alert("Nuovo gruppo", isPresented: $isPresented) {
-                TextField("Nome gruppo", text: $name)
-                Button("Annulla", role: .cancel) { name = "" }
-                Button("Crea") {
-                    let trimmed = name.trimmingCharacters(in: .whitespaces)
-                    if !trimmed.isEmpty { onCreate(trimmed) }
-                    name = ""
-                }
+        content.alert("Nuovo gruppo", isPresented: $isPresented) {
+            TextField("Nome gruppo", text: $name)
+            Button("Annulla", role: .cancel) { name = "" }
+            Button("Crea") {
+                let trimmed = name.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty { onCreate(trimmed) }
+                name = ""
             }
-        } else {
-            content
         }
     }
 }
