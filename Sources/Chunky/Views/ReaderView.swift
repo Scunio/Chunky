@@ -34,10 +34,19 @@ private struct ReaderContentView: View {
     let onSwitchComic: (ComicEntity) -> Void
     @Environment(\.managedObjectContext) private var context
     @Environment(\.presentationMode) private var presentationMode
+    #if os(macOS)
+    // Su Mac il reader vive nella propria finestra (WindowGroup(for: ComicID.self)), non più
+    // in uno .sheet: presentationMode.dismiss() lì non ha alcun effetto. dismissWindow() chiude
+    // la finestra che la contiene, che è il vero equivalente di "esci dalla lettura" qui.
+    @Environment(\.dismissWindow) private var dismissWindow
+    #endif
     /// Scelta esplicita singola/doppia pagina, valida solo quando non si è in modalità automatica.
     @AppStorage("doublePageMode") private var isDoublePageEnabled = false
     /// In automatico, la doppia pagina segue semplicemente lo spazio disponibile (isDoublePageAllowed).
     @AppStorage("doublePageAutoMode") private var isDoublePageAutoMode = true
+    /// Se vera, la prima pagina (di solito la copertina) è sempre mostrata da sola anche in
+    /// doppia pagina, e l'accoppiamento a due pagine riprende dalla seconda.
+    @AppStorage("doublePageCoverAlone") private var isCoverAlone = true
     @AppStorage("tapPageTurnStyle") private var tapPageTurnStyle = TapPageTurnStyle.slide
     @AppStorage("swipePageTurnStyle") private var swipePageTurnStyle = TapPageTurnStyle.slide
     @AppStorage("oneHandedMode") private var isOneHandedModeEnabled = false
@@ -67,6 +76,14 @@ private struct ReaderContentView: View {
     /// basta a evitare lo spreco di spazio (due pagine strette con bande nere sopra/sotto).
     @State private var viewportSize: CGSize = .zero
     @State private var provider: ComicPageProvider?
+    #if os(macOS)
+    @State private var pageCache: PageImageCache?
+    // Duplicano le chiavi lette anche da `PageView`: servono qui per invalidare la cache
+    // quando cambiano (vedi `.onChange` più sotto), non per l'elaborazione stessa.
+    @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
+    @AppStorage("upscalingEnabled") private var isUpscalingEnabled = false
+    @AppStorage("autoTintContrastEnabled") private var isAutoTintContrastEnabled = false
+    #endif
     /// Indice della pagina "principale" (la prima, più a sinistra in LTR) dello spread corrente.
     @State private var currentPage: Int = 0
     @State private var loadError: String?
@@ -94,14 +111,14 @@ private struct ReaderContentView: View {
     /// Due pagine verticali affiancate su uno schermo stretto lasciano un vuoto enorme sopra e
     /// sotto (l'immagine combinata è troppo larga rispetto all'altezza disponibile): la doppia
     /// pagina ha senso solo con più spazio orizzontale che verticale. La size class da sola non
-    /// basta su iPad, dove resta "regular" anche in verticale.
+    /// basta su iPad, dove resta "regular" anche in verticale. Logica in `DoublePagePolicy`:
+    /// su macOS non esiste una size class compatta, quindi la decisione dipende sempre e solo
+    /// dalle proporzioni misurate — prima era `true` a prescindere.
     private var isDoublePageAllowed: Bool {
         #if os(iOS)
-        guard horizontalSizeClass == .regular else { return false }
-        guard viewportSize.width > 0, viewportSize.height > 0 else { return true }
-        return viewportSize.width > viewportSize.height
+        DoublePagePolicy.isAllowed(viewportSize: viewportSize, isCompactWidth: horizontalSizeClass != .regular)
         #else
-        true
+        DoublePagePolicy.isAllowed(viewportSize: viewportSize, isCompactWidth: false)
         #endif
     }
 
@@ -112,9 +129,18 @@ private struct ReaderContentView: View {
 
     private var pageStep: Int { effectiveDoublePage ? 2 : 1 }
 
+    private func pagination(pageCount: Int) -> ReaderPagination {
+        ReaderPagination(
+            pageCount: pageCount,
+            pageStep: pageStep,
+            isRightToLeft: comic.readingDirection == .rightToLeft,
+            coverIsAlone: isCoverAlone
+        )
+    }
+
     /// Indici di inizio di ogni spread (1 o 2 pagine), usati come "tag"/passi di navigazione.
     private func spreadStarts(pageCount: Int) -> [Int] {
-        Array(stride(from: 0, to: pageCount, by: pageStep))
+        pagination(pageCount: pageCount).spreadStarts
     }
 
     // Cambiando il passo di pagina, l'indice corrente potrebbe non essere più un
@@ -122,8 +148,7 @@ private struct ReaderContentView: View {
     // il tag del TabView non trova corrispondenza e mostra la pagina sbagliata.
     private func realignCurrentPageToSpreadStart() {
         guard let provider = provider else { return }
-        let starts = spreadStarts(pageCount: provider.pageCount)
-        currentPage = starts.last(where: { $0 <= currentPage }) ?? 0
+        currentPage = pagination(pageCount: provider.pageCount).realigned(currentPage)
     }
 
     private var readerBackground: Color {
@@ -267,6 +292,14 @@ private struct ReaderContentView: View {
         .onChange(of: isDoublePageEnabled) { _ in realignCurrentPageToSpreadStart() }
         .onChange(of: isDoublePageAutoMode) { _ in realignCurrentPageToSpreadStart() }
         .onChange(of: viewportSize) { _ in realignCurrentPageToSpreadStart() }
+        #if os(macOS)
+        // Le voci in cache sono state elaborate con le opzioni precedenti: senza svuotarla,
+        // una pagina già vista mostrerebbe il ritaglio/tint vecchio finché non esce dalla
+        // finestra di prefetch.
+        .onChange(of: isAutoCropEnabled) { _ in purgePageCache() }
+        .onChange(of: isUpscalingEnabled) { _ in purgePageCache() }
+        .onChange(of: isAutoTintContrastEnabled) { _ in purgePageCache() }
+        #endif
         #if os(iOS)
         .sheet(isPresented: $isSharePresented) {
             if let shareImage = shareImage {
@@ -291,6 +324,7 @@ private struct ReaderContentView: View {
         }
         .sheet(isPresented: $isAccountsPresented) {
             NavigationView { AccountsView().toolbarDoneButton { isAccountsPresented = false } }
+                .sheetSized()
         }
     }
 
@@ -302,6 +336,14 @@ private struct ReaderContentView: View {
         if let window = NSApp.keyWindow, let contentView = window.contentView {
             NSSharingServicePicker(items: [image]).show(relativeTo: .zero, of: contentView, preferredEdge: .minY)
         }
+        #endif
+    }
+
+    private func exitReader() {
+        #if os(macOS)
+        dismissWindow()
+        #else
+        presentationMode.wrappedValue.dismiss()
         #endif
     }
 
@@ -351,8 +393,7 @@ private struct ReaderContentView: View {
 
     private func confirmPageJump() {
         guard let provider = provider else { return }
-        let starts = spreadStarts(pageCount: provider.pageCount)
-        let target = starts.last(where: { $0 <= jumpPageNumber - 1 }) ?? 0
+        let target = pagination(pageCount: provider.pageCount).realigned(jumpPageNumber - 1)
         turnStyle = tapPageTurnStyle
         turnDirection = target > currentPage ? 1 : -1
         withAnimation(.easeInOut(duration: 0.2)) {
@@ -368,11 +409,35 @@ private struct ReaderContentView: View {
     /// transizione, così i bordi di `.move(edge:)` si risolvono sempre in LTR e il verso lo
     /// decidiamo noi in `pageTurnTransition`; quello interno rispecchia lo spread per i manga.
     private func pagerContent(provider: ComicPageProvider) -> some View {
-        PageSpreadView(provider: provider, leadingIndex: currentPage, isDoublePage: effectiveDoublePage, isZoomed: $isZoomed)
+        PageSpreadView(provider: provider, leadingIndex: currentPage, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache)
             .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
             .id(currentPage)
             .transition(pageTurnTransition)
             .environment(\.layoutDirection, .leftToRight)
+            // Avviato appena `currentPage` cambia, non dentro `PageView.onAppear`: così il
+            // prefetch parte subito, in parallelo con l'animazione di transizione, invece di
+            // aspettare che la pagina in arrivo lo richieda.
+            .task(id: currentPage) {
+                await prefetchAroundCurrentPage(provider: provider)
+            }
+    }
+
+    private func prefetchAroundCurrentPage(provider: ComicPageProvider) async {
+        guard let pageCache else { return }
+        // Deve combaciare con `proxy.size` che `PageView.loadImage` userà davvero: in doppia
+        // pagina ogni `PageView` occupa circa metà larghezza del viewport (HStack(spacing: 0)
+        // in `PageSpreadView`), non l'intero viewport. Senza questo, `ProcessingOptions` non
+        // coincide mai tra prefetch e richiesta reale, e la cache va in miss ad ogni pagina —
+        // esattamente nella modalità (doppia pagina + upscaling) in cui costa di più.
+        let pageTargetSize = effectiveDoublePage
+            ? CGSize(width: viewportSize.width / 2, height: viewportSize.height)
+            : viewportSize
+        let options = PageImageCache.ProcessingOptions(
+            autoCrop: isAutoCropEnabled,
+            autoTintContrast: isAutoTintContrastEnabled,
+            upscaleTargetSize: isUpscalingEnabled ? pageTargetSize : nil
+        )
+        await pageCache.prefetch(around: currentPage, radius: 2, pageCount: provider.pageCount, options: options)
     }
 
     /// Traduce lo stile del gesto che ha innescato il cambio nella transizione corrispondente:
@@ -428,7 +493,7 @@ private struct ReaderContentView: View {
     /// scroll view, che continua a riconoscere il pan dal proprio recognizer.
     private func pageContent(provider: ComicPageProvider, start: Int) -> some View {
         ZStack {
-            PageSpreadView(provider: provider, leadingIndex: start, isDoublePage: effectiveDoublePage, isZoomed: $isZoomed)
+            PageSpreadView(provider: provider, leadingIndex: start, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed)
                 .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
 
             tapZonesOrControlsToggle(provider: provider)
@@ -498,7 +563,7 @@ private struct ReaderContentView: View {
             } onToggleControls: {
                 toggleControls()
             } onExit: {
-                presentationMode.wrappedValue.dismiss()
+                exitReader()
             } onOpenSettings: {
                 isToolsPresented = true
             } onToggleDoublePage: {
@@ -513,6 +578,13 @@ private struct ReaderContentView: View {
         }
     }
     #else
+    #if os(macOS)
+    private func purgePageCache() {
+        guard let pageCache else { return }
+        Task { await pageCache.purge() }
+    }
+    #endif
+
     private func macOSPager(provider: ComicPageProvider) -> some View {
         ZStack {
             pagerContent(provider: provider)
@@ -525,7 +597,7 @@ private struct ReaderContentView: View {
                 } onToggleControls: {
                     toggleControls()
                 } onExit: {
-                    presentationMode.wrappedValue.dismiss()
+                    exitReader()
                 } onOpenSettings: {
                     isToolsPresented = true
                 } onToggleDoublePage: {
@@ -541,12 +613,15 @@ private struct ReaderContentView: View {
             guard swipePageTurnStyle != .disabled, !isZoomed else { return }
             step(direction, provider: provider, style: swipePageTurnStyle)
         })
-        .background(KeyEventMonitor { keyCode in
-            switch keyCode {
-            case .leftArrow: step(-1, provider: provider, style: tapPageTurnStyle)
-            case .rightArrow, .space: step(1, provider: provider, style: tapPageTurnStyle)
-            }
-        })
+        // Sostituisce KeyEventMonitor: vedi il commento su `ReaderCommandActions` per il perché.
+        // Pubblicata solo mentre questa vista è viva, quindi solo mentre una finestra reader è
+        // davvero in scena — nessun filtro sul blocco genitori qui, perché con `lock.isLocked`
+        // `ReaderWindowContainer` mostra `ParentalLockGateView` al posto di `ReaderView`,
+        // quindi questo codice non è proprio montato.
+        .focusedSceneValue(\.readerActions, ReaderCommandActions(
+            previousPage: { step(-1, provider: provider, style: tapPageTurnStyle) },
+            nextPage: { step(1, provider: provider, style: tapPageTurnStyle) }
+        ))
     }
     #endif
 
@@ -556,27 +631,25 @@ private struct ReaderContentView: View {
     /// Quando è attivo il pager nativo (swipe e tap entrambi su "Scorrimento") lo slide dello
     /// swipe non passa da qui: lo gestisce il TabView seguendo il dito.
     private func step(_ direction: Int, provider: ComicPageProvider, style: TapPageTurnStyle) {
-        let effectiveDirection = (comic.readingDirection == .rightToLeft ? -direction : direction) * pageStep
-        let next = currentPage + effectiveDirection
-        if next >= provider.pageCount {
-            // `effectiveDirection`, non `direction`: nei manga si arriva in fondo al fumetto
-            // andando avanti nella lettura, che però corrisponde a `direction` negativo.
-            if effectiveDirection > 0, let candidate = nextComicInLibrary {
+        switch pagination(pageCount: provider.pageCount).step(from: currentPage, direction: direction) {
+        case .endReached(let triggersNextComic):
+            if triggersNextComic, let candidate = nextComicInLibrary {
                 pendingNextComic = candidate
             }
-            return
-        }
-        guard next >= 0 else { return }
-        resetIdleTimerIfNeeded()
-        turnStyle = style
-        turnDirection = effectiveDirection > 0 ? 1 : -1
-        switch style {
-        case .immediate:
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) { currentPage = next }
-        default:
-            withAnimation(.easeInOut(duration: 0.2)) { currentPage = next }
+        case .beginningReached:
+            break
+        case .page(let next):
+            resetIdleTimerIfNeeded()
+            turnStyle = style
+            turnDirection = next > currentPage ? 1 : -1
+            switch style {
+            case .immediate:
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { currentPage = next }
+            default:
+                withAnimation(.easeInOut(duration: 0.2)) { currentPage = next }
+            }
         }
     }
 
@@ -663,7 +736,7 @@ private struct ReaderContentView: View {
 
     private var header: some View {
         HStack(spacing: 2) {
-            Button(action: { presentationMode.wrappedValue.dismiss() }) {
+            Button(action: exitReader) {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
                     Text("Libreria")
@@ -957,7 +1030,6 @@ private struct ReaderContentView: View {
         try? context.save()
     }
 
-
     private func loadComic() {
         guard provider == nil else { return }
         let url = LibraryStorage.fileURL(forRelativePath: comic.relativePath ?? "")
@@ -1019,6 +1091,9 @@ private struct ReaderContentView: View {
                 let loaded = try ComicPageProviderFactory.makeProvider(for: url, format: format)
                 DispatchQueue.main.async {
                     provider = loaded
+                    #if os(macOS)
+                    pageCache = PageImageCache(provider: loaded)
+                    #endif
                     let clampedStart = min(startingPage, max(0, loaded.pageCount - 1))
                     let starts = spreadStarts(pageCount: loaded.pageCount)
                     let aligned = starts.last(where: { $0 <= clampedStart }) ?? 0
@@ -1138,15 +1213,48 @@ private struct PageTapZones: View {
 private struct PageSpreadView: View {
     let provider: ComicPageProvider
     let leadingIndex: Int
-    let isDoublePage: Bool
+    /// Sostituisce il vecchio `isDoublePage: Bool`: con la copertina "da sola" attiva, non
+    /// tutti gli spread hanno la stessa larghezza (la copertina è 1 pagina, il resto 2), quindi
+    /// serve la paginazione intera per sapere se *questo* spread specifico ne mostra una o due.
+    let pagination: ReaderPagination
     let isZoomed: Binding<Bool>
+    /// Solo macOS: quando presente, le `PageView` la consultano invece di ridecodificare da
+    /// disco a ogni ricomparsa. `nil` su iOS, dove il problema non esiste (la cache di
+    /// `UIHostingController` in `PageTurnPager` evita già la ricomparsa).
+    var imageCache: PageImageCache?
+
+    /// Vero solo se questo specifico spread contiene due pagine: con `coverIsAlone`, lo
+    /// spread che inizia alla copertina (indice 0) resta largo 1 anche a passo 2.
+    private var showsSecondPage: Bool {
+        guard pagination.pageStep > 1, leadingIndex + 1 < pagination.pageCount else { return false }
+        let starts = pagination.spreadStarts
+        guard let spreadIndex = starts.firstIndex(of: leadingIndex) else { return pagination.pageStep > 1 }
+        let nextStart = spreadIndex + 1 < starts.count ? starts[spreadIndex + 1] : pagination.pageCount
+        return nextStart - leadingIndex >= 2
+    }
 
     var body: some View {
-        HStack(spacing: 0) {
-            PageView(provider: provider, index: leadingIndex, isDoublePage: isDoublePage, isZoomed: isZoomed)
-            if isDoublePage, leadingIndex + 1 < provider.pageCount {
-                PageView(provider: provider, index: leadingIndex + 1, isDoublePage: isDoublePage, isZoomed: isZoomed)
+        // Il GeometryReader qui (non più dentro ogni PageView) è ciò che permette alle due
+        // pagine di uno spread di toccarsi: passando un'altezza fissa e lasciando che la
+        // larghezza segua le proporzioni dell'immagine, l'HStack le dimensiona in base al
+        // loro contenuto invece di dividere lo spazio a metà a prescindere — che è quello che
+        // causava la fascia nera tra le pagine (ciascuna centrata nella propria metà, con
+        // margini indipendenti anziché uniti).
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                PageView(
+                    provider: provider, index: leadingIndex, isDoublePage: pagination.pageStep > 1,
+                    isZoomed: isZoomed, imageCache: imageCache,
+                    pairedHeight: showsSecondPage ? proxy.size.height : nil
+                )
+                if showsSecondPage {
+                    PageView(
+                        provider: provider, index: leadingIndex + 1, isDoublePage: pagination.pageStep > 1,
+                        isZoomed: isZoomed, imageCache: imageCache, pairedHeight: proxy.size.height
+                    )
+                }
             }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
         }
     }
 }
@@ -1156,6 +1264,11 @@ private struct PageView: View {
     let index: Int
     let isDoublePage: Bool
     let isZoomed: Binding<Bool>
+    var imageCache: PageImageCache?
+    /// Non-nil solo per una pagina che fa davvero parte di uno spread a due, affiancata a
+    /// un'altra pagina "toccante" (vedi `PageSpreadView`): in quel caso la larghezza segue le
+    /// proporzioni dell'immagine invece di riempire una metà fissa del riquadro.
+    var pairedHeight: CGFloat?
     @ObservedObject private var theme = AppTheme.shared
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
     @AppStorage("upscalingEnabled") private var isUpscalingEnabled = false
@@ -1181,42 +1294,77 @@ private struct PageView: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            Group {
-                if let image = image {
-                    if effectiveZoomMode == .fitWidth {
-                        ScrollView(.vertical, showsIndicators: false) {
+        if let pairedHeight, effectiveZoomMode != .fitWidth {
+            pairedContent(height: pairedHeight)
+        } else {
+            GeometryReader { proxy in
+                Group {
+                    if let image = image {
+                        if effectiveZoomMode == .fitWidth {
+                            ScrollView(.vertical, showsIndicators: false) {
+                                image.asSwiftUIImage
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: proxy.size.width)
+                                    .overlay(tintOverlay)
+                            }
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                        } else {
                             image.asSwiftUIImage
                                 .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: proxy.size.width)
+                                .scaledToFit()
+                                .frame(width: proxy.size.width, height: proxy.size.height)
+                                .scaleEffect(scale)
+                                .offset(offset)
+                                .blur(radius: motionBlurRadius)
                                 .overlay(tintOverlay)
+                                .gesture(magnifyGesture)
+                                // Attivo solo da zoomata: a scale 1 non deve intercettare il drag,
+                                // altrimenti ruba il tocco allo swipe-pagina sottostante anche se poi
+                                // non fa nulla (guard scale > 1).
+                                .gesture(dragGesture, including: scale > 1 ? .all : .subviews)
+                                .onTapGesture(count: 2) { toggleZoom() }
                         }
-                        .frame(width: proxy.size.width, height: proxy.size.height)
                     } else {
-                        image.asSwiftUIImage
-                            .resizable()
-                            .scaledToFit()
+                        ProgressView().accentColor(.white)
                             .frame(width: proxy.size.width, height: proxy.size.height)
-                            .scaleEffect(scale)
-                            .offset(offset)
-                            .blur(radius: motionBlurRadius)
-                            .overlay(tintOverlay)
-                            .gesture(magnifyGesture)
-                            // Attivo solo da zoomata: a scale 1 non deve intercettare il drag,
-                            // altrimenti ruba il tocco allo swipe-pagina sottostante anche se poi
-                            // non fa nulla (guard scale > 1).
-                            .gesture(dragGesture, including: scale > 1 ? .all : .subviews)
-                            .onTapGesture(count: 2) { toggleZoom() }
                     }
-                } else {
-                    ProgressView().accentColor(.white)
-                        .frame(width: proxy.size.width, height: proxy.size.height)
                 }
+                .onAppear { loadImage(targetSize: proxy.size) }
             }
-            .onAppear { loadImage(targetSize: proxy.size) }
+            .clipped()
         }
-        .clipped()
+    }
+
+    /// Percorso per una pagina che tocca l'altra metà dello spread: altezza fissa, larghezza
+    /// derivata dalle proporzioni dell'immagine (nessun `GeometryReader` a imporre una metà
+    /// fissa, che è la causa dello spazio nero tra le pagine). Non copre "Adatta larghezza",
+    /// che resta sullo scroll verticale per-pagina di prima: le due nozioni non si combinano
+    /// bene (l'una deriva l'altezza dalla larghezza, l'altra il contrario).
+    @ViewBuilder
+    private func pairedContent(height: CGFloat) -> some View {
+        // Stima 2:3 finché non si conoscono le proporzioni reali: evita che il placeholder
+        // salti di dimensione quando l'immagine arriva.
+        let estimatedWidth = height * 2 / 3
+        Group {
+            if let image = image {
+                image.asSwiftUIImage
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: height)
+                    .scaleEffect(scale)
+                    .offset(offset)
+                    .blur(radius: motionBlurRadius)
+                    .overlay(tintOverlay)
+                    .gesture(magnifyGesture)
+                    .gesture(dragGesture, including: scale > 1 ? .all : .subviews)
+                    .onTapGesture(count: 2) { toggleZoom() }
+            } else {
+                ProgressView().accentColor(.white)
+                    .frame(width: estimatedWidth, height: height)
+            }
+        }
+        .onAppear { loadImage(targetSize: CGSize(width: estimatedWidth, height: height)) }
     }
 
     @ViewBuilder
@@ -1231,6 +1379,23 @@ private struct PageView: View {
         let autoCrop = isAutoCropEnabled
         let upscale = isUpscalingEnabled
         let autoTintContrast = isAutoTintContrastEnabled
+
+        if let imageCache {
+            // Percorso macOS: la cache è quasi sempre già calda grazie al prefetch avviato da
+            // `ReaderContentView` quando `currentPage` cambia — questa chiamata torna quasi
+            // subito invece di ridecodificare da disco.
+            let options = PageImageCache.ProcessingOptions(
+                autoCrop: autoCrop,
+                autoTintContrast: autoTintContrast,
+                upscaleTargetSize: upscale ? targetSize : nil
+            )
+            Task {
+                let loaded = await imageCache.image(at: index, options: options)
+                await MainActor.run { self.image = loaded }
+            }
+            return
+        }
+
         DispatchQueue.global(qos: .userInitiated).async {
             guard var loaded = try? provider.image(atPage: index) else { return }
             if autoCrop {
@@ -1599,6 +1764,25 @@ private struct ScrollSwipeMonitor: NSViewRepresentable {
             // L'inerzia dopo il rilascio delle dita è la coda dello stesso gesto: contarla
             // farebbe girare una seconda pagina da sola.
             guard event.momentumPhase == [] else { return }
+
+            // Una rotella del mouse tradizionale (non un trackpad) non manda mai `.began`/
+            // `.ended`: `event.phase` resta sempre vuoto, quindi il reset legato alle fasi
+            // sotto non scatta mai per lei. Va gestita a parte, PRIMA del filtro di dominanza
+            // orizzontale sotto — che comunque la include, essendo solo un ulteriore controllo.
+            if event.phase.isEmpty {
+                guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return }
+                accumulated += event.scrollingDeltaX
+                guard abs(accumulated) > 40 else { return }
+                let direction = accumulated < 0 ? 1 : -1
+                accumulated = 0
+                onSwipe?(direction)
+                return
+            }
+
+            // Il reset ai bordi del gesto resta incondizionato rispetto alla dominanza
+            // orizzontale: un frame di inizio/fine gesto verticale deve comunque azzerare lo
+            // stato, altrimenti un gesto successivo può risultare già "consumato" e non girare
+            // pagina.
             if event.phase.contains(.began) {
                 accumulated = 0
                 didFireForCurrentGesture = false
@@ -1628,47 +1812,4 @@ private struct ScrollSwipeMonitor: NSViewRepresentable {
     }
 }
 
-private enum ReaderKey {
-    case leftArrow
-    case rightArrow
-    case space
-}
-
-/// Intercetta le frecce e la barra spaziatrice per la navigazione da tastiera nel reader su Mac.
-private struct KeyEventMonitor: NSViewRepresentable {
-    let onKey: (ReaderKey) -> Void
-
-    func makeNSView(context: Context) -> NSView {
-        let view = MonitoringView()
-        view.onKey = onKey
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        (nsView as? MonitoringView)?.onKey = onKey
-    }
-
-    final class MonitoringView: NSView {
-        var onKey: ((ReaderKey) -> Void)?
-        private var monitor: Any?
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                switch event.keyCode {
-                case 123: self?.onKey?(.leftArrow); return nil
-                case 124: self?.onKey?(.rightArrow); return nil
-                case 49: self?.onKey?(.space); return nil
-                default: return event
-                }
-            }
-        }
-
-        deinit {
-            if let monitor = monitor {
-                NSEvent.removeMonitor(monitor)
-            }
-        }
-    }
-}
 #endif

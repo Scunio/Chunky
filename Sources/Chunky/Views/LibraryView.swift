@@ -24,7 +24,15 @@ private enum ReadStatus: CaseIterable, Identifiable {
 }
 
 struct LibraryView: View {
+    /// Su macOS la sidebar decide quale serie mostrare; su iOS non esiste sidebar e la
+    /// selezione resta sempre `.all`, quindi il comportamento non cambia.
+    var selection: LibrarySelection = .all
+
     @Environment(\.managedObjectContext) private var context
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var lock = ParentalLock.shared
+    #endif
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \ComicEntity.title, ascending: true)]
     ) private var comics: FetchedResults<ComicEntity>
@@ -33,7 +41,11 @@ struct LibraryView: View {
     @ObservedObject private var theme = AppTheme.shared
     @AppStorage("kioskModeEnabled") private var isKioskModeEnabled = false
     @State private var isShowingFileImporter = false
+    #if os(iOS)
+    // Su Mac il reader vive in una finestra propria (vedi `openComic`); questo stato
+    // esiste solo per il `.fullScreenCover` di iOS.
     @State private var selectedComic: ComicEntity?
+    #endif
     @State private var displayMode: LibraryDisplayMode = .grouped
     @State private var searchText = ""
     @State private var isSearching = false
@@ -43,19 +55,27 @@ struct LibraryView: View {
     @State private var isNowReadingPresented = false
     @State private var isNewComicsPresented = false
     @AppStorage("newTrayClearedAt") private var newTrayClearedAtTimestamp: Double = 0
+    #if os(macOS)
+    /// Per finestra, non globale: aprire una seconda finestra libreria (in futuro) non deve
+    /// costringerla alla stessa modalità di visualizzazione dell'altra.
+    @SceneStorage("libraryUsesTableLayout") private var usesTableLayout = false
+    #endif
     @State private var isToolsPresented = false
     @State private var isAccountsPresented = false
     @State private var isNewGroupPromptPresented = false
     @State private var newGroupName = ""
-
-    private static let ungroupedSectionTitle = "Altri fumetti"
+    /// Solo per l'indicazione visiva del drag & drop: non c'è altro stato da tracciare, il
+    /// drop stesso è gestito interamente dentro `.dropDestination`.
+    @State private var isDropTargeted = false
 
     var body: some View {
         VStack(spacing: 0) {
+            #if os(iOS)
             searchField
+            #endif
             content
         }
-            .navigationTitle("Chunky")
+            .navigationTitle(selection.groupTitle ?? "Chunky")
             .toolbar {
                 #if os(iOS)
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -90,12 +110,7 @@ struct LibraryView: View {
                     }
                 }
                 #else
-                ToolbarItem {
-                    leadingToolbarContent
-                }
-                ToolbarItem {
-                    trailingToolbarContent
-                }
+                macOSToolbarContent
                 #endif
             }
             .fileImporter(
@@ -110,15 +125,12 @@ struct LibraryView: View {
             .alert(item: errorBinding) { message in
                 Alert(title: Text("Errore"), message: Text(message.text))
             }
-            #if os(iOS)
             // A schermo intero come nell'originale: un .sheet normale su iOS resta una card
             // con angoli arrotondati che non copre tutto lo schermo (da cui lo spazio vuoto
-            // sopra e lo slider quasi tagliato in fondo).
+            // sopra e lo slider quasi tagliato in fondo). Su Mac il reader vive invece nella
+            // propria finestra (vedi openComic), quindi qui non c'è nulla da presentare.
+            #if os(iOS)
             .fullScreenCover(item: $selectedComic) { comic in
-                ReaderView(comic: comic, libraryComics: filteredComics)
-            }
-            #else
-            .sheet(item: $selectedComic) { comic in
                 ReaderView(comic: comic, libraryComics: filteredComics)
             }
             #endif
@@ -127,8 +139,42 @@ struct LibraryView: View {
             }
             .sheet(isPresented: $isAccountsPresented) {
                 NavigationView { AccountsView().toolbarDoneButton { isAccountsPresented = false } }
+                    .sheetSized()
+            }
+            #if os(macOS)
+            .searchable(text: $searchText, placement: .toolbar, prompt: "Cerca per titolo o serie")
+            #endif
+            // Vale su entrambe le piattaforme: su iPad si può trascinare da Files, su Mac dal
+            // Finder. `URL` è già `Transferable` di sistema (si rappresenta come URL di file),
+            // quindi non serve altro che filtrare le estensioni supportate.
+            .dropDestination(for: URL.self) { urls, _ in
+                let supported = urls.filter { ComicFormat(fileExtension: $0.pathExtension) != nil }
+                guard !supported.isEmpty else { return false }
+                viewModel.importFiles(supported, into: context)
+                return true
+            } isTargeted: { isDropTargeted = $0 }
+            .overlay {
+                if isDropTargeted {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.accentColor, lineWidth: 3)
+                        .padding(6)
+                        .allowsHitTesting(false)
+                }
             }
             .modifier(NewGroupPromptModifier(isPresented: $isNewGroupPromptPresented, name: $newGroupName, onCreate: applyGroup))
+            #if os(macOS)
+            // `nil` mentre il blocco genitori è attivo: altrimenti un comando da tastiera
+            // (⌘O, ⇧⌘N) agirebbe comunque sulla libreria da sotto la schermata di blocco.
+            .focusedSceneValue(\.libraryActions, lock.isLocked ? nil : LibraryCommandActions(
+                importFiles: { isShowingFileImporter = true },
+                newGroup: { isNewGroupPromptPresented = true },
+                isGroupedBySeries: Binding(
+                    get: { displayMode == .grouped },
+                    set: { displayMode = $0 ? .grouped : .alphabetical }
+                ),
+                isTableLayout: $usesTableLayout
+            ))
+            #endif
             .overlay(importingOverlay)
             .background((theme.background ?? Color.clear).ignoresSafeArea())
             .foregroundColor(theme.text)
@@ -152,33 +198,57 @@ struct LibraryView: View {
         }
     }
 
-    @ViewBuilder
-    private var trailingToolbarContent: some View {
+    #if os(macOS)
+    // Ogni controllo è un `ToolbarItem` a sé, non un `HStack` dentro un `ToolbarItem` solo:
+    // un'unica view opaca non si scompone correttamente nel menu "»" quando la finestra è
+    // stretta — macOS riesce a farne un sottomenu solo per controlli nativi riconoscibili
+    // (es. il Picker qui sotto, che diventa "Vista"), mentre i pulsanti semplici dentro la
+    // stessa view sparivano senza alcuna rappresentazione nell'overflow (bug segnalato).
+    @ToolbarContentBuilder
+    private var macOSToolbarContent: some ToolbarContent {
         if isEditing {
-            HStack(spacing: 16) {
-                statusMenu
-                    .disabled(selectedIDs.isEmpty)
-                groupMenu
-                    .disabled(selectedIDs.isEmpty)
+            ToolbarItem {
+                Button("Annulla") {
+                    isEditing = false
+                    selectedIDs.removeAll()
+                }
+            }
+            ToolbarItem { statusMenu.disabled(selectedIDs.isEmpty) }
+            ToolbarItem { groupMenu.disabled(selectedIDs.isEmpty) }
+            ToolbarItem {
                 Button(action: deleteSelected) {
                     Image(systemName: "trash")
                 }
                 .disabled(selectedIDs.isEmpty)
             }
         } else {
-            HStack(spacing: 16) {
-                searchButton
-                newComicsButton
-                nowReadingButton
-                if !isKioskModeEnabled {
-                    accountsLink
-                    toolsMenu
-                } else {
-                    settingsLink
+            ToolbarItem { Button("Modifica") { isEditing = true } }
+            ToolbarItem { displayModeButton }
+            ToolbarItem {
+                Picker("Vista", selection: $usesTableLayout) {
+                    // Label anche qui: se la finestra è stretta, l'intero Picker collassa in un
+                    // sottomenu "Vista" — senza testo, le due voci sarebbero due icone identiche
+                    // di forma ma senza indicazione di cosa selezionano.
+                    Label("Griglia", systemImage: "square.grid.2x2").tag(false)
+                    Label("Lista", systemImage: "list.bullet").tag(true)
                 }
+                .pickerStyle(.segmented)
+                .frame(width: 90)
+                .accessibilityIdentifier("library.layoutPicker")
+            }
+            // Niente `searchButton` qui: su Mac la ricerca passa da `.searchable`,
+            // il campo nativo che compare da sé nella toolbar della finestra.
+            ToolbarItem { newComicsButton }
+            ToolbarItem { nowReadingButton }
+            if !isKioskModeEnabled {
+                ToolbarItem { accountsLink }
+                ToolbarItem { toolsMenu }
+            } else {
+                ToolbarItem { settingsLink }
             }
         }
     }
+    #endif
 
     /// Un pannello ("Done"/"Accounts") come nell'originale, non una push a tutto schermo.
     /// È anche il punto in cui si importano i fumetti (Downloads / Web / iCloud Drive / altri
@@ -187,7 +257,11 @@ struct LibraryView: View {
     /// stesso trattamento di Tools, raggiunto dall'icona accanto.
     private var accountsLink: some View {
         Button(action: { isAccountsPresented = true }) {
-            Image(systemName: "cloud")
+            // Label, non Image da sola: quando questo pulsante finisce nel menu di overflow
+            // (finestra stretta su Mac, o iPhone in orizzontale), un'icona senza testo non
+            // spiega cosa fa. Label mostra solo l'icona nella toolbar normale e icona+testo
+            // quando collassato in un menu — lo stesso trattamento già usato da settingsLink.
+            Label("Account", systemImage: "cloud")
         }
     }
 
@@ -195,7 +269,7 @@ struct LibraryView: View {
     /// come nell'originale.
     private var toolsMenu: some View {
         Button(action: { isToolsPresented = true }) {
-            Image(systemName: "wrench.and.screwdriver")
+            Label("Strumenti", systemImage: "wrench.and.screwdriver")
         }
     }
 
@@ -329,12 +403,12 @@ struct LibraryView: View {
     private var nowReadingButton: some View {
         if let comic = lastReadComic {
             Button(action: { isNowReadingPresented = true }) {
-                Image(systemName: "book")
+                Label("Ora in lettura", systemImage: "book")
             }
             .popover(isPresented: $isNowReadingPresented) {
                 NowReadingView(comic: comic) {
                     isNowReadingPresented = false
-                    selectedComic = comic
+                    openComic(comic)
                 }
             }
         }
@@ -373,27 +447,33 @@ struct LibraryView: View {
             } else if filteredComics.isEmpty {
                 noResultsState
             } else {
+                #if os(macOS)
+                if usesTableLayout {
+                    LibraryTableView(comics: filteredComics, onSelect: openComic)
+                } else {
+                    libraryGrid
+                }
+                #else
                 libraryGrid
+                #endif
             }
         }
     }
 
     private var filteredComics: [ComicEntity] {
-        guard !searchText.isEmpty else { return Array(comics) }
-        return comics.filter { comic in
+        var result = Array(comics)
+        if let group = selection.groupTitle {
+            result = result.filter { ($0.seriesName ?? LibraryGrouping.ungroupedTitle) == group }
+        }
+        guard !searchText.isEmpty else { return result }
+        return result.filter { comic in
             (comic.title ?? "").localizedCaseInsensitiveContains(searchText)
                 || (comic.seriesName ?? "").localizedCaseInsensitiveContains(searchText)
         }
     }
 
-    /// Serie ordinate alfabeticamente; i fumetti senza serie finiscono in una sezione a parte, in fondo.
-    private var groupedSections: [(title: String, comics: [ComicEntity])] {
-        let groups = Dictionary(grouping: filteredComics) { $0.seriesName ?? Self.ungroupedSectionTitle }
-        return groups.keys.sorted { lhs, rhs in
-            if lhs == Self.ungroupedSectionTitle { return false }
-            if rhs == Self.ungroupedSectionTitle { return true }
-            return lhs.localizedStandardCompare(rhs) == .orderedAscending
-        }.map { key in (title: key, comics: (groups[key] ?? []).sorted { ($0.title ?? "") < ($1.title ?? "") }) }
+    private var groupedSections: [LibraryGrouping.Section] {
+        LibraryGrouping.sections(for: filteredComics)
     }
 
     private var libraryGrid: some View {
@@ -401,7 +481,7 @@ struct LibraryView: View {
             LazyVStack(alignment: .leading, spacing: 8) {
                 switch displayMode {
                 case .grouped:
-                    ForEach(groupedSections, id: \.title) { section in
+                    ForEach(groupedSections) { section in
                         sectionView(title: section.title, comics: section.comics)
                     }
                 case .alphabetical:
@@ -437,11 +517,11 @@ struct LibraryView: View {
     /// dell'implementazione precedente, non si nasconde più quando `recentComics` è vuoto.
     private var newComicsButton: some View {
         Button(action: { isNewComicsPresented = true }) {
-            Image(systemName: "envelope")
+            Label("Novità", systemImage: "envelope")
         }
         .popover(isPresented: $isNewComicsPresented) {
             NewComicsView(comics: recentComics) {
-                selectedComic = $0
+                openComic($0)
                 isNewComicsPresented = false
             } onClear: {
                 newTrayClearedAtTimestamp = Date().timeIntervalSince1970
@@ -468,7 +548,7 @@ struct LibraryView: View {
                 HStack {
                     Image(systemName: collapsedGroups.contains(title) ? "chevron.right" : "chevron.down")
                         .font(.caption.bold())
-                    Text(sectionHeaderText(title: title, comics: comics))
+                    Text(LibraryGrouping.headerText(title: title, comics: comics))
                         .font(.subheadline.bold())
                     Spacer()
                     if comics.contains(where: { $0.progress > 0 }) {
@@ -496,22 +576,6 @@ struct LibraryView: View {
         }
     }
 
-    /// "TOPOLINO 3594-3687" come nell'originale quando i titoli finiscono con un numero
-    /// (es. testate periodiche): altrimenti solo il nome della serie.
-    private func sectionHeaderText(title: String, comics: [ComicEntity]) -> String {
-        guard title != Self.ungroupedSectionTitle else { return title.uppercased() }
-        let numbers = comics.compactMap { issueNumber(fromTitle: $0.title ?? "") }
-        guard let min = numbers.min(), let max = numbers.max(), numbers.count == comics.count else {
-            return title.uppercased()
-        }
-        return min == max ? "\(title.uppercased()) \(min)" : "\(title.uppercased()) \(min)-\(max)"
-    }
-
-    private func issueNumber(fromTitle title: String) -> Int? {
-        guard let range = title.range(of: #"\d+\s*$"#, options: .regularExpression) else { return nil }
-        return Int(title[range])
-    }
-
     private func cell(for comic: ComicEntity) -> some View {
         ComicCell(
             comic: comic,
@@ -531,8 +595,27 @@ struct LibraryView: View {
                 selectedIDs.insert(comic.objectID)
             }
         } else {
-            selectedComic = comic
+            openComic(comic)
         }
+    }
+
+    /// Unico punto da cui si "apre" un fumetto: su iOS imposta lo stato che presenta il
+    /// `fullScreenCover`, su Mac apre una finestra indipendente (vedi `ComicID`,
+    /// `ReaderWindowContainer`).
+    private func openComic(_ comic: ComicEntity) {
+        #if os(macOS)
+        guard let id = ComicID(comic) else {
+            // In pratica non dovrebbe capitare (l'inserimento salva l'entity sincronamente
+            // prima che compaia nella griglia, quindi il suo objectID è già permanente), ma
+            // se succede il tap non deve restare senza alcun riscontro: si riusa lo stesso
+            // canale d'errore già in uso per gli import falliti.
+            viewModel.importError = "Impossibile aprire questo fumetto."
+            return
+        }
+        openWindow(value: id)
+        #else
+        selectedComic = comic
+        #endif
     }
 
     private func deleteSelected() {
@@ -629,13 +712,42 @@ private struct ComicCell: View {
             .accessibilityAddTraits(.isButton)
             .accessibilityLabel(comic.title ?? "Fumetto")
             .contextMenu {
+                if !isEditing {
+                    Button(action: onSelect) {
+                        Label("Apri", systemImage: "book")
+                    }
+                    Button(action: toggleFavorite) {
+                        Label(comic.isFavorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti",
+                              systemImage: comic.isFavorite ? "star.slash" : "star")
+                    }
+                    #if os(macOS)
+                    Button(action: revealInFinder) {
+                        Label("Mostra nel Finder", systemImage: "folder")
+                    }
+                    #endif
+                    if allowsDeletion {
+                        Divider()
+                    }
+                }
                 if !isEditing && allowsDeletion {
-                    Button(action: onDelete) {
+                    Button(role: .destructive, action: onDelete) {
                         Label("Rimuovi", systemImage: "trash")
                     }
                 }
             }
     }
+
+    private func toggleFavorite() {
+        comic.isFavorite.toggle()
+        try? comic.managedObjectContext?.save()
+    }
+
+    #if os(macOS)
+    private func revealInFinder() {
+        let url = LibraryStorage.fileURL(forRelativePath: comic.relativePath ?? "")
+        RevealInFinder.reveal(url)
+    }
+    #endif
 
     @ViewBuilder
     private var selectionBadge: some View {

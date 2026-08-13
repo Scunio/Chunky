@@ -81,6 +81,7 @@ struct AddAccountView: View {
                 #endif
             }
         }
+        .sheetSized()
     }
 
     private func save() {

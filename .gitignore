@@ -11,3 +11,8 @@ xcuserdata/
 .swiftpm/
 .build/
 *.profraw
+
+# Firma: i Team ID personali non si committano (vedi Config/Signing.xcconfig).
+Config/Signing.local.xcconfig
+Config/appstoreconnect.env
+Config/ExportOptions.plist

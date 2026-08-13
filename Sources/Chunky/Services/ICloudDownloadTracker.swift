@@ -16,6 +16,12 @@ final class ICloudDownloadTracker: ObservableObject {
     /// non ancora scaricati. Vuoto se iCloud non è attivo: in quel caso i file sono tutti locali.
     @Published private(set) var pendingRelativePaths: Set<String> = []
 
+    /// Tutti i percorsi relativi visti nel container ubiquity, scaricati o no. Usato da
+    /// `ICloudSyncFolderView` per accorgersi di file nuovi depositati da un altro dispositivo
+    /// (via Files/Finder) senza un `Timer` di polling: la stessa query che alimenta il badge
+    /// "da scaricare" enumera già tutto ciò che serve.
+    @Published private(set) var allRelativePaths: Set<String> = []
+
     private let query = NSMetadataQuery()
     private var isRunning = false
 
@@ -46,20 +52,26 @@ final class ICloudDownloadTracker: ObservableObject {
     @objc private func handleUpdate() {
         let rootPath = LibraryStorage.rootFolderURL().resolvingSymlinksInPath().standardizedFileURL.path
         var pending: Set<String> = []
+        var all: Set<String> = []
 
         query.disableUpdates()
         for case let item as NSMetadataItem in query.results {
             guard let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL else { continue }
             let path = url.resolvingSymlinksInPath().standardizedFileURL.path
             guard path.hasPrefix(rootPath + "/") else { continue }
+            let relativePath = String(path.dropFirst(rootPath.count + 1))
+            all.insert(relativePath)
             let status = item.value(forAttribute: NSMetadataUbiquitousItemDownloadingStatusKey) as? String
             guard status != NSMetadataUbiquitousItemDownloadingStatusCurrent else { continue }
-            pending.insert(String(path.dropFirst(rootPath.count + 1)))
+            pending.insert(relativePath)
         }
         query.enableUpdates()
 
         if pending != pendingRelativePaths {
             pendingRelativePaths = pending
+        }
+        if all != allRelativePaths {
+            allRelativePaths = all
         }
     }
 }

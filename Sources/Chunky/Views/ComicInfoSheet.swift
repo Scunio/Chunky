@@ -81,6 +81,7 @@ struct ComicInfoSheet: View {
                 }
             }
         }
+        .sheetSized()
     }
 
     private func row(_ label: String, _ value: String) -> some View {
