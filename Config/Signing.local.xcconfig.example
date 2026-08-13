@@ -1,0 +1,7 @@
+// Copia questo file in Signing.local.xcconfig (senza .example) e inserisci il tuo Team ID.
+// Quel file è gitignorato: resta sulla tua macchina e non finisce nel repository.
+//
+// Il Team ID si legge su https://developer.apple.com/account sotto Membership details,
+// oppure da terminale: security find-identity -v -p codesigning
+DEVELOPMENT_TEAM = XXXXXXXXXX
+CODE_SIGN_STYLE = Automatic

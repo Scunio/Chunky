@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copia questo file in Config/ExportOptions.plist (senza .example) e inserisci il tuo
+     Team ID. Quel file è gitignorato: resta sulla tua macchina e non finisce nel repository
+     (vedi anche Config/Signing.local.xcconfig.example, stesso trattamento). -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>teamID</key>
+	<string>XXXXXXXXXX</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>destination</key>
+	<string>upload</string>
+</dict>
+</plist>
