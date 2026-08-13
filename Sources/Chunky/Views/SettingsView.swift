@@ -107,6 +107,7 @@ private func labelWithInfo(_ title: String, info: String, compact: Bool = false)
 struct SettingsView: View {
     @AppStorage("defaultReadingDirection") private var defaultReadingDirectionRawValue = ReadingDirection.leftToRight.rawValue
     @AppStorage("doublePageMode") private var isDoublePageEnabled = false
+    @AppStorage("doublePageCoverAlone") private var isCoverAlone = true
     @AppStorage("tapPageTurnStyle") private var tapPageTurnStyle = TapPageTurnStyle.slide
     @AppStorage("swipePageTurnStyle") private var swipePageTurnStyle = TapPageTurnStyle.slide
     @AppStorage("tapToPanEnabled") private var isTapToPanEnabled = false
@@ -146,6 +147,9 @@ struct SettingsView: View {
                 .pickerStyle(.inline)
                 #endif
                 Toggle("Doppia pagina di default", isOn: $isDoublePageEnabled)
+                Toggle(isOn: $isCoverAlone) {
+                    labelWithInfo("Copertina da sola", info: "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi.")
+                }
             }
 
             Section(
@@ -211,6 +215,14 @@ struct SettingsView: View {
             ) {
                 NavigationLink("Diagnostica", destination: DiagnosticsView())
                 NavigationLink("Stato iCloud", destination: ICloudStatusView())
+                #if os(macOS)
+                // Senza iCloud la cartella libreria vive nel container sandbox
+                // (~/Library/Containers/com.scunio.Chunky/...), che nessuno trova da sé nel
+                // Finder: un modo diretto per arrivarci, invece di lasciarlo nascosto.
+                Button("Mostra la cartella della libreria nel Finder") {
+                    RevealInFinder.reveal(LibraryStorage.rootFolderURL())
+                }
+                #endif
                 Toggle("Includi fumetti nel backup", isOn: Binding(
                     get: { isIncludedInBackup },
                     set: { newValue in
@@ -256,14 +268,18 @@ struct SettingsView: View {
                 }
             }
 
+            // MetricKit, da cui dipende questa funzione, non esiste su macOS: mostrare il
+            // toggle lì significherebbe promettere qualcosa che non fa nulla.
+            #if os(iOS)
             Section(
                 header: Text("Diagnostica avanzata"),
-                footer: Text("Le segnalazioni di crash restano solo su questo dispositivo (nessun server remoto): vengono aggiunte al log diagnostico e possono arrivare con qualche ritardo, generalmente solo su dispositivo fisico e solo su iOS (MetricKit non esiste su Mac).")
+                footer: Text("Le segnalazioni di crash restano solo su questo dispositivo (nessun server remoto): vengono aggiunte al log diagnostico e possono arrivare con qualche ritardo, generalmente solo su dispositivo fisico.")
             ) {
                 Toggle(isOn: $isCrashReportingEnabled) {
                     labelWithInfo("Invia segnalazioni di crash", info: "Le segnalazioni di crash sono anonime, e aiutano a individuare e correggere i problemi.")
                 }
             }
+            #endif
 
             Section(header: Text("Informazioni")) {
                 HStack {

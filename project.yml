@@ -6,6 +6,13 @@ options:
     macOS: "14.0"
   createIntermediateGroups: true
 
+# Impostazioni di firma a livello di progetto: i target le ereditano tutti. Il file committato
+# non contiene dati personali, include solo (in modo opzionale) Signing.local.xcconfig, che ogni
+# sviluppatore si crea con il proprio Team ID e che è gitignorato.
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
+
 packages:
   ZIPFoundation:
     url: https://github.com/weichsel/ZIPFoundation.git

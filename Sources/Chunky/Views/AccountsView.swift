@@ -129,18 +129,24 @@ struct AccountsView: View {
         .navigationTitle("Accounts")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: { withAnimation { isAddingAccount.toggle() } }) {
-                    if isAddingAccount {
-                        Text("Done")
-                    } else {
-                        Image(systemName: "plus")
-                    }
-                }
-            }
-        }
         #endif
+        .toolbar {
+            // Prima era dentro `#if os(iOS)`: su Mac non c'era alcun modo di rivelare la
+            // sezione "Add account", quindi gli account remoti erano impossibili da creare.
+            // Placement diverso per piattaforma: su iOS `.primaryAction` cade sullo stesso
+            // lato (trailing) del "Chiudi" di `toolbarDoneButton()` quando questa vista è
+            // presentata come sheet — i due finiscono ammassati insieme. `.navigationBarLeading`
+            // replica il posto che questo pulsante aveva sempre avuto su iOS.
+            #if os(iOS)
+            ToolbarItem(placement: .navigationBarLeading) {
+                addAccountToggleButton
+            }
+            #else
+            ToolbarItem(placement: .primaryAction) {
+                addAccountToggleButton
+            }
+            #endif
+        }
         .sheet(isPresented: $isShowingAddAccount) {
             AddAccountView(initialKind: addAccountKind)
         }
@@ -163,6 +169,17 @@ struct AccountsView: View {
                 break
             }
         }
+    }
+
+    private var addAccountToggleButton: some View {
+        Button(action: { withAnimation { isAddingAccount.toggle() } }) {
+            if isAddingAccount {
+                Text("Done")
+            } else {
+                Image(systemName: "plus")
+            }
+        }
+        .accessibilityIdentifier("accounts.add")
     }
 
     private func deleteAccounts(at offsets: IndexSet) {

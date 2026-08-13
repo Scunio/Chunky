@@ -1,4 +1,9 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 enum PageBackground: String, CaseIterable, Identifiable {
     case automatic
@@ -45,9 +50,12 @@ struct ColorThemeView: View {
             }
 
             Section(footer: Text("Personalizza i colori della libreria. Lascia \"Automatico\" per seguire la modalità chiara/scura di sistema.")) {
-                colorRow(title: "Sfondo", hex: $theme.backgroundHex)
-                colorRow(title: "Testo", hex: $theme.textHex)
-                colorRow(title: "Colore evidenziazione", hex: $theme.accentHex)
+                // Ogni riga ha un colore di ripiego diverso quando non è ancora personalizzata
+                // (hex vuoto = "Automatico"): mostrarli tutti come .primary li rendeva identici
+                // e neri, indistinguibili l'uno dall'altro nonostante rappresentino cose diverse.
+                colorRow(title: "Sfondo", hex: $theme.backgroundHex, defaultColor: systemBackgroundColor)
+                colorRow(title: "Testo", hex: $theme.textHex, defaultColor: .primary)
+                colorRow(title: "Colore evidenziazione", hex: $theme.accentHex, defaultColor: .accentColor)
             }
 
             Section(
@@ -65,7 +73,7 @@ struct ColorThemeView: View {
                 header: Text("Tint pagina (lettore)"),
                 footer: Text("Sovrappone una leggera tinta alle pagine mentre leggi: utile per correggere pagine ingiallite o per una modalità notte più riposante.")
             ) {
-                colorRow(title: "Colore", hex: $theme.pageTintHex)
+                colorRow(title: "Colore", hex: $theme.pageTintHex, defaultColor: .white)
                 if !theme.pageTintHex.isEmpty {
                     HStack {
                         Text("Intensità")
@@ -101,9 +109,9 @@ struct ColorThemeView: View {
         .buttonStyle(PlainButtonStyle())
     }
 
-    private func colorRow(title: String, hex: Binding<String>) -> some View {
+    private func colorRow(title: String, hex: Binding<String>, defaultColor: Color) -> some View {
         let binding = Binding<Color>(
-            get: { Color(hex: hex.wrappedValue) ?? .primary },
+            get: { Color(hex: hex.wrappedValue) ?? defaultColor },
             set: { hex.wrappedValue = $0.hexString }
         )
         return HStack {
@@ -116,5 +124,16 @@ struct ColorThemeView: View {
                 .buttonStyle(PlainButtonStyle())
             }
         }
+    }
+
+    /// Colore di sistema per lo sfondo, come ripiego quando "Sfondo" non è ancora personalizzato
+    /// (hex vuoto = "Automatico"). Non è lo stesso `.primary` usato per "Testo": mostrare lo
+    /// stesso valore per righe che rappresentano cose diverse è ciò che le rendeva indistinguibili.
+    private var systemBackgroundColor: Color {
+        #if os(iOS)
+        Color(UIColor.systemBackground)
+        #else
+        Color(NSColor.windowBackgroundColor)
+        #endif
     }
 }

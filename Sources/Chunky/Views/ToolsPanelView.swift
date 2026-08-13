@@ -59,6 +59,7 @@ struct ToolsPanelView: View {
                 }
             }
         }
+        .sheetSized()
     }
 
     private func sendFeedbackEmail() {
