@@ -1,0 +1,11 @@
+// Impostazioni di firma condivise da tutti i target.
+//
+// I valori veri (Team ID) NON stanno qui: sono dati personali dello sviluppatore, diversi
+// per ognuno e legati al proprio account Apple, quindi non vanno committati. Vivono in
+// Signing.local.xcconfig, che è gitignorato — copialo da Signing.local.xcconfig.example e
+// mettici il tuo Team ID.
+//
+// L'inclusione è `#include?` e non `#include`: con il punto interrogativo un file mancante
+// viene ignorato invece di far fallire la build, così un clone appena fatto compila lo stesso
+// (per il simulatore, dove la firma non serve) senza obbligare nessuno a creare il file.
+#include? "Signing.local.xcconfig"
