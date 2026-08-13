@@ -80,7 +80,7 @@ extension Color {
         #elseif os(macOS)
         let components = NSColor(self).usingColorSpace(.deviceRGB)?.cgColor.components ?? [0, 0, 0]
         #endif
-        let r = Int((components.count > 0 ? components[0] : 0) * 255)
+        let r = Int((components.isEmpty ? 0 : components[0]) * 255)
         let g = Int((components.count > 1 ? components[1] : 0) * 255)
         let b = Int((components.count > 2 ? components[2] : 0) * 255)
         return String(format: "#%02X%02X%02X", r, g, b)

@@ -2,8 +2,8 @@ name: Chunky
 options:
   bundleIdPrefix: com.scunio
   deploymentTarget:
-    iOS: "14.0"
-    macOS: "11.0"
+    iOS: "17.0"
+    macOS: "14.0"
   createIntermediateGroups: true
 
 packages:
@@ -14,22 +14,71 @@ packages:
     url: https://github.com/mtgto/Unrar.swift.git
     from: 0.3.15
 
-targets:
-  Chunky:
-    type: application
-    platform: [iOS, macOS]
-    deploymentTarget:
-      iOS: "14.0"
-      macOS: "11.0"
+# ---------------------------------------------------------------------------
+# Due target espliciti invece di un unico target multipiattaforma: è l'unico modo
+# per dare a iOS e macOS un Info.plist e degli entitlements distinti. Con il target
+# unico, il bundle Mac riceveva UILaunchScreen, UISupportedInterfaceOrientations,
+# UIBackgroundModes e TARGETED_DEVICE_FAMILY, che su macOS non significano nulla.
+# `Scripts/verify-plists.sh` verifica che non ci tornino dentro.
+#
+# I nomi Chunky_iOS / Chunky_macOS replicano quelli che XcodeGen generava prima,
+# così schemi, comandi e CI restano invariati.
+# ---------------------------------------------------------------------------
+targetTemplates:
+  # I test unitari NON sono ospitati nell'app: compilano direttamente i sorgenti sotto test
+  # (escluso il punto d'ingresso @main). Ospitarli nell'app richiederebbe di firmarla, e con
+  # gli entitlement iCloud servirebbe un provisioning profile che la CI non ha; in più ogni
+  # run dovrebbe lanciare la UI. Così i test sono ermetici, veloci e girano ovunque.
+  # Conseguenza: i test vivono nello stesso modulo del codice, quindi niente
+  # `@testable import Chunky`.
+  ChunkyUnitTest:
+    type: bundle.unit-test
     sources:
+      - path: Tests/ChunkyTests
       - path: Sources/Chunky
-    resources:
-      - path: Sources/Chunky/Resources
+        excludes:
+          - ChunkyApp.swift
     dependencies:
       - package: ZIPFoundation
       - package: Unrar
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: true
+
+  ChunkyUITest:
+    type: bundle.ui-testing
+    sources:
+      - path: Tests/ChunkyUITests
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: true
+
+  ChunkyApp:
+    type: application
+    sources:
+      - path: Sources/Chunky
+    dependencies:
+      - package: ZIPFoundation
+      - package: Unrar
+    settings:
+      base:
+        PRODUCT_NAME: Chunky
+        PRODUCT_BUNDLE_IDENTIFIER: com.scunio.Chunky
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        ENABLE_PREVIEWS: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+
+targets:
+  Chunky_iOS:
+    platform: iOS
+    templates: [ChunkyApp]
     info:
-      path: Sources/Chunky/Resources/Info.plist
+      path: Support/Info-iOS.plist
       properties:
         CFBundleDisplayName: Chunky
         UILaunchScreen: {}
@@ -42,16 +91,19 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes:
+          - remote-notification
+        # Su iOS l'apertura in place funziona davvero (Files fornisce l'URL sicuro).
+        # Sul Mac sandboxed servirebbero bookmark security-scoped, che non abbiamo:
+        # per questo la chiave resta solo qui.
+        LSSupportsOpeningDocumentsInPlace: true
+        NSFaceIDUsageDescription: "Usa Face ID per sbloccare Chunky quando il blocco genitori è attivo."
+        NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
         NSUbiquitousContainers:
           iCloud.com.scunio.Chunky:
             NSUbiquitousContainerIsDocumentScopePublic: true
             NSUbiquitousContainerSupportedFolderLevels: Any
             NSUbiquitousContainerName: Chunky
-        LSSupportsOpeningDocumentsInPlace: true
-        UIBackgroundModes:
-          - remote-notification
-        NSFaceIDUsageDescription: "Usa Face ID per sbloccare Chunky quando il blocco genitori è attivo."
-        NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
         CFBundleDocumentTypes:
           - CFBundleTypeName: Comic Archive
             LSItemContentTypes:
@@ -71,8 +123,55 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension: [cbr]
     entitlements:
-      path: Sources/Chunky/Resources/Chunky.entitlements
+      path: Support/Chunky-iOS.entitlements
       properties:
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.com.scunio.Chunky
+        com.apple.developer.icloud-services:
+          - CloudDocuments
+          - CloudKit
+        com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)com.scunio.Chunky"
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1,2"
+
+  Chunky_macOS:
+    platform: macOS
+    templates: [ChunkyApp]
+    info:
+      path: Support/Info-macOS.plist
+      properties:
+        CFBundleDisplayName: Chunky
+        LSApplicationCategoryType: public.app-category.entertainment
+        NSHumanReadableCopyright: "MIT License"
+        NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
+        NSUbiquitousContainers:
+          iCloud.com.scunio.Chunky:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerSupportedFolderLevels: Any
+            NSUbiquitousContainerName: Chunky
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Comic Archive
+            LSItemContentTypes:
+              - com.scunio.chunky.cbz
+              - com.scunio.chunky.cbr
+              - com.adobe.pdf
+            LSHandlerRank: Owner
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.scunio.chunky.cbz
+            UTTypeDescription: Comic Book Zip Archive
+            UTTypeConformsTo: [public.zip-archive]
+            UTTypeTagSpecification:
+              public.filename-extension: [cbz]
+          - UTTypeIdentifier: com.scunio.chunky.cbr
+            UTTypeDescription: Comic Book RAR Archive
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [cbr]
+    entitlements:
+      path: Support/Chunky-macOS.entitlements
+      properties:
+        # Sandbox e file-access sono chiavi macOS: su iOS erano rumore.
         com.apple.security.app-sandbox: true
         com.apple.security.files.user-selected.read-write: true
         com.apple.security.network.client: true
@@ -83,13 +182,70 @@ targets:
           - CloudDocuments
           - CloudKit
         com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)com.scunio.Chunky"
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.scunio.Chunky
-        MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "1"
-        SWIFT_VERSION: "5.0"
-        ENABLE_PREVIEWS: true
-        TARGETED_DEVICE_FAMILY: "1,2"
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+
+  ChunkyTests_iOS:
+    platform: iOS
+    templates: [ChunkyUnitTest]
+
+  ChunkyTests_macOS:
+    platform: macOS
+    templates: [ChunkyUnitTest]
+
+  ChunkyUITests_iOS:
+    platform: iOS
+    templates: [ChunkyUITest]
+    dependencies:
+      - target: Chunky_iOS
+
+  ChunkyUITests_macOS:
+    platform: macOS
+    templates: [ChunkyUITest]
+    dependencies:
+      - target: Chunky_macOS
+
+# Gli schemi sono dichiarati qui invece di lasciarli autocreare da Xcode: gli schemi
+# autocreati vivono in xcuserdata e non sono deterministici, mentre la CI deve poter
+# contare sul fatto che `-scheme Chunky_macOS` includa davvero i target di test.
+schemes:
+  # Lo schema principale esegue SOLO i test unitari, e la sua azione `test` non costruisce
+  # l'app: i test unitari non ne hanno bisogno, e costruire l'app in fase di test
+  # richiederebbe un provisioning profile per gli entitlement iCloud (che la CI non ha).
+  Chunky_iOS:
+    build:
+      targets:
+        Chunky_iOS: [run, archive, profile, analyze]
+        ChunkyTests_iOS: [test]
+    test:
+      gatherCoverageData: true
+      targets: [ChunkyTests_iOS]
+    run:
+      config: Debug
+
+  Chunky_macOS:
+    build:
+      targets:
+        Chunky_macOS: [run, archive, profile, analyze]
+        ChunkyTests_macOS: [test]
+    test:
+      gatherCoverageData: true
+      targets: [ChunkyTests_macOS]
+    run:
+      config: Debug
+
+  # Gli UI test hanno bisogno dell'app vera (quindi di firma e avvio): stanno in schemi
+  # separati, eseguiti dal workflow notturno e non a ogni PR.
+  ChunkyUI_iOS:
+    build:
+      targets:
+        Chunky_iOS: all
+        ChunkyUITests_iOS: [test]
+    test:
+      targets: [ChunkyUITests_iOS]
+
+  ChunkyUI_macOS:
+    build:
+      targets:
+        Chunky_macOS: all
+        ChunkyUITests_macOS: [test]
+    test:
+      targets: [ChunkyUITests_macOS]

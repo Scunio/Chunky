@@ -29,7 +29,10 @@ struct ChunkyApp: App {
 
                     if lock.isLocked {
                         ParentalLockGateView()
-                            .background(BackgroundMaterialCompat().ignoresSafeArea())
+                            // Deve restare OPACO: è la schermata che nasconde la libreria
+                            // quando il blocco genitori è attivo. Un materiale traslucido
+                            // lascerebbe intravedere le copertine.
+                            .background(.background, ignoresSafeAreaEdges: .all)
                     }
                 }
                 .preferredColorScheme(theme.colorSchemeMode.colorScheme)
@@ -43,16 +46,5 @@ struct ChunkyApp: App {
                 lock.lockIfNeeded()
             }
         }
-    }
-}
-
-/// Sfondo opaco per la schermata di blocco, senza dipendere dai materiali (iOS15+/macOS12+).
-private struct BackgroundMaterialCompat: View {
-    var body: some View {
-        #if os(iOS)
-        Color(.systemBackground)
-        #else
-        Color(NSColor.windowBackgroundColor)
-        #endif
     }
 }

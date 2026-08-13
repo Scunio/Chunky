@@ -81,13 +81,7 @@ private struct InfoButton: View {
         }
         .buttonStyle(.plain)
         .popover(isPresented: $isPresented) {
-            Group {
-                if #available(iOS 16.4, macOS 13.3, *) {
-                    infoText.presentationCompactAdaptation(.popover)
-                } else {
-                    infoText
-                }
-            }
+            infoText.presentationCompactAdaptation(.popover)
         }
     }
 

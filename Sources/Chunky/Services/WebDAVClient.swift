@@ -102,9 +102,10 @@ private final class WebDAVMultistatusDelegate: NSObject, XMLParserDelegate {
             defer { isFirstResponse = false }
             // La prima <response> del multistatus è tipicamente la cartella stessa: la saltiamo.
             guard !isFirstResponse, let href = currentHref, let url = URL(string: href, relativeTo: baseURL) else { return }
-            let name = currentDisplayName?.isEmpty == false
-                ? currentDisplayName!
-                : url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
+            let displayName = currentDisplayName.flatMap { $0.isEmpty ? nil : $0 }
+            let name = displayName
+                ?? url.lastPathComponent.removingPercentEncoding
+                ?? url.lastPathComponent
 
             if isCollection {
                 entries.append(RemoteEntry(title: name, isContainer: true, url: url.absoluteURL))

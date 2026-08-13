@@ -51,6 +51,13 @@ private struct ReaderContentView: View {
     /// con lo zoom attivo lo swipe-per-cambiare-pagina va sospeso, altrimenti confligge col
     /// trascinamento usato per spostarsi dentro la pagina ingrandita.
     @State private var isZoomed = false
+    /// Stile e verso dell'ultimo cambio pagina: il pager li usa per scegliere la transizione.
+    /// Servono perché lo stile è per-gesto (tap e swipe hanno impostazioni indipendenti), quindi
+    /// non si può leggerlo dall'AppStorage al momento di costruire la vista: bisogna sapere
+    /// *quale* gesto ha innescato il cambio.
+    @State private var turnStyle = TapPageTurnStyle.slide
+    /// +1 = l'indice di pagina cresce, -1 = cala (già al netto della direzione di lettura).
+    @State private var turnDirection = 1
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -63,6 +70,11 @@ private struct ReaderContentView: View {
     /// Indice della pagina "principale" (la prima, più a sinistra in LTR) dello spread corrente.
     @State private var currentPage: Int = 0
     @State private var loadError: String?
+    /// Avanzamento (0...1) del download iCloud del fumetto che si sta aprendo, nil se non c'è
+    /// nessun download in corso: apre il fumetto si può sempre, è l'apertura stessa a scaricarlo.
+    @State private var downloadProgress: Double?
+    /// Il download in corso, per poterlo annullare direttamente dal lettore.
+    @State private var downloadItem: DownloadItem?
     @State private var isControlsVisible = true
     @State private var isSharePresented = false
     @State private var shareImage: PlatformImage?
@@ -181,6 +193,8 @@ private struct ReaderContentView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
                 }
+            } else if let downloadProgress = downloadProgress {
+                downloadOverlay(progress: downloadProgress)
             } else {
                 ProgressView().accentColor(chromeForeground)
             }
@@ -346,69 +360,143 @@ private struct ReaderContentView: View {
         guard let provider = provider else { return }
         let starts = spreadStarts(pageCount: provider.pageCount)
         let target = starts.last(where: { $0 <= jumpPageNumber - 1 }) ?? 0
+        turnStyle = tapPageTurnStyle
+        turnDirection = target > currentPage ? 1 : -1
         withAnimation(.easeInOut(duration: 0.2)) {
             currentPage = target
         }
         isPageJumpPresented = false
     }
 
+    #if os(macOS)
+    /// La pagina (o lo spread) corrente, con la transizione dell'ultimo cambio pagina.
+    ///
+    /// L'ordine dei due `.environment` è voluto: quello più esterno vale per il layer della
+    /// transizione, così i bordi di `.move(edge:)` si risolvono sempre in LTR e il verso lo
+    /// decidiamo noi in `pageTurnTransition`; quello interno rispecchia lo spread per i manga.
+    private func pagerContent(provider: ComicPageProvider) -> some View {
+        PageSpreadView(provider: provider, leadingIndex: currentPage, isDoublePage: effectiveDoublePage, isZoomed: $isZoomed)
+            .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
+            .id(currentPage)
+            .transition(pageTurnTransition)
+            .environment(\.layoutDirection, .leftToRight)
+    }
+
+    /// Traduce lo stile del gesto che ha innescato il cambio nella transizione corrispondente:
+    /// scorrimento laterale, dissolvenza o taglio netto (per "Immediato" l'animazione è già
+    /// disattivata in `step`, qui basta non aggiungere effetti).
+    private var pageTurnTransition: AnyTransition {
+        switch turnStyle {
+        case .fade:
+            return .opacity
+        case .slide:
+            // La pagina con indice più alto sta a destra in LTR e a sinistra nei manga: è da
+            // lì che deve entrare quando l'indice cresce, e dal lato opposto quando cala.
+            let indexIncreasing = turnDirection > 0
+            let rightToLeft = comic.readingDirection == .rightToLeft
+            let entering: Edge = (indexIncreasing != rightToLeft) ? .trailing : .leading
+            return .asymmetric(
+                insertion: .move(edge: entering),
+                removal: .move(edge: entering == .trailing ? .leading : .trailing)
+            )
+        case .immediate, .disabled:
+            return .identity
+        }
+    }
+
+    #endif
+
     #if os(iOS)
-    /// Con "Swipe page-turn" = Scorrimento usiamo il pager nativo `TabView(.page)` (segue il
-    /// dito, sensazione migliore); per le altre opzioni (Disattivato/Immediato/Dissolvenza) lo
-    /// swipe nativo non è configurabile, quindi passiamo a un pager gestito a mano con
-    /// DragGesture, sospeso quando la pagina è ingrandita per non confliggere col pan interno.
+    /// Quando lo swipe deve seguire il dito si usa `TabView(.page)`: il paging interattivo di
+    /// `UIPageViewController` non porta a termine la transizione dentro questa gerarchia (il pan
+    /// parte, il dataSource restituisce la pagina vicina, ma `didFinishAnimating` non arriva mai —
+    /// verificato anche con il contenuto ridotto a un colore pieno, quindi non è colpa dei gesti
+    /// della pagina né degli overlay). Il TabView invece funziona, al prezzo di non poter
+    /// sostituire la propria animazione di slide.
+    ///
+    /// Per gli altri stili serve proprio quello: "Immediato" e "Dissolvenza" non sono
+    /// rappresentabili da un trascinamento continuo, quindi lì il paging a gesto è spento, lo
+    /// swipe viene riconosciuto come gesto discreto e la pagina gira in modo programmatico con
+    /// l'animazione giusta — cosa che `PageTurnPager` sa fare e il TabView no.
     @ViewBuilder
     private func iOSPager(provider: ComicPageProvider) -> some View {
-        if swipePageTurnStyle == .slide {
+        if swipePageTurnStyle == .slide && tapPageTurnStyle == .slide {
             nativeSwipePager(provider: provider)
         } else {
-            manualSwipePager(provider: provider)
+            programmaticPager(provider: provider)
+        }
+    }
+
+    /// Le zone di tap stanno *dentro* il contenuto della pagina, non sovrapposte al pager in uno
+    /// ZStack: una view sovrapposta (anche `Color.clear`) è un fratello disegnato sopra la scroll
+    /// view del pager e l'hit-test UIKit le assegna ogni tocco, swipe compresi — il pager non ne
+    /// riceve nessuno e il cambio pagina resta morto (`simultaneousGesture` non cambia l'hit-test,
+    /// riguarda solo l'arbitraggio fra gesture). Da dentro il contenuto sono invece subview della
+    /// scroll view, che continua a riconoscere il pan dal proprio recognizer.
+    private func pageContent(provider: ComicPageProvider, start: Int) -> some View {
+        ZStack {
+            PageSpreadView(provider: provider, leadingIndex: start, isDoublePage: effectiveDoublePage, isZoomed: $isZoomed)
+                .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
+
+            tapZonesOrControlsToggle(provider: provider)
         }
     }
 
     private func nativeSwipePager(provider: ComicPageProvider) -> some View {
-        ZStack {
-            TabView(selection: $currentPage) {
-                ForEach(spreadStarts(pageCount: provider.pageCount), id: \.self) { start in
-                    PageSpreadView(provider: provider, leadingIndex: start, isDoublePage: effectiveDoublePage, isZoomed: $isZoomed)
-                        .tag(start)
-                }
+        TabView(selection: $currentPage) {
+            ForEach(spreadStarts(pageCount: provider.pageCount), id: \.self) { start in
+                pageContent(provider: provider, start: start)
+                    .tag(start)
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
+    }
 
-            tapZonesOrControlsToggle(provider: provider)
+    private func programmaticPager(provider: ComicPageProvider) -> some View {
+        let isInteractiveSwipe = swipePageTurnStyle == .slide && !isZoomed
+        return ZStack {
+            PageTurnPager(
+                starts: spreadStarts(pageCount: provider.pageCount),
+                selection: $currentPage,
+                rightToLeft: comic.readingDirection == .rightToLeft,
+                turnStyle: turnStyle,
+                interactiveSwipe: isInteractiveSwipe,
+                resetToken: PagerResetToken(
+                    doublePage: effectiveDoublePage,
+                    rightToLeft: comic.readingDirection == .rightToLeft,
+                    pageCount: provider.pageCount
+                )
+            ) { start in
+                pageContent(provider: provider, start: start)
+            }
+
+            if !isInteractiveSwipe && swipePageTurnStyle != .disabled && !isZoomed {
+                discreteSwipeCatcher(provider: provider)
+            }
         }
     }
 
-    private func manualSwipePager(provider: ComicPageProvider) -> some View {
-        ZStack {
-            PageSpreadView(provider: provider, leadingIndex: currentPage, isDoublePage: effectiveDoublePage, isZoomed: $isZoomed)
-                .id(currentPage)
-                .transition(swipePageTurnStyle == .fade ? .opacity : .identity)
-                .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
-
-            tapZonesOrControlsToggle(provider: provider)
-
-            if swipePageTurnStyle != .disabled && !isZoomed {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 24)
-                            .onEnded { value in
-                                guard abs(value.translation.width) > abs(value.translation.height),
-                                      abs(value.translation.width) > 60 else { return }
-                                step(value.translation.width < 0 ? 1 : -1, provider: provider, style: swipePageTurnStyle)
-                            }
-                    )
-            }
-        }
+    /// Riconosce lo swipe come gesto discreto (soglia superata = una pagina) per gli stili che
+    /// il paging interattivo non sa rendere. `simultaneousGesture` per non rubare il tocco alle
+    /// zone di tap sottostanti.
+    private func discreteSwipeCatcher(provider: ComicPageProvider) -> some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 24)
+                    .onEnded { value in
+                        guard abs(value.translation.width) > abs(value.translation.height),
+                              abs(value.translation.width) > 60 else { return }
+                        step(value.translation.width < 0 ? 1 : -1, provider: provider, style: swipePageTurnStyle)
+                    }
+            )
     }
 
     @ViewBuilder
     private func tapZonesOrControlsToggle(provider: ComicPageProvider) -> some View {
         if tapPageTurnStyle != .disabled {
-            PageTapZones(oneHanded: isOneHandedModeEnabled, oneHandedReversed: isOneHandedZonesReversed, hotCorners: isHotCornersEnabled) {
+            PageTapZones(oneHanded: isOneHandedModeEnabled, oneHandedReversed: isOneHandedZonesReversed, hotCorners: isHotCornersEnabled, rightToLeft: comic.readingDirection == .rightToLeft) {
                 // Con "Tap-to-pan" anche la zona "indietro" avanza: comodo se non riesci a
                 // raggiungere comodamente entrambi i lati dello schermo (vedi tooltip originale).
                 step(isTapToPanEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
@@ -434,13 +522,10 @@ private struct ReaderContentView: View {
     #else
     private func macOSPager(provider: ComicPageProvider) -> some View {
         ZStack {
-            PageSpreadView(provider: provider, leadingIndex: currentPage, isDoublePage: effectiveDoublePage, isZoomed: $isZoomed)
-                .id(currentPage)
-                .transition(tapPageTurnStyle == .fade ? .opacity : .identity)
-                .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
+            pagerContent(provider: provider)
 
             if tapPageTurnStyle != .disabled {
-                PageTapZones(oneHanded: isOneHandedModeEnabled, oneHandedReversed: isOneHandedZonesReversed, hotCorners: isHotCornersEnabled) {
+                PageTapZones(oneHanded: isOneHandedModeEnabled, oneHandedReversed: isOneHandedZonesReversed, hotCorners: isHotCornersEnabled, rightToLeft: comic.readingDirection == .rightToLeft) {
                     step(-1, provider: provider, style: tapPageTurnStyle)
                 } onNext: {
                     step(1, provider: provider, style: tapPageTurnStyle)
@@ -459,6 +544,10 @@ private struct ReaderContentView: View {
                     .onTapGesture { toggleControls() }
             }
         }
+        .background(ScrollSwipeMonitor { direction in
+            guard swipePageTurnStyle != .disabled, !isZoomed else { return }
+            step(direction, provider: provider, style: swipePageTurnStyle)
+        })
         .background(KeyEventMonitor { keyCode in
             switch keyCode {
             case .leftArrow: step(-1, provider: provider, style: tapPageTurnStyle)
@@ -470,20 +559,24 @@ private struct ReaderContentView: View {
 
     /// Avanza/retrocede di uno spread, rispettando la direzione di lettura corrente (manga = invertita).
     /// `style` è quello del gesto che ha innescato il cambio (tap o swipe/tastiera hanno
-    /// impostazioni indipendenti) e decide solo l'animazione: "Scorrimento" nativo via TabView
-    /// su iOS non passa da qui (vedi iOSPager), quindi qui "slide" è semplicemente l'animazione
-    /// di fallback usata anche per i cambi pagina non innescati da swipe (tap, tastiera, jump).
+    /// impostazioni indipendenti) e decide l'animazione, che viene resa da `pageTurnTransition`.
+    /// Quando è attivo il pager nativo (swipe e tap entrambi su "Scorrimento") lo slide dello
+    /// swipe non passa da qui: lo gestisce il TabView seguendo il dito.
     private func step(_ direction: Int, provider: ComicPageProvider, style: TapPageTurnStyle) {
         let effectiveDirection = (comic.readingDirection == .rightToLeft ? -direction : direction) * pageStep
         let next = currentPage + effectiveDirection
         if next >= provider.pageCount {
-            if direction > 0, let candidate = nextComicInLibrary {
+            // `effectiveDirection`, non `direction`: nei manga si arriva in fondo al fumetto
+            // andando avanti nella lettura, che però corrisponde a `direction` negativo.
+            if effectiveDirection > 0, let candidate = nextComicInLibrary {
                 pendingNextComic = candidate
             }
             return
         }
         guard next >= 0 else { return }
         resetIdleTimerIfNeeded()
+        turnStyle = style
+        turnDirection = effectiveDirection > 0 ? 1 : -1
         switch style {
         case .immediate:
             var transaction = Transaction()
@@ -505,6 +598,8 @@ private struct ReaderContentView: View {
         idleResetWorkItem?.cancel()
         guard readerIdleReset.rawValue > 0 else { return }
         let workItem = DispatchWorkItem {
+            turnStyle = tapPageTurnStyle
+            turnDirection = -1
             withAnimation(.easeInOut(duration: 0.2)) { currentPage = 0 }
         }
         idleResetWorkItem = workItem
@@ -826,12 +921,42 @@ private struct ReaderContentView: View {
                             let fraction = min(max(value.location.x / width, 0), 1)
                             let target = Int((Double(isRTL ? 1 - fraction : fraction) * maxValue).rounded())
                             let starts = spreadStarts(pageCount: provider.pageCount)
+                            // Trascinando il pallino si attraversano molte pagine di seguito:
+                            // animarle una per una sarebbe lento e a scatti.
+                            turnStyle = .immediate
                             currentPage = starts.min(by: { abs($0 - target) < abs($1 - target) }) ?? 0
                         }
                 )
         }
         .frame(height: 24)
         .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
+    }
+
+    /// Mostrato mentre il fumetto viene scaricato da iCloud: percentuale reale e possibilità di
+    /// annullare senza dover passare dalla schermata Downloads.
+    @ViewBuilder
+    private func downloadOverlay(progress: Double) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "icloud.and.arrow.down")
+                .font(.largeTitle)
+                .foregroundColor(chromeForeground)
+            Text(comic.title ?? "Fumetto")
+                .foregroundColor(chromeForeground)
+                .multilineTextAlignment(.center)
+            ProgressView(value: progress)
+                .frame(maxWidth: 240)
+            Text("\(Int(progress * 100))%")
+                .font(.caption)
+                .foregroundColor(chromeForeground.opacity(0.7))
+            Button(action: { downloadItem?.cancel() }) {
+                Text("Annulla")
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.secondary.opacity(0.25))
+                    .cornerRadius(8)
+            }
+        }
+        .padding(.horizontal, 32)
     }
 
     private func toggleReadingDirection() {
@@ -846,34 +971,68 @@ private struct ReaderContentView: View {
         let format = comic.format
         let startingPage = Int(comic.lastReadPage)
 
+        // La pagina salvata va ripristinata *prima* che il pager esista, non quando arriva il
+        // provider: il pager si costruisce leggendo currentPage, quindi se lo trova ancora a 0 e
+        // lo vede cambiare subito dopo esegue uno scorrimento programmatico verso la pagina
+        // giusta — e il primo swipe dell'utente, che cade dentro quell'assestamento, viene perso
+        // (verificato: aprendo a pagina 1, dove non c'è nulla da ripristinare, il primo swipe
+        // funziona). Qui il numero di pagine non è ancora noto: l'allineamento all'inizio dello
+        // spread avviene dopo, ed è un no-op a pagina singola.
+        currentPage = max(0, startingPage)
+
         // Il download da iCloud può richiedere più di qualche secondo (file grandi, connessione
         // lenta): lo registriamo nella scheda Downloads con un progresso reale, invece di far
         // fallire il lettore dopo un timeout fisso come accadeva prima.
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 if LibraryStorage.isPendingDownload(url) {
-                    let downloadItem = DispatchQueue.main.sync {
-                        DownloadManager.shared.register(title: comic.title ?? "Fumetto")
+                    let title = comic.title ?? "Fumetto"
+                    // La chiave è il percorso del file: riaprire lo stesso fumetto mentre scarica
+                    // si aggancia al download già in corso invece di aprirne un secondo.
+                    let item = DispatchQueue.main.sync {
+                        DownloadManager.shared.register(title: title, key: url.path)
+                    }
+                    DispatchQueue.main.async {
+                        downloadItem = item
+                        downloadProgress = item.fractionCompleted
                     }
                     do {
                         try LibraryStorage.downloadIfNeeded(
                             url,
-                            isCancelled: { downloadItem.isCancelled }
+                            isCancelled: { item.isCancelled }
                         ) { progress in
-                            downloadItem.updateProgress(progress)
+                            // `onProgress` arriva dalla coda principale durante il download, ma
+                            // dal thread di background nel caso "già scaricato": non si può
+                            // scrivere lo stato senza rimbalzare esplicitamente sul main.
+                            DispatchQueue.main.async {
+                                item.updateProgress(progress)
+                                downloadProgress = progress
+                            }
                         }
                     } catch {
-                        DispatchQueue.main.async { DownloadManager.shared.remove(downloadItem) }
+                        DispatchQueue.main.async {
+                            DownloadManager.shared.remove(item)
+                            downloadItem = nil
+                            downloadProgress = nil
+                        }
                         throw error
                     }
-                    DispatchQueue.main.async { DownloadManager.shared.remove(downloadItem) }
+                    DispatchQueue.main.async {
+                        DownloadManager.shared.remove(item)
+                        downloadItem = nil
+                        downloadProgress = nil
+                    }
                 }
                 let loaded = try ComicPageProviderFactory.makeProvider(for: url, format: format)
                 DispatchQueue.main.async {
                     provider = loaded
                     let clampedStart = min(startingPage, max(0, loaded.pageCount - 1))
                     let starts = spreadStarts(pageCount: loaded.pageCount)
-                    currentPage = starts.last(where: { $0 <= clampedStart }) ?? 0
+                    let aligned = starts.last(where: { $0 <= clampedStart }) ?? 0
+                    // Solo se serve davvero: riassegnare lo stesso valore è innocuo, ma un valore
+                    // diverso qui fa scorrere il pager, ed è esattamente ciò che si vuole evitare
+                    // quando la pagina ripristinata era già un inizio di spread valido.
+                    if aligned != currentPage { currentPage = aligned }
                     if comic.pageCount == 0 {
                         comic.pageCount = Int32(loaded.pageCount)
                         try? context.save()
@@ -897,6 +1056,9 @@ private struct PageTapZones: View {
     /// retrocede: comodo per adattarsi a mano destra/sinistra o a come si tiene il telefono.
     let oneHandedReversed: Bool
     let hotCorners: Bool
+    /// Nei manga il lato sinistro è quello che *avanza*: serve solo alle etichette di
+    /// accessibilità, perché l'inversione vera del verso avviene già in `step`.
+    let rightToLeft: Bool
     let onPrevious: () -> Void
     let onNext: () -> Void
     let onToggleControls: () -> Void
@@ -914,16 +1076,16 @@ private struct PageTapZones: View {
                 // userebbero entrambe simultaneousGesture e scatterebbero insieme sullo stesso tocco.
                 VStack(spacing: 0) {
                     HStack {
-                        zone(action: onExit)
+                        zone(label: "Esci dalla lettura", action: onExit)
                             .frame(width: 88, height: 88)
                         Spacer()
-                        zone(action: onOpenSettings)
+                        zone(label: "Impostazioni", action: onOpenSettings)
                             .frame(width: 88, height: 88)
                     }
                     mainZones(proxy: proxy)
                     HStack {
                         Spacer()
-                        zone(action: onToggleDoublePage)
+                        zone(label: "Doppia pagina", action: onToggleDoublePage)
                             .frame(width: 88, height: 88)
                     }
                 }
@@ -940,32 +1102,40 @@ private struct PageTapZones: View {
             // esatto): quale, lo sceglie oneHandedReversed. Fascia centrale per i controlli,
             // come in modalità normale.
             let sharedAction = oneHandedReversed ? onPrevious : onNext
+            let sharedLabel = oneHandedReversed ? previousLabel : nextLabel
             HStack(spacing: 0) {
-                zone(action: sharedAction)
+                zone(label: sharedLabel, action: sharedAction)
                     .frame(width: min(proxy.size.width * 0.18, 90))
-                zone(action: onToggleControls)
-                zone(action: sharedAction)
+                zone(label: "Mostra o nascondi i controlli", action: onToggleControls)
+                zone(label: sharedLabel, action: sharedAction)
                     .frame(width: min(proxy.size.width * 0.18, 90))
             }
         } else {
             HStack(spacing: 0) {
-                zone(action: onPrevious)
+                zone(label: previousLabel, action: onPrevious)
                     .frame(width: min(proxy.size.width * 0.18, 90))
-                zone(action: onToggleControls)
-                zone(action: onNext)
+                zone(label: "Mostra o nascondi i controlli", action: onToggleControls)
+                zone(label: nextLabel, action: onNext)
                     .frame(width: min(proxy.size.width * 0.18, 90))
             }
         }
     }
 
-    private func zone(action: @escaping () -> Void) -> some View {
+    /// `onPrevious`/`onNext` sono la zona sinistra e quella destra: nei manga la sinistra è
+    /// quella che manda avanti, quindi le etichette vanno scambiate.
+    private var previousLabel: String { rightToLeft ? "Pagina successiva" : "Pagina precedente" }
+    private var nextLabel: String { rightToLeft ? "Pagina precedente" : "Pagina successiva" }
+
+    /// Etichetta e trait espliciti: la zona è una `Color.clear`, quindi senza questi VoiceOver
+    /// non avrebbe alcun modo di girare pagina (e i test automatici nessun bersaglio).
+    private func zone(label: String, action: @escaping () -> Void) -> some View {
         // simultaneousGesture, non .onTapGesture: quest'ultimo reclama il tocco in esclusiva,
-        // impedendo allo swipe nativo del TabView(.page) sottostante di funzionare del tutto
-        // (su iOS il cambio pagina via swipe restava morto anche con le zone di tap disattivate,
-        // perché non è questo il gesture ad essere il problema — .onTapGesture in generale sì).
+        // impedendo allo swipe sottostante di funzionare del tutto.
         Color.clear
             .contentShape(Rectangle())
             .simultaneousGesture(TapGesture().onEnded(action))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(label)
     }
 }
 
@@ -1041,8 +1211,8 @@ private struct PageView: View {
                             .overlay(tintOverlay)
                             .gesture(magnifyGesture)
                             // Attivo solo da zoomata: a scale 1 non deve intercettare il drag,
-                            // altrimenti ruba il tocco allo swipe-pagina sottostante (TabView
-                            // nativo o pager manuale) anche se poi non fa nulla (guard scale > 1).
+                            // altrimenti ruba il tocco allo swipe-pagina sottostante anche se poi
+                            // non fa nulla (guard scale > 1).
                             .gesture(dragGesture, including: scale > 1 ? .all : .subviews)
                             .onTapGesture(count: 2) { toggleZoom() }
                     }
@@ -1139,6 +1309,171 @@ private struct PageView: View {
 }
 
 #if os(iOS)
+/// Cambia quando cambia qualcosa che obbliga a ricostruire tutte le pagine da zero (il numero
+/// di pagine per spread, il verso di lettura, il fumetto stesso): i controller in cache
+/// mostrerebbero altrimenti spread composti con le regole vecchie.
+private struct PagerResetToken: Hashable {
+    let doublePage: Bool
+    let rightToLeft: Bool
+    let pageCount: Int
+}
+
+/// Pager del lettore. Espone `UIPageViewController` perché è l'unico componente che offre sia
+/// lo scorrimento interattivo che segue il dito sia un cambio pagina programmatico di cui si
+/// possa scegliere l'animazione — le due cose che servono per rendere davvero indipendenti le
+/// impostazioni "Tap page-turn" e "Swipe page-turn".
+private struct PageTurnPager<Content: View>: UIViewControllerRepresentable {
+    /// Indici di inizio spread, in ordine crescente: sono i "passi" della navigazione.
+    let starts: [Int]
+    @Binding var selection: Int
+    let rightToLeft: Bool
+    /// Stile dell'ultimo cambio pagina programmatico (tap, tastiera, salto, scrubber).
+    let turnStyle: TapPageTurnStyle
+    /// Con false lo scorrimento a dito è spento: o perché lo stile dello swipe non è
+    /// "Scorrimento", o perché la pagina è ingrandita e il trascinamento serve al pan.
+    let interactiveSwipe: Bool
+    let resetToken: PagerResetToken
+    let content: (Int) -> Content
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIViewController(context: Context) -> UIPageViewController {
+        let pager = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal)
+        pager.view.backgroundColor = .clear
+        pager.delegate = context.coordinator
+        pager.dataSource = interactiveSwipe ? context.coordinator : nil
+        pager.setViewControllers([context.coordinator.controller(for: selection)], direction: .forward, animated: false)
+        return pager
+    }
+
+    func updateUIViewController(_ pager: UIPageViewController, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.parent = self
+        // Togliere il dataSource è il modo pulito di disattivare il paging a gesto lasciando
+        // funzionante il cambio pagina programmatico.
+        pager.dataSource = interactiveSwipe ? coordinator : nil
+
+        if coordinator.resetToken != resetToken {
+            coordinator.resetToken = resetToken
+            coordinator.discardCachedControllers()
+            coordinator.currentIndex = selection
+            pager.setViewControllers([coordinator.controller(for: selection)], direction: .forward, animated: false)
+            return
+        }
+
+        // Il confronto è con l'indice tenuto dal coordinator, mai con un valore catturato:
+        // questo metodo viene richiamato a ogni cambio di stato del padre (lo zoom, per dirne
+        // uno, cambia a ogni pizzicata) e un confronto sbagliato girerebbe la pagina da solo.
+        guard selection != coordinator.currentIndex else { return }
+        let indexIncreasing = selection > coordinator.currentIndex
+        coordinator.currentIndex = selection
+        let next = coordinator.controller(for: selection)
+        let direction = Self.navigationDirection(indexIncreasing: indexIncreasing, rightToLeft: rightToLeft)
+        switch turnStyle {
+        case .slide:
+            pager.setViewControllers([next], direction: direction, animated: true)
+        case .fade:
+            UIView.transition(with: pager.view, duration: 0.25, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+                pager.setViewControllers([next], direction: direction, animated: false)
+            }
+        case .immediate, .disabled:
+            pager.setViewControllers([next], direction: direction, animated: false)
+        }
+    }
+
+    /// `.forward` fa entrare la pagina nuova da destra. La pagina con indice più alto sta a
+    /// destra in LTR e a sinistra nei manga, quindi nei manga i due versi vanno scambiati.
+    /// Stessa regola per il vicino da restituire al dataSource, così i due non possono divergere.
+    static func navigationDirection(indexIncreasing: Bool, rightToLeft: Bool) -> UIPageViewController.NavigationDirection {
+        (indexIncreasing != rightToLeft) ? .forward : .reverse
+    }
+
+    final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
+        var parent: PageTurnPager
+        var currentIndex: Int
+        var resetToken: PagerResetToken
+        private var controllers: [Int: UIHostingController<Content>] = [:]
+
+        init(_ parent: PageTurnPager) {
+            self.parent = parent
+            self.currentIndex = parent.selection
+            self.resetToken = parent.resetToken
+        }
+
+        func discardCachedControllers() {
+            controllers.removeAll()
+        }
+
+        func controller(for index: Int) -> UIHostingController<Content> {
+            if let existing = controllers[index] { return existing }
+            let hosting = UIHostingController(rootView: parent.content(index))
+            hosting.view.backgroundColor = .clear
+            controllers[index] = hosting
+            pruneCache(around: index)
+            return hosting
+        }
+
+        /// Teniamo in cache solo gli spread vicini: su un fumetto lungo, conservarli tutti
+        /// significherebbe tenere in memoria ogni immagine già decodificata. Quello uscente
+        /// resta comunque vivo finché serve, perché il pager lo trattiene come figlio.
+        private func pruneCache(around index: Int) {
+            guard let position = parent.starts.firstIndex(of: index) else { return }
+            let keep = Set((position - 2...position + 2)
+                .filter { parent.starts.indices.contains($0) }
+                .map { parent.starts[$0] })
+            controllers = controllers.filter { keep.contains($0.key) }
+        }
+
+        private func index(of viewController: UIViewController) -> Int? {
+            controllers.first(where: { $0.value === viewController })?.key
+        }
+
+        private func neighbour(of viewController: UIViewController, offset: Int) -> UIViewController? {
+            guard let index = index(of: viewController),
+                  let position = parent.starts.firstIndex(of: index) else { return nil }
+            let target = position + offset
+            guard parent.starts.indices.contains(target) else { return nil }
+            return controller(for: parent.starts[target])
+        }
+
+        func pageViewController(_ pageViewController: UIPageViewController,
+                                viewControllerBefore viewController: UIViewController) -> UIViewController? {
+            // "Prima" è ciò che sta a sinistra: nei manga è la pagina con indice più alto.
+            neighbour(of: viewController, offset: parent.rightToLeft ? 1 : -1)
+        }
+
+        func pageViewController(_ pageViewController: UIPageViewController,
+                                viewControllerAfter viewController: UIViewController) -> UIViewController? {
+            neighbour(of: viewController, offset: parent.rightToLeft ? -1 : 1)
+        }
+
+        func pageViewController(_ pageViewController: UIPageViewController,
+                                didFinishAnimating finished: Bool,
+                                previousViewControllers: [UIViewController],
+                                transitionCompleted completed: Bool) {
+            guard completed,
+                  let visible = pageViewController.viewControllers?.first,
+                  let index = index(of: visible) else { return }
+            // Prima il coordinator, poi il binding: l'aggiornamento che ne segue non vede
+            // differenze e non rianima un cambio pagina che il dito ha già fatto.
+            currentIndex = index
+            parent.selection = index
+        }
+    }
+}
+
+/// `defersSystemGestures(on:)` esiste solo da iOS 16: sotto, nessun-op (l'unico effetto perso
+/// è la precedenza dello swipe-pagina sul gesto di sistema del Dock/App Switcher su iPad).
+private struct DefersBottomSystemGesturesIfAvailable: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 16.0, *) {
+            content.defersSystemGestures(on: .bottom)
+        } else {
+            content
+        }
+    }
+}
+
 private struct ActivityShareSheet: UIViewControllerRepresentable {
     let activityItems: [Any]
 
@@ -1232,20 +1567,86 @@ private final class WindowPanRelayView: UIView {
     }
 }
 
-/// `defersSystemGestures(on:)` esiste solo da iOS 16: sotto, nessun-op (l'unico effetto perso
-/// è la precedenza dello swipe-pagina sul gesto di sistema del Dock/App Switcher su iPad).
-private struct DefersBottomSystemGesturesIfAvailable: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 16.0, *) {
-            content.defersSystemGestures(on: .bottom)
-        } else {
-            content
-        }
-    }
-}
 #endif
 
 #if os(macOS)
+/// Su Mac non esiste lo swipe a dito: l'equivalente è lo scorrimento orizzontale a due dita sul
+/// trackpad (o la rotella orizzontale del mouse), che SwiftUI non espone — DragGesture su Mac
+/// segue il trascinamento col tasto premuto, non le due dita. Lo leggiamo quindi dagli eventi
+/// scrollWheel, con una soglia e un solo scatto per gesto per non saltare più pagine insieme.
+private struct ScrollSwipeMonitor: NSViewRepresentable {
+    /// +1 = pagina successiva, -1 = precedente (nel senso di lettura, come lo swipe su iOS).
+    let onSwipe: (Int) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = MonitoringView()
+        view.onSwipe = onSwipe
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? MonitoringView)?.onSwipe = onSwipe
+    }
+
+    final class MonitoringView: NSView {
+        var onSwipe: ((Int) -> Void)?
+        private var monitor: Any?
+        private var accumulated: CGFloat = 0
+        private var didFireForCurrentGesture = false
+
+        // Chiamato anche quando la vista *esce* da una finestra: senza le due guardie si
+        // accumulerebbe un monitor a ogni riapertura del lettore, e un solo swipe girerebbe
+        // altrettante pagine.
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil else {
+                removeMonitor()
+                return
+            }
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                self?.handle(event)
+                return event
+            }
+        }
+
+        private func handle(_ event: NSEvent) {
+            // Il monitor è di app, non di vista: senza questo filtro reagiremmo anche agli
+            // scorrimenti sopra le impostazioni o un'altra finestra.
+            guard let window = window, event.window === window,
+                  bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+            // L'inerzia dopo il rilascio delle dita è la coda dello stesso gesto: contarla
+            // farebbe girare una seconda pagina da sola.
+            guard event.momentumPhase == [] else { return }
+            if event.phase.contains(.began) {
+                accumulated = 0
+                didFireForCurrentGesture = false
+            }
+            if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+                accumulated = 0
+                didFireForCurrentGesture = false
+                return
+            }
+            guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return }
+            accumulated += event.scrollingDeltaX
+            guard !didFireForCurrentGesture, abs(accumulated) > 40 else { return }
+            didFireForCurrentGesture = true
+            onSwipe?(accumulated < 0 ? 1 : -1)
+        }
+
+        private func removeMonitor() {
+            if let monitor = monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        deinit {
+            removeMonitor()
+        }
+    }
+}
+
 private enum ReaderKey {
     case leftArrow
     case rightArrow
