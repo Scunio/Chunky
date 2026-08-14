@@ -1,8 +1,7 @@
 import Foundation
 
 /// Client WebDAV minimale: elenca una cartella con PROPFIND (Depth: 1) e scarica i file con
-/// una GET autenticata. Copre NAS, Nextcloud/ownCloud e qualunque server WebDAV generico —
-/// lo stesso protocollo usato per "Windows/Mac Shared Folder" nell'app originale.
+/// una GET autenticata. Copre NAS, Nextcloud/ownCloud e qualunque server WebDAV generico.
 final class WebDAVClient: RemoteBrowsing {
     func listEntries(at url: URL, account: RemoteAccountEntity) async throws -> [RemoteEntry] {
         var request = authenticatedRequest(for: url, account: account)

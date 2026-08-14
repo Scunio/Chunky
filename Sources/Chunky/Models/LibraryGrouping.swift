@@ -29,8 +29,8 @@ enum LibraryGrouping {
         }
     }
 
-    /// "TOPOLINO 3594-3687" come nell'originale quando i titoli finiscono con un numero
-    /// (es. testate periodiche): altrimenti solo il nome della serie.
+    /// "TOPOLINO 3594-3687" quando i titoli finiscono con un numero (es. testate periodiche):
+    /// altrimenti solo il nome della serie.
     static func headerText(title: String, comics: [ComicEntity]) -> String {
         guard title != ungroupedTitle else { return title.uppercased() }
         let numbers = comics.compactMap { issueNumber(fromTitle: $0.title ?? "") }

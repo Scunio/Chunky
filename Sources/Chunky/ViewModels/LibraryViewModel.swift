@@ -95,9 +95,9 @@ final class LibraryViewModel: ObservableObject {
     }
 
     /// Molti CBZ/CBR scansionati non hanno un ComicInfo.xml con la serie: senza un fallback,
-    /// finirebbero tutti ammassati in "Altri fumetti" invece che raggruppati per testata come
-    /// nell'originale. Se il titolo finisce con un numero (es. "Topolino 3595"), lo togliamo e
-    /// usiamo il resto come nome serie ("Topolino").
+    /// finirebbero tutti ammassati in "Altri fumetti" invece che raggruppati per testata. Se il
+    /// titolo finisce con un numero (es. "Topolino 3595"), lo togliamo e usiamo il resto come
+    /// nome serie ("Topolino").
     static func deriveSeriesName(fromFallbackTitle title: String) -> String? {
         guard let range = title.range(of: #"\s+#?\d+\s*$"#, options: .regularExpression) else { return nil }
         let series = String(title[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)

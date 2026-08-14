@@ -1,4 +1,15 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+
+extension UIScreen {
+    /// `UIScreen.main` è deprecato in un mondo multi-scena: la luminosità va letta/scritta
+    /// sullo schermo della scena attiva, non su un main screen implicito.
+    static var current: UIScreen? {
+        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.screen
+    }
+}
+#endif
 
 /// Confine tra le due piattaforme per le presentazioni: le viste di contenuto restano
 /// agnostiche, e chiedono qui "mostrami come si conviene" invece di ramificarsi da sole.
@@ -7,12 +18,11 @@ extension View {
     /// il pannello a piena altezza che ci si aspetta. Su iOS non serve: il sistema decide già
     /// bene la dimensione dei fogli.
     ///
-    /// 480pt di larghezza minima sembrava ragionevole per un form semplice (AddAccountView,
-    /// ComicInfoSheet), ma `ToolsPanelView` e `SettingsView` sono un `NavigationView` a due
-    /// colonne (sidebar + dettaglio) su Mac: a quella larghezza un'etichetta come "Colore
-    /// evidenziazione" veniva tagliata dal bordo della colonna di dettaglio. Allargato per
-    /// tutti i chiamanti — anche un form semplice più largo resta comunque leggibile, mentre
-    /// il testo tagliato non lo è.
+    /// `ToolsPanelView` e `SettingsView` sono un `NavigationView` a due colonne (sidebar +
+    /// dettaglio) su Mac: sotto questa larghezza un'etichetta come "Colore evidenziazione"
+    /// viene tagliata dal bordo della colonna di dettaglio, quindi la larghezza minima è
+    /// quella — anche per i form più semplici (AddAccountView, ComicInfoSheet), che restano
+    /// comunque leggibili più larghi.
     func sheetSized() -> some View {
         #if os(macOS)
         self.frame(minWidth: 640, idealWidth: 760, minHeight: 480, idealHeight: 680)
@@ -25,9 +35,7 @@ extension View {
 extension View {
     /// Sfondo della schermata di blocco genitori, condiviso da tutte le finestre in cui
     /// compare (libreria, reader, Preferenze su Mac). Deve restare OPACO: un materiale
-    /// traslucido lascerebbe intravedere il contenuto che dovrebbe nascondere. Centralizzato
-    /// qui perché prima era ripetuto identico in tre punti — facile aggiornarne due su tre e
-    /// lasciarne uno traslucido per sbaglio.
+    /// traslucido lascerebbe intravedere il contenuto che dovrebbe nascondere.
     func lockScreenBackground() -> some View {
         self.background(.background, ignoresSafeAreaEdges: .all)
     }

@@ -33,11 +33,11 @@ private struct ReaderContentView: View {
     var libraryComics: [ComicEntity] = []
     let onSwitchComic: (ComicEntity) -> Void
     @Environment(\.managedObjectContext) private var context
-    @Environment(\.presentationMode) private var presentationMode
+    @Environment(\.dismiss) private var dismiss
     #if os(macOS)
-    // Su Mac il reader vive nella propria finestra (WindowGroup(for: ComicID.self)), non più
-    // in uno .sheet: presentationMode.dismiss() lì non ha alcun effetto. dismissWindow() chiude
-    // la finestra che la contiene, che è il vero equivalente di "esci dalla lettura" qui.
+    // Su Mac il reader vive nella propria finestra (WindowGroup(for: ComicID.self)), non in uno
+    // .sheet: dismiss() lì non ha alcun effetto. dismissWindow() chiude la finestra che la
+    // contiene, che è il vero equivalente di "esci dalla lettura" qui.
     @Environment(\.dismissWindow) private var dismissWindow
     #endif
     /// Scelta esplicita singola/doppia pagina, valida solo quando non si è in modalità automatica.
@@ -113,7 +113,7 @@ private struct ReaderContentView: View {
     /// pagina ha senso solo con più spazio orizzontale che verticale. La size class da sola non
     /// basta su iPad, dove resta "regular" anche in verticale. Logica in `DoublePagePolicy`:
     /// su macOS non esiste una size class compatta, quindi la decisione dipende sempre e solo
-    /// dalle proporzioni misurate — prima era `true` a prescindere.
+    /// dalle proporzioni misurate.
     private var isDoublePageAllowed: Bool {
         #if os(iOS)
         DoublePagePolicy.isAllowed(viewportSize: viewportSize, isCompactWidth: horizontalSizeClass != .regular)
@@ -220,7 +220,8 @@ private struct ReaderContentView: View {
             #if os(iOS)
             if isTwoFingerBrightnessEnabled {
                 TwoFingerBrightnessView { delta in
-                    UIScreen.main.brightness = min(max(UIScreen.main.brightness + delta, 0), 1)
+                    guard let screen = UIScreen.current else { return }
+                    screen.brightness = min(max(screen.brightness + delta, 0), 1)
                 }
             }
             #endif
@@ -235,16 +236,32 @@ private struct ReaderContentView: View {
 
                 // Suggeriscono dove sono le zone di tap per cambiare pagina (altrimenti
                 // completamente invisibili): non intercettano tocchi, sono solo un indizio visivo.
-                if tapPageTurnStyle != .disabled && !isOneHandedModeEnabled {
-                    HStack {
-                        Image(systemName: "arrowtriangle.left")
-                        Spacer()
-                        Image(systemName: "arrowtriangle.right")
+                if tapPageTurnStyle != .disabled {
+                    if isOneHandedModeEnabled {
+                        // In modalità una mano i due lati fanno la stessa azione, quindi le
+                        // frecce puntano entrambe nella stessa direzione (quella dell'azione
+                        // condivisa) invece che una avanti e una indietro.
+                        let sharedSymbol = isOneHandedZonesReversed ? "arrowtriangle.left" : "arrowtriangle.right"
+                        HStack {
+                            Image(systemName: sharedSymbol)
+                            Spacer()
+                            Image(systemName: sharedSymbol)
+                        }
+                        .font(.title2)
+                        .foregroundColor(chromeForeground.opacity(0.35))
+                        .padding(.horizontal, 14)
+                        .allowsHitTesting(false)
+                    } else {
+                        HStack {
+                            Image(systemName: "arrowtriangle.left")
+                            Spacer()
+                            Image(systemName: "arrowtriangle.right")
+                        }
+                        .font(.title2)
+                        .foregroundColor(chromeForeground.opacity(0.35))
+                        .padding(.horizontal, 14)
+                        .allowsHitTesting(false)
                     }
-                    .font(.title2)
-                    .foregroundColor(chromeForeground.opacity(0.35))
-                    .padding(.horizontal, 14)
-                    .allowsHitTesting(false)
                 }
             }
 
@@ -256,9 +273,8 @@ private struct ReaderContentView: View {
                 pageJumpCard(provider: provider)
             }
 
-            // Sovrapposta direttamente alla pagina già visibile (non un'altra schermata/sheet),
-            // come nell'app originale: si vede ancora la pagina sotto, non un fumetto ricaricato
-            // a sé stante.
+            // Sovrapposta direttamente alla pagina già visibile (non un'altra schermata/sheet):
+            // si vede ancora la pagina sotto, non un fumetto ricaricato a sé stante.
             if isPanelSelectionPresented, let provider = provider {
                 PanelSelectionView(pageIndex: currentPage, provider: provider) { cropped in
                     isPanelSelectionPresented = false
@@ -343,7 +359,7 @@ private struct ReaderContentView: View {
         #if os(macOS)
         dismissWindow()
         #else
-        presentationMode.wrappedValue.dismiss()
+        dismiss()
         #endif
     }
 
@@ -556,7 +572,7 @@ private struct ReaderContentView: View {
         if tapPageTurnStyle != .disabled {
             PageTapZones(oneHanded: isOneHandedModeEnabled, oneHandedReversed: isOneHandedZonesReversed, hotCorners: isHotCornersEnabled, rightToLeft: comic.readingDirection == .rightToLeft) {
                 // Con "Tap-to-pan" anche la zona "indietro" avanza: comodo se non riesci a
-                // raggiungere comodamente entrambi i lati dello schermo (vedi tooltip originale).
+                // raggiungere comodamente entrambi i lati dello schermo.
                 step(isTapToPanEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
             } onNext: {
                 step(1, provider: provider, style: tapPageTurnStyle)
@@ -613,7 +629,6 @@ private struct ReaderContentView: View {
             guard swipePageTurnStyle != .disabled, !isZoomed else { return }
             step(direction, provider: provider, style: swipePageTurnStyle)
         })
-        // Sostituisce KeyEventMonitor: vedi il commento su `ReaderCommandActions` per il perché.
         // Pubblicata solo mentre questa vista è viva, quindi solo mentre una finestra reader è
         // davvero in scena — nessun filtro sul blocco genitori qui, perché con `lock.isLocked`
         // `ReaderWindowContainer` mostra `ParentalLockGateView` al posto di `ReaderView`,
@@ -745,17 +760,15 @@ private struct ReaderContentView: View {
                 }
                 .frame(minHeight: 44)
             }
-            // Ritaglio: apre la selezione riquadro, l'unico modo per condividere nell'originale
-            // (si seleziona sempre un'area, non c'è un tasto "condividi tutta la pagina" a parte).
-            // Icona a bolla con puntini come nell'originale (non l'icona standard "crop").
+            // Ritaglio: apre la selezione riquadro (si seleziona sempre un'area, non c'è un
+            // tasto "condividi tutta la pagina" a parte).
             Button(action: { isPanelSelectionPresented = true }) {
                 Image(systemName: "ellipsis.bubble").frame(width: 44, height: 44)
             }
             Spacer(minLength: 4)
-            // Info fumetto (con vai-a-pagina/preferiti/direzione lettura, che prima stavano in
-            // un Menu a tendina — mai presente nell'originale, e già noto essere inaffidabile
-            // con contenuti interattivi su questo target, vedi ToolsPanelView): tap prolungato
-            // sul titolo, per non aggiungere un'altra icona all'header.
+            // Info fumetto (vai-a-pagina/preferiti/direzione lettura): tap prolungato sul
+            // titolo, per non aggiungere un'altra icona all'header. I Menu a tendina con
+            // contenuti interattivi sono inaffidabili su questo target (vedi ToolsPanelView).
             Text(comic.title ?? "")
                 .font(.subheadline.bold())
                 .lineLimit(1)
@@ -790,8 +803,10 @@ private struct ReaderContentView: View {
     }
 
     /// Su iPhone (larghezza compatta) le 4 icone finali dell'header non ci stanno comode:
-    /// le raccogliamo in un menu "..." unico, come fa già nativamente la toolbar di Libreria
-    /// quando lo spazio non basta. Su iPad/Mac restano le singole icone, invariate.
+    /// le raccogliamo in un menu "..." unico. Il reader non vive in una NavigationStack (vedi
+    /// header/chromeBackground sopra), quindi qui non c'è una vera toolbar di sistema che
+    /// collassi da sola: il trigger è manuale, su horizontalSizeClass. Su iPad/Mac restano le
+    /// singole icone, invariate.
     @ViewBuilder
     private var headerTrailingActions: some View {
         #if os(iOS)
@@ -955,10 +970,11 @@ private struct ReaderContentView: View {
     private func pageSlider(provider: ComicPageProvider) -> some View {
         let maxValue = Double(max(provider.pageCount - 1, 0))
         let isRTL = comic.readingDirection == .rightToLeft
-        // Non usiamo più lo Slider di sistema: sovrapposto al TabView(.page), il suo
-        // pan gesture interno perde l'arbitraggio con quello di scroll della pagina (la
-        // pagina gira invece di trascinare il pallino). Un DragGesture con priorità alta
-        // vince sempre sul gesture di swipe sottostante.
+        // Non usiamo lo Slider di sistema: sovrapposto al TabView(.page), il suo pan gesture
+        // interno perde l'arbitraggio con quello di scroll della pagina (la pagina gira invece
+        // di trascinare il pallino — verificato dal vivo, il pallino resta fermo mentre il
+        // pager mostra gli indicatori di swipe). Un DragGesture con priorità alta vince sempre
+        // sul gesture di swipe sottostante.
         return GeometryReader { proxy in
             let width = max(proxy.size.width, 1)
             let progress = maxValue > 0 ? CGFloat(currentPage) / CGFloat(maxValue) : 0
@@ -1047,7 +1063,7 @@ private struct ReaderContentView: View {
 
         // Il download da iCloud può richiedere più di qualche secondo (file grandi, connessione
         // lenta): lo registriamo nella scheda Downloads con un progresso reale, invece di far
-        // fallire il lettore dopo un timeout fisso come accadeva prima.
+        // fallire il lettore dopo un timeout fisso.
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 if LibraryStorage.isPendingDownload(url) {
@@ -1131,8 +1147,7 @@ private struct PageTapZones: View {
     let onNext: () -> Void
     let onToggleControls: () -> Void
     /// Angoli attivi con "Hot corners": in alto a sinistra esce dalla lettura, in alto a
-    /// destra apre le impostazioni, in basso a destra alterna la doppia pagina — corrispondono
-    /// ai tre comportamenti documentati nei tooltip dell'app originale.
+    /// destra apre le impostazioni, in basso a destra alterna la doppia pagina.
     let onExit: () -> Void
     let onOpenSettings: () -> Void
     let onToggleDoublePage: () -> Void
@@ -1213,9 +1228,9 @@ private struct PageTapZones: View {
 private struct PageSpreadView: View {
     let provider: ComicPageProvider
     let leadingIndex: Int
-    /// Sostituisce il vecchio `isDoublePage: Bool`: con la copertina "da sola" attiva, non
-    /// tutti gli spread hanno la stessa larghezza (la copertina è 1 pagina, il resto 2), quindi
-    /// serve la paginazione intera per sapere se *questo* spread specifico ne mostra una o due.
+    /// Con la copertina "da sola" attiva, non tutti gli spread hanno la stessa larghezza (la
+    /// copertina è 1 pagina, il resto 2), quindi serve la paginazione intera per sapere se
+    /// *questo* spread specifico ne mostra una o due.
     let pagination: ReaderPagination
     let isZoomed: Binding<Bool>
     /// Solo macOS: quando presente, le `PageView` la consultano invece di ridecodificare da
@@ -1282,8 +1297,7 @@ private struct PageView: View {
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
     /// Sfoca leggermente l'immagine in proporzione alla velocità del trascinamento mentre si fa
-    /// pan su una pagina ingrandita ("Motion-blur": "Make panning a feel little smoother" nel
-    /// tooltip originale) — non un filtro estetico permanente, sparisce a fine gesto.
+    /// pan su una pagina ingrandita — non un filtro estetico permanente, sparisce a fine gesto.
     @State private var motionBlurRadius: CGFloat = 0
 
     /// "Automatico"/"Adatta pagina" mostrano l'intera pagina (comportamento storico, invariato).
@@ -1339,8 +1353,8 @@ private struct PageView: View {
     /// Percorso per una pagina che tocca l'altra metà dello spread: altezza fissa, larghezza
     /// derivata dalle proporzioni dell'immagine (nessun `GeometryReader` a imporre una metà
     /// fissa, che è la causa dello spazio nero tra le pagine). Non copre "Adatta larghezza",
-    /// che resta sullo scroll verticale per-pagina di prima: le due nozioni non si combinano
-    /// bene (l'una deriva l'altezza dalla larghezza, l'altra il contrario).
+    /// che resta sullo scroll verticale per-pagina: le due nozioni non si combinano bene
+    /// (l'una deriva l'altezza dalla larghezza, l'altra il contrario).
     @ViewBuilder
     private func pairedContent(height: CGFloat) -> some View {
         // Stima 2:3 finché non si conoscono le proporzioni reali: evita che il placeholder
@@ -1630,9 +1644,8 @@ private struct ActivityShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-/// Intercetta un pan a due dita per regolare la luminosità dello schermo, come
-/// "Two-finger-swipe brightness" nell'app originale — senza rubare tocchi alle viste
-/// sottostanti (swipe pagina, tap zone, pinch-to-zoom).
+/// Intercetta un pan a due dita per regolare la luminosità dello schermo, senza rubare tocchi
+/// alle viste sottostanti (swipe pagina, tap zone, pinch-to-zoom).
 private struct TwoFingerBrightnessView: UIViewRepresentable {
     /// Delta verticale normalizzato (-1...1) da sommare alla luminosità corrente.
     let onChange: (CGFloat) -> Void
@@ -1672,7 +1685,7 @@ private struct TwoFingerBrightnessView: UIViewRepresentable {
 }
 
 /// Non intercetta mai l'hit-testing: un `hitTest` che a volte restituisce sé stesso e a volte
-/// nil (come faceva prima in base al numero di dita già premute) non funziona, perché un tocco
+/// nil in base al numero di dita già premute non funziona, perché un tocco
 /// viene assegnato in modo definitivo alla vista risultante dall'hit-test al suo `touchesBegan`
 /// — se il primo dito è già stato instradato al pager sottostante, "rubare" il secondo dito qui
 /// lo isola dal primo e nessun recognizer arriva mai a vedere entrambi i tocchi insieme (né

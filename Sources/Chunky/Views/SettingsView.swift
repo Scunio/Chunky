@@ -67,7 +67,7 @@ enum ReaderIdleResetOption: Int, CaseIterable, Identifiable {
     }
 }
 
-/// Icona "ⓘ" con spiegazione a comparsa, come nelle Impostazioni dell'app originale.
+/// Icona "ⓘ" con spiegazione a comparsa.
 struct InfoButton: View {
     let text: String
     @State private var isPresented = false
@@ -124,7 +124,7 @@ struct SettingsView: View {
     @AppStorage("doublePageZoomMode") private var doublePageZoomMode = PageZoomMode.auto
     @AppStorage("readerIdleResetSeconds") private var readerIdleReset = ReaderIdleResetOption.never
     @AppStorage("crashReportingEnabled") private var isCrashReportingEnabled = true
-    @AppStorage("includeInBackup") private var isIncludedInBackup = true
+    @AppStorage("includeInBackup") private var isIncludedInBackup = false
 
     private var defaultReadingDirection: Binding<ReadingDirection> {
         Binding(

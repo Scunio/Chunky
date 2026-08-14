@@ -22,14 +22,47 @@ enum LibraryStorage {
         }
         let root: URL
         if let ubiquityURL = FileManager.default.url(forUbiquityContainerIdentifier: ubiquityContainerID) {
-            root = ubiquityURL.appendingPathComponent("Documents").appendingPathComponent(comicsFolderName)
+            // La cartella root deve essere "Documents" (non un livello sotto, es.
+            // "Documents/Comics"): il messaggio mostrato all'utente in ICloudSyncFolderView dice
+            // di mettere i fumetti direttamente "dentro Chunky", quindi il comportamento reale
+            // deve allinearsi a quel messaggio.
+            root = ubiquityURL.appendingPathComponent("Documents")
         } else {
-            let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            root = documents.appendingPathComponent(comicsFolderName)
+            root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         }
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        migrateLegacyComicsSubfolderIfNeeded(newRoot: root)
         cachedRootURL = root
         return root
+    }
+
+    /// Sposta alla radice i fumetti lasciati da un layout di cartelle precedente nella
+    /// sottocartella "Comics" (vedi il commento in `rootFolderURL()`): senza questo passaggio, chi aveva già
+    /// una libreria se la ritroverebbe "sparita" al primo avvio dopo l'update, pur restando i
+    /// file fisicamente presenti su iCloud/disco. In caso di collisione di nome (es. un file che
+    /// l'utente aveva già messo per sbaglio alla radice) rinomina l'arrivo, con lo stesso schema
+    /// usato da `importFile`.
+    private static func migrateLegacyComicsSubfolderIfNeeded(newRoot: URL) {
+        let legacyRoot = newRoot.appendingPathComponent(comicsFolderName)
+        guard FileManager.default.fileExists(atPath: legacyRoot.path) else { return }
+
+        let items = (try? FileManager.default.contentsOfDirectory(at: legacyRoot, includingPropertiesForKeys: nil)) ?? []
+        for item in items {
+            var destinationName = item.lastPathComponent
+            var destinationURL = newRoot.appendingPathComponent(destinationName)
+
+            var suffix = 1
+            let baseName = (destinationName as NSString).deletingPathExtension
+            let ext = (destinationName as NSString).pathExtension
+            while FileManager.default.fileExists(atPath: destinationURL.path) {
+                destinationName = "\(baseName) \(suffix).\(ext)"
+                destinationURL = newRoot.appendingPathComponent(destinationName)
+                suffix += 1
+            }
+
+            try? FileManager.default.moveItem(at: item, to: destinationURL)
+        }
+        try? FileManager.default.removeItem(at: legacyRoot)
     }
 
     static func fileURL(forRelativePath relativePath: String) -> URL {

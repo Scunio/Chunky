@@ -3,7 +3,7 @@ import Network
 
 /// Mini server HTTP locale: mostra una pagina con un form di upload, così si possono trascinare
 /// fumetti da un browser su un computer della stessa rete direttamente nella libreria — senza
-/// account cloud, senza cavi. Equivalente al "web-server" dell'app originale.
+/// account cloud, senza cavi.
 final class LocalUploadServer: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var lastError: String?

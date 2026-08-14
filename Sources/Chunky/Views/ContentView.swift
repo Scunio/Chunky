@@ -8,20 +8,73 @@ struct ContentView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     #endif
 
+    @EnvironmentObject private var viewModel: LibraryViewModel
+    @Environment(\.managedObjectContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var tracker = ICloudDownloadTracker.shared
+    @AppStorage("icloudSyncFolderEnabled") private var isSyncFolderEnabled = false
+
+    /// Coalesce gli aggiornamenti di `tracker.allRelativePaths`: durante la raccolta iniziale di
+    /// una libreria iCloud non banale, `NSMetadataQuery` pubblica molti aggiornamenti
+    /// incrementali in rapida sequenza — senza attendere che si stabilizzino, ognuno
+    /// rilancerebbe una scansione completa della libreria.
+    @State private var debounceTask: Task<Void, Never>?
+    /// Rete di sicurezza oltre agli aggiornamenti live di `NSMetadataQuery`: nella pratica la
+    /// query non sempre notifica un cambiamento avvenuto mentre l'app era in background, quindi
+    /// un rescan periodico a bassa frequenza copre quel caso senza dipendere dal solo evento.
+    @State private var periodicRescanTask: Task<Void, Never>?
+
     var body: some View {
         rootNavigation
             // Avviata una sola volta per tutta la durata dell'app (la query è inerte se iCloud non
             // è attivo): fermarla e riavviarla entrando/uscendo dal lettore costringerebbe a una
             // nuova fase di raccolta ogni volta.
-            .onAppear { ICloudDownloadTracker.shared.start() }
+            .onAppear {
+                ICloudDownloadTracker.shared.start()
+                syncSyncFolderIfNeeded()
+                startPeriodicRescan()
+            }
+            .onDisappear {
+                debounceTask?.cancel()
+                periodicRescanTask?.cancel()
+            }
+            // ContentView è radice sempre viva per tutta la sessione: l'aggiornamento di
+            // `allRelativePaths` innesca qui il rescan indipendentemente da cosa sta guardando
+            // l'utente, invece di dipendere dall'apertura di una schermata specifica.
+            .onChange(of: tracker.allRelativePaths) { _, _ in scheduleDebouncedSync() }
+            .onChange(of: isSyncFolderEnabled) { _, newValue in if newValue { syncSyncFolderIfNeeded() } }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { syncSyncFolderIfNeeded() } }
+    }
+
+    private func scheduleDebouncedSync() {
+        debounceTask?.cancel()
+        debounceTask = Task {
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            guard !Task.isCancelled else { return }
+            syncSyncFolderIfNeeded()
+        }
+    }
+
+    private func syncSyncFolderIfNeeded() {
+        guard isSyncFolderEnabled, LibraryStorage.isICloudAvailable else { return }
+        viewModel.rebuildLibrary(context: context)
+    }
+
+    private func startPeriodicRescan() {
+        periodicRescanTask?.cancel()
+        periodicRescanTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 180_000_000_000) // 3 minuti
+                guard !Task.isCancelled else { return }
+                syncSyncFolderIfNeeded()
+            }
+        }
     }
 
     @ViewBuilder
     private var rootNavigation: some View {
         #if os(macOS)
         // Su Mac la libreria sta nella finestra principale e la sidebar elenca le serie.
-        // Il vecchio `NavigationView` senza stile degenerava nel comportamento a due colonne
-        // e ci finiva dentro l'intera griglia, larga quanto una sidebar.
         NavigationSplitView(columnVisibility: $columnVisibility) {
             LibrarySidebarView(selection: $selection)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
@@ -31,10 +84,9 @@ struct ContentView: View {
         }
         .navigationSplitViewStyle(.balanced)
         #else
-        NavigationView {
+        NavigationStack {
             LibraryView()
         }
-        .navigationViewStyle(StackNavigationViewStyle())
         #endif
     }
 }

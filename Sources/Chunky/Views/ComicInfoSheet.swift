@@ -1,16 +1,16 @@
 import SwiftUI
 
 /// Scheda informativa del fumetto, raggiungibile dall'icona "info" del reader. Ospita anche
-/// le azioni che prima stavano in un Menu a tendina nell'header: su questo target i Menu con
-/// contenuti interattivi si sono già dimostrati inaffidabili (vedi commento in ToolsPanelView),
-/// quindi qui usiamo una vera List, coerente col resto dell'app.
+/// azioni (vai a pagina, preferiti, direzione lettura): su questo target i Menu con contenuti
+/// interattivi si sono dimostrati inaffidabili (vedi ToolsPanelView), quindi qui usiamo una
+/// vera List.
 struct ComicInfoSheet: View {
     @ObservedObject var comic: ComicEntity
     let loadedPageCount: Int?
     var onJumpToPage: (() -> Void)?
     var onToggleFavorite: (() -> Void)?
     var onToggleReadingDirection: (() -> Void)?
-    @Environment(\.presentationMode) private var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -20,7 +20,7 @@ struct ComicInfoSheet: View {
     }()
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
                 Section {
                     row("Titolo", comic.title ?? "")
@@ -45,7 +45,7 @@ struct ComicInfoSheet: View {
                     Section {
                         if let onJumpToPage {
                             Button(action: {
-                                presentationMode.wrappedValue.dismiss()
+                                dismiss()
                                 onJumpToPage()
                             }) {
                                 Label("Vai a pagina...", systemImage: "number")
@@ -77,7 +77,7 @@ struct ComicInfoSheet: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Chiudi") { presentationMode.wrappedValue.dismiss() }
+                    Button("Chiudi") { dismiss() }
                 }
             }
         }

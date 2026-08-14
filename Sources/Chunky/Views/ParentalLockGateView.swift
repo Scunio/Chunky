@@ -4,6 +4,7 @@ struct ParentalLockGateView: View {
     @ObservedObject private var lock = ParentalLock.shared
     @State private var enteredPasscode = ""
     @State private var showError = false
+    @FocusState private var isPasscodeFocused: Bool
 
     var body: some View {
         VStack(spacing: 20) {
@@ -13,9 +14,11 @@ struct ParentalLockGateView: View {
             Text("Chunky è bloccata")
                 .font(.title3.bold())
 
-            SecureField("Codice", text: $enteredPasscode, onCommit: attemptUnlock)
+            SecureField("Codice", text: $enteredPasscode)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .frame(maxWidth: 220)
+                .focused($isPasscodeFocused)
+                .onSubmit(attemptUnlock)
                 #if os(iOS)
                 .keyboardType(.numberPad)
                 #endif
@@ -37,7 +40,10 @@ struct ParentalLockGateView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear(perform: attemptBiometrics)
+        .onAppear {
+            isPasscodeFocused = true
+            attemptBiometrics()
+        }
     }
 
     private func attemptUnlock() {

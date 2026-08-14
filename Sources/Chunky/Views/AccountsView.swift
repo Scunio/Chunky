@@ -4,8 +4,8 @@ import UniformTypeIdentifiers
 
 /// Servizio elencato in "Add account": qui il tocco apre il picker file di sistema, dove
 /// Dropbox/Google Drive/OneDrive compaiono automaticamente se le rispettive app sono installate
-/// — non essendoci integrazione OAuth diretta in questa ricostruzione, e nessun sistema di
-/// acquisto in-app che richieda di distinguere servizi "PRO" da quelli gratuiti.
+/// — non essendoci integrazione OAuth diretta, e nessun sistema di acquisto in-app che richieda
+/// di distinguere servizi "PRO" da quelli gratuiti.
 private struct OpenRemoteService {
     let name: String
     let systemImage: String
@@ -32,8 +32,8 @@ struct AccountsView: View {
     @State private var addAccountKind: RemoteAccountKind = .opds
     @State private var activeImporter: ActiveImporter?
     @State private var folderConversionError: String?
-    /// Come nell'originale: "+" non apre un altro schermo, rivela la sezione "Add account" in
-    /// coda alla stessa lista e diventa "Done" per richiuderla — non è un secondo passo separato.
+    /// "+" non apre un altro schermo: rivela la sezione "Add account" in coda alla stessa lista
+    /// e diventa "Done" per richiuderla.
     @State private var isAddingAccount = false
 
     private static let openServices: [OpenRemoteService] = [
@@ -131,12 +131,9 @@ struct AccountsView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            // Prima era dentro `#if os(iOS)`: su Mac non c'era alcun modo di rivelare la
-            // sezione "Add account", quindi gli account remoti erano impossibili da creare.
             // Placement diverso per piattaforma: su iOS `.primaryAction` cade sullo stesso
             // lato (trailing) del "Chiudi" di `toolbarDoneButton()` quando questa vista è
-            // presentata come sheet — i due finiscono ammassati insieme. `.navigationBarLeading`
-            // replica il posto che questo pulsante aveva sempre avuto su iOS.
+            // presentata come sheet — i due finiscono ammassati insieme.
             #if os(iOS)
             ToolbarItem(placement: .navigationBarLeading) {
                 addAccountToggleButton

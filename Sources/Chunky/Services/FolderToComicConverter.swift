@@ -14,7 +14,7 @@ enum FolderToComicError: LocalizedError {
 }
 
 /// Trasforma una cartella di immagini in un CBZ, così una serie di scan sciolti (jpg/png) può
-/// entrare in libreria come un fumetto vero e proprio — la stessa funzione dell'app originale.
+/// entrare in libreria come un fumetto vero e proprio.
 enum FolderToComicConverter {
     private static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif"]
 

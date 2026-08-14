@@ -23,21 +23,15 @@ struct RemoteBrowserView: View {
                 ProgressView("Caricamento…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let errorMessage = errorMessage {
-                VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundColor(.orange)
+                ContentUnavailableView {
+                    Label("Impossibile caricare", systemImage: "exclamationmark.triangle")
+                } description: {
                     Text(errorMessage)
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(.secondary)
+                } actions: {
                     Button("Riprova", action: load)
                 }
-                .padding()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if entries.isEmpty {
-                Text("Nessun contenuto qui.")
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ContentUnavailableView("Nessun contenuto qui.", systemImage: "folder")
             } else {
                 List(entries) { entry in
                     row(for: entry)

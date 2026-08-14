@@ -233,7 +233,7 @@ private struct ParentalLockSettingsTab: View {
 }
 
 private struct AdvancedSettingsTab: View {
-    @AppStorage("includeInBackup") private var isIncludedInBackup = true
+    @AppStorage("includeInBackup") private var isIncludedInBackup = false
 
     var body: some View {
         Form {

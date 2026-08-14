@@ -2,9 +2,7 @@ import SwiftUI
 
 /// Schermata "Downloads" raggiunta dalla riga omonima del pannello Accounts: elenca i fumetti
 /// in scaricamento da un account remoto (WebDAV/OPDS), con avanzamento per ciascuno e "Stop all"
-/// per annullarli tutti. Il contenuto di ogni riga (titolo + barra di avanzamento) non è
-/// confermato da uno screenshot dell'originale con un download attivo: da rivedere se non
-/// corrisponde.
+/// per annullarli tutti.
 struct DownloadsView: View {
     @ObservedObject private var downloadManager = DownloadManager.shared
 
@@ -12,6 +10,11 @@ struct DownloadsView: View {
         VStack(spacing: 0) {
             List(downloadManager.activeDownloads) { item in
                 DownloadRow(item: item)
+                    .swipeActions {
+                        Button(role: .destructive, action: item.cancel) {
+                            Label("Annulla", systemImage: "xmark")
+                        }
+                    }
             }
             .listStyle(.plain)
 

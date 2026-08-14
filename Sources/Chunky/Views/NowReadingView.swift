@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Popover con l'anteprima rapida dell'ultimo fumetto aperto: titolo centrato in alto,
-/// copertina con badge di pagina sovrapposto in basso (non testo a lato, come nell'originale),
-/// tocco sulla copertina per riprendere subito la lettura.
+/// copertina con badge di pagina sovrapposto in basso, tocco sulla copertina per riprendere
+/// subito la lettura.
 struct NowReadingView: View {
     @ObservedObject var comic: ComicEntity
     let onResume: () -> Void
