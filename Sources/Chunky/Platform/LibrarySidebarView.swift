@@ -49,7 +49,7 @@ struct LibrarySidebarView: View {
         // cancellato), la sidebar lo toglie da sé dall'elenco ma la selezione ci restava
         // comunque puntata: la griglia mostrava "nessun risultato" per una ricerca vuota,
         // senza modo di capire perché. Si torna a "Tutti i fumetti".
-        .onChange(of: sections.map(\.title)) { titles in
+        .onChange(of: sections.map(\.title)) { _, titles in
             if case .group(let title) = selection, !titles.contains(title) {
                 selection = .all
             }

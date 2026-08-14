@@ -21,7 +21,7 @@ struct ToolsPanelView: View {
                         Image(systemName: "sun.min")
                             .foregroundColor(.secondary)
                         Slider(value: $brightness, in: 0...1)
-                            .onChange(of: brightness) { UIScreen.main.brightness = CGFloat($0) }
+                            .onChange(of: brightness) { UIScreen.main.brightness = CGFloat(brightness) }
                         Image(systemName: "sun.max.fill")
                             .foregroundColor(.secondary)
                     }

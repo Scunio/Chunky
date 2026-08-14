@@ -44,7 +44,7 @@ struct ChunkyApp: App {
         .windowResizability(.contentMinSize)
         .commands { ChunkyCommands() }
         #endif
-        .onChange(of: scenePhase) { phase in
+        .onChange(of: scenePhase) { _, phase in
             guard phase == .background else { return }
             let triggerRawValue = UserDefaults.standard.string(forKey: "parentalLockAutoLockTrigger") ?? ""
             let trigger = ParentalAutoLockTrigger(rawValue: triggerRawValue) ?? .doNothing
@@ -72,13 +72,18 @@ struct ChunkyApp: App {
         .windowResizability(.contentMinSize)
 
         // ⌘, apre le Preferenze come finestra separata invece che dentro il foglio Tools —
-        // dove restano raggiungibili anche su iOS.
-        Settings {
-            // Le Preferenze non devono restare accessibili da sotto il blocco genitori:
-            // ⌘, apre comunque la finestra, ma mostra il lucchetto finché non si sblocca.
+        // dove restano raggiungibili anche su iOS. Una `Window` invece di `Settings`: quella
+        // scena, con un pannello a sidebar come contenuto, si è rivelata dal vivo bloccata a
+        // una dimensione fissa nonostante `.windowResizability` (né zoom né trascinamento del
+        // bordo avevano effetto) e non offre `.defaultSize` per partire più alta — `Window` fa
+        // entrambe le cose. `CommandGroup(replacing: .appSettings)` in ChunkyCommands tiene
+        // ⌘, e la voce di menu "Impostazioni…" dove un utente Mac se le aspetta.
+        Window("Impostazioni", id: "settings") {
+            // Le Preferenze non devono restare accessibili da sotto il blocco genitori: la
+            // finestra si apre comunque, ma mostra il lucchetto finché non si sblocca.
             //
-            // Serve lo stesso `.environment` del WindowGroup principale: `DiagnosticsView` e
-            // `ICloudStatusView`, raggiungibili da qui, leggono `LibraryViewModel` e il
+            // Serve lo stesso `.environment` del WindowGroup principale: le sezioni Diagnostica
+            // e Stato iCloud, raggiungibili da qui, leggono `LibraryViewModel` e il
             // `managedObjectContext` — senza questi la prima crasha e la seconda mostra
             // sempre zero fumetti.
             Group {
@@ -86,15 +91,17 @@ struct ChunkyApp: App {
                     ParentalLockGateView()
                         .lockScreenBackground()
                 } else {
-                    NavigationStack {
-                        SettingsView()
-                    }
+                    // Sidebar di categorie + pannello di dettaglio, come System Settings.app,
+                    // invece dell'unica Form lunga e navigabile di SettingsView (quel pattern
+                    // resta corretto per iOS, dove SettingsView è ancora usata).
+                    MacSettingsView()
                 }
             }
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             .environmentObject(libraryViewModel)
-            .sheetSized()
         }
+        .defaultSize(width: 760, height: 640)
+        .windowResizability(.contentMinSize)
         #endif
     }
 }

@@ -91,6 +91,9 @@ struct ColorThemeView: View {
                 Button("Ripristina automatico", action: theme.reset)
             }
         }
+        #if os(macOS)
+        .formStyle(.grouped)
+        #endif
         .navigationTitle("Colori")
     }
 

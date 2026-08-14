@@ -84,10 +84,10 @@ struct ICloudSyncFolderView: View {
             ICloudDownloadTracker.shared.start()
             syncIfNeeded()
         }
-        .onChange(of: isEnabled) { newValue in
+        .onChange(of: isEnabled) { _, newValue in
             if newValue { syncIfNeeded() }
         }
-        .onChange(of: tracker.allRelativePaths) { _ in scheduleDebouncedSync() }
+        .onChange(of: tracker.allRelativePaths) { scheduleDebouncedSync() }
         .onDisappear { debounceTask?.cancel() }
     }
 

@@ -187,7 +187,7 @@ private struct ReaderContentView: View {
             GeometryReader { proxy in
                 Color.clear
                     .onAppear { viewportSize = proxy.size }
-                    .onChange(of: proxy.size) { viewportSize = $0 }
+                    .onChange(of: proxy.size) { viewportSize = proxy.size }
             }
             .ignoresSafeArea()
             .allowsHitTesting(false)
@@ -283,22 +283,22 @@ private struct ReaderContentView: View {
             resetIdleTimerIfNeeded()
         }
         .onDisappear { idleResetWorkItem?.cancel() }
-        .onChange(of: currentPage) { newValue in
+        .onChange(of: currentPage) { _, newValue in
             guard let provider = provider else { return }
             comic.lastReadPage = Int32(min(max(newValue, 0), provider.pageCount - 1))
             comic.dateLastOpened = Date()
             try? context.save()
         }
-        .onChange(of: isDoublePageEnabled) { _ in realignCurrentPageToSpreadStart() }
-        .onChange(of: isDoublePageAutoMode) { _ in realignCurrentPageToSpreadStart() }
-        .onChange(of: viewportSize) { _ in realignCurrentPageToSpreadStart() }
+        .onChange(of: isDoublePageEnabled) { realignCurrentPageToSpreadStart() }
+        .onChange(of: isDoublePageAutoMode) { realignCurrentPageToSpreadStart() }
+        .onChange(of: viewportSize) { realignCurrentPageToSpreadStart() }
         #if os(macOS)
         // Le voci in cache sono state elaborate con le opzioni precedenti: senza svuotarla,
         // una pagina già vista mostrerebbe il ritaglio/tint vecchio finché non esce dalla
         // finestra di prefetch.
-        .onChange(of: isAutoCropEnabled) { _ in purgePageCache() }
-        .onChange(of: isUpscalingEnabled) { _ in purgePageCache() }
-        .onChange(of: isAutoTintContrastEnabled) { _ in purgePageCache() }
+        .onChange(of: isAutoCropEnabled) { purgePageCache() }
+        .onChange(of: isUpscalingEnabled) { purgePageCache() }
+        .onChange(of: isAutoTintContrastEnabled) { purgePageCache() }
         #endif
         #if os(iOS)
         .sheet(isPresented: $isSharePresented) {

@@ -15,6 +15,18 @@ enum ParentalAutoLockTrigger: String, CaseIterable, Identifiable {
 }
 
 struct ParentalLockSettingsView: View {
+    var body: some View {
+        Form {
+            ParentalLockSections()
+        }
+        .navigationTitle("Blocco genitori")
+    }
+}
+
+/// Contenuto del blocco genitori senza `Form` propria, per poterlo incorporare in una `Form`
+/// più ampia (es. la tab "Blocco genitori" delle Preferenze Mac) oltre che mostrarlo da solo
+/// dietro `NavigationLink` su iOS (`ParentalLockSettingsView` sopra).
+struct ParentalLockSections: View {
     @ObservedObject private var lock = ParentalLock.shared
     @AppStorage("parentalLockAutoLockTrigger") private var autoLockTriggerRawValue = ParentalAutoLockTrigger.doNothing.rawValue
     @State private var newPasscode = ""
@@ -29,7 +41,7 @@ struct ParentalLockSettingsView: View {
     }
 
     var body: some View {
-        Form {
+        Group {
             if lock.hasPasscode {
                 Section(footer: Text("Il blocco genitori impedisce di aprire Chunky senza inserire il codice, o Face ID/Touch ID se abilitato. Non protegge da un utente sufficientemente determinato: serve a scoraggiare gli accessi accidentali.")) {
                     Toggle("Blocco attivo", isOn: Binding(
@@ -72,7 +84,6 @@ struct ParentalLockSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Blocco genitori")
     }
 
     private func savePasscode() {
