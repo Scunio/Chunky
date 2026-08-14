@@ -339,7 +339,7 @@ private struct ReaderContentView: View {
             ToolsPanelView()
         }
         .sheet(isPresented: $isAccountsPresented) {
-            NavigationView { AccountsView().toolbarDoneButton { isAccountsPresented = false } }
+            NavigationStack { AccountsView().toolbarDoneButton { isAccountsPresented = false } }
                 .sheetSized()
         }
     }

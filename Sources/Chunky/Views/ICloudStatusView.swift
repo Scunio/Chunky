@@ -7,6 +7,9 @@ struct ICloudStatusView: View {
         Form {
             ICloudStatusSections()
         }
+        #if os(macOS)
+        .formStyle(.grouped)
+        #endif
         .navigationTitle("Stato iCloud")
     }
 }
