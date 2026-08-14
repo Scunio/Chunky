@@ -292,6 +292,10 @@ struct SettingsView: View {
             }
         }
         #if os(macOS)
+        // Senza uno stile esplicito, una Form spinta in una NavigationStack (non root) su
+        // macOS cade su una lista piatta senza sfondi raggruppati — verificato dal vivo,
+        // aspetto completamente diverso dalla stessa Form mostrata come radice.
+        .formStyle(.grouped)
         // Un `maxHeight` qui taglierebbe il contenuto in eccesso senza scroll (verificato: è
         // esattamente quello che succedeva). Solo un limite di larghezza, e la finestra —
         // resa ridimensionabile in ChunkyApp.swift — può aprirsi più bassa e lasciare che la

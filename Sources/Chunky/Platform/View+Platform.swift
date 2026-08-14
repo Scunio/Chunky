@@ -18,11 +18,9 @@ extension View {
     /// il pannello a piena altezza che ci si aspetta. Su iOS non serve: il sistema decide già
     /// bene la dimensione dei fogli.
     ///
-    /// `ToolsPanelView` e `SettingsView` sono un `NavigationView` a due colonne (sidebar +
-    /// dettaglio) su Mac: sotto questa larghezza un'etichetta come "Colore evidenziazione"
-    /// viene tagliata dal bordo della colonna di dettaglio, quindi la larghezza minima è
-    /// quella — anche per i form più semplici (AddAccountView, ComicInfoSheet), che restano
-    /// comunque leggibili più larghi.
+    /// La larghezza minima è quella che serve a `ToolsPanelView`/`SettingsView` perché
+    /// un'etichetta come "Colore evidenziazione" non venga tagliata — anche per i form più
+    /// semplici (AddAccountView, ComicInfoSheet), che restano comunque leggibili più larghi.
     func sheetSized() -> some View {
         #if os(macOS)
         self.frame(minWidth: 640, idealWidth: 760, minHeight: 480, idealHeight: 680)

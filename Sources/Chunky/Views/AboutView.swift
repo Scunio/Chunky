@@ -22,6 +22,9 @@ struct AboutView: View {
                 NavigationLink("Licenze open source", destination: AcknowledgementsView())
             }
         }
+        #if os(macOS)
+        .formStyle(.grouped)
+        #endif
         .navigationTitle("Informazioni")
     }
 

@@ -19,6 +19,9 @@ struct ParentalLockSettingsView: View {
         Form {
             ParentalLockSections()
         }
+        #if os(macOS)
+        .formStyle(.grouped)
+        #endif
         .navigationTitle("Blocco genitori")
     }
 }

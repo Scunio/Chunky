@@ -13,7 +13,7 @@ struct ToolsPanelView: View {
     @State private var brightness: Double = ToolsPanelView.currentBrightness()
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
                 #if os(iOS)
                 Section {

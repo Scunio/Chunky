@@ -130,7 +130,7 @@ struct LibraryView: View {
                 ToolsPanelView()
             }
             .sheet(isPresented: $isAccountsPresented) {
-                NavigationView { AccountsView().toolbarDoneButton { isAccountsPresented = false } }
+                NavigationStack { AccountsView().toolbarDoneButton { isAccountsPresented = false } }
                     .sheetSized()
             }
             #if os(macOS)

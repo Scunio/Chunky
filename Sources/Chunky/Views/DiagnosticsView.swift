@@ -6,6 +6,9 @@ struct DiagnosticsView: View {
         Form {
             DiagnosticsSections()
         }
+        #if os(macOS)
+        .formStyle(.grouped)
+        #endif
         .navigationTitle("Diagnostica")
     }
 }
