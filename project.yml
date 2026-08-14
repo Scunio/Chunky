@@ -88,6 +88,9 @@ targets:
       path: Support/Info-iOS.plist
       properties:
         CFBundleDisplayName: Chunky
+        # Niente crittografia oltre a quella di sistema (Keychain, TLS): evita che App Store
+        # Connect chieda le informazioni di conformità all'esportazione a ogni upload.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -149,6 +152,9 @@ targets:
       path: Support/Info-macOS.plist
       properties:
         CFBundleDisplayName: Chunky
+        # Niente crittografia oltre a quella di sistema (Keychain, TLS): evita che App Store
+        # Connect chieda le informazioni di conformità all'esportazione a ogni upload.
+        ITSAppUsesNonExemptEncryption: false
         LSApplicationCategoryType: public.app-category.entertainment
         NSHumanReadableCopyright: "MIT License"
         NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
