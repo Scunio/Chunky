@@ -45,17 +45,7 @@ struct NewComicsView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Image(systemName: "envelope")
-                .font(.system(size: 32))
-                .foregroundColor(.secondary)
-            Text("Nessun fumetto nuovo")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
+        ContentUnavailableView("Nessun fumetto nuovo", systemImage: "envelope")
     }
 
     @ViewBuilder

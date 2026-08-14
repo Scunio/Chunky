@@ -9,7 +9,7 @@ struct ChunkyApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        let includeInBackup = UserDefaults.standard.object(forKey: "includeInBackup") as? Bool ?? true
+        let includeInBackup = UserDefaults.standard.object(forKey: "includeInBackup") as? Bool ?? false
         LibraryStorage.setExcludedFromBackup(!includeInBackup)
         CrashReportManager.configure()
     }
@@ -36,10 +36,8 @@ struct ChunkyApp: App {
             }
         }
         #if os(macOS)
-        // La finestra ereditava una geometria salvata per la vecchia griglia piatta
-        // (900×450): troppo bassa e larga per una sidebar, che ci finiva schiacciata dentro.
-        // `windowResizability(.contentSize)` lascia comunque liberi di ridimensionare;
-        // fissa solo il minimo utilizzabile e la dimensione iniziale.
+        // `.contentMinSize` lascia liberi di ridimensionare oltre il minimo, fissando solo
+        // dimensione minima e iniziale della finestra.
         .defaultSize(width: 1100, height: 720)
         .windowResizability(.contentMinSize)
         .commands { ChunkyCommands() }
@@ -54,9 +52,8 @@ struct ChunkyApp: App {
         }
 
         #if os(macOS)
-        // Una finestra per fumetto, invece del foglio piccolo e non ridimensionabile di
-        // prima: ogni fumetto aperto vive nella propria finestra, chiudibile e spostabile
-        // indipendentemente dalle altre.
+        // Una finestra per fumetto: ogni fumetto aperto vive nella propria finestra,
+        // chiudibile e spostabile indipendentemente dalle altre.
         WindowGroup("Fumetto", for: ComicID.self) { $comicID in
             if let comicID {
                 ReaderWindowContainer(comicID: comicID)

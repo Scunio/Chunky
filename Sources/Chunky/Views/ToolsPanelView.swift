@@ -9,7 +9,7 @@ import AppKit
 /// navigazione — non un Menu a tendina, che su questo target non riesce a spingere le
 /// NavigationLink al suo interno (verificato dal vivo: il tap non naviga da nessuna parte).
 struct ToolsPanelView: View {
-    @Environment(\.presentationMode) private var presentationMode
+    @Environment(\.dismiss) private var dismiss
     @State private var brightness: Double = ToolsPanelView.currentBrightness()
 
     var body: some View {
@@ -21,7 +21,7 @@ struct ToolsPanelView: View {
                         Image(systemName: "sun.min")
                             .foregroundColor(.secondary)
                         Slider(value: $brightness, in: 0...1)
-                            .onChange(of: brightness) { UIScreen.main.brightness = CGFloat(brightness) }
+                            .onChange(of: brightness) { UIScreen.current?.brightness = CGFloat(brightness) }
                         Image(systemName: "sun.max.fill")
                             .foregroundColor(.secondary)
                     }
@@ -55,7 +55,7 @@ struct ToolsPanelView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Fatto") { presentationMode.wrappedValue.dismiss() }
+                    Button("Fatto") { dismiss() }
                 }
             }
         }
@@ -77,7 +77,7 @@ struct ToolsPanelView: View {
 
     private static func currentBrightness() -> Double {
         #if os(iOS)
-        Double(UIScreen.main.brightness)
+        Double(UIScreen.current?.brightness ?? 1)
         #else
         1
         #endif

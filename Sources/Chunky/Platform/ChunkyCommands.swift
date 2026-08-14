@@ -34,9 +34,8 @@ struct ChunkyCommands: Commands {
             .keyboardShortcut(.rightArrow, modifiers: [])
             .disabled(readerActions == nil)
 
-            // Stesso effetto della freccia destra: nell'app originale la barra spaziatrice
-            // avanzava di pagina esattamente come la freccia destra (vedi il vecchio
-            // `KeyEventMonitor`, `case .rightArrow, .space`).
+            // Stesso effetto della freccia destra: la barra spaziatrice deve avanzare di
+            // pagina come la freccia destra.
             Button("Pagina successiva (Spazio)") {
                 readerActions?.nextPage()
             }

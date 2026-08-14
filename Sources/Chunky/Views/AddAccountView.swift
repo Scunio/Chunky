@@ -3,7 +3,7 @@ import CoreData
 
 struct AddAccountView: View {
     @Environment(\.managedObjectContext) private var context
-    @Environment(\.presentationMode) private var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     @State private var kind: RemoteAccountKind
     @State private var name = ""
@@ -17,7 +17,7 @@ struct AddAccountView: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section(header: Text("Tipo di account")) {
                     Picker("Tipo", selection: $kind) {
@@ -66,14 +66,14 @@ struct AddAccountView: View {
             .toolbar {
                 #if os(iOS)
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Annulla") { presentationMode.wrappedValue.dismiss() }
+                    Button("Annulla") { dismiss() }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Salva", action: save)
                 }
                 #else
                 ToolbarItem {
-                    Button("Annulla") { presentationMode.wrappedValue.dismiss() }
+                    Button("Annulla") { dismiss() }
                 }
                 ToolbarItem {
                     Button("Salva", action: save)
@@ -102,6 +102,6 @@ struct AddAccountView: View {
             in: context
         )
         try? context.save()
-        presentationMode.wrappedValue.dismiss()
+        dismiss()
     }
 }
