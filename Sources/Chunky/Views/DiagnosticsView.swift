@@ -2,12 +2,23 @@ import SwiftUI
 import CoreData
 
 struct DiagnosticsView: View {
+    var body: some View {
+        Form {
+            DiagnosticsSections()
+        }
+        .navigationTitle("Diagnostica")
+    }
+}
+
+/// Contenuto della diagnostica senza `Form` propria, per poterlo incorporare nella tab
+/// "Avanzate" delle Preferenze Mac oltre che mostrarlo da solo su iOS (`DiagnosticsView` sopra).
+struct DiagnosticsSections: View {
     @Environment(\.managedObjectContext) private var context
     @EnvironmentObject private var viewModel: LibraryViewModel
     @State private var logText = DiagnosticLog.readAll()
 
     var body: some View {
-        Form {
+        Group {
             Section(
                 header: Text("Libreria"),
                 footer: Text("Rimuove i fumetti i cui file non esistono più e ritrova quelli presenti nella cartella della libreria ma non registrati (utile dopo un ripristino da backup).")
@@ -31,7 +42,6 @@ struct DiagnosticsView: View {
                     .foregroundColor(.red)
             }
         }
-        .navigationTitle("Diagnostica")
         .onAppear(perform: refresh)
     }
 

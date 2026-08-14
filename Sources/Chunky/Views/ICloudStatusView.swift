@@ -3,12 +3,23 @@ import CoreData
 
 /// Stato sincronizzazione iCloud, raggiungibile da Impostazioni > Avanzate.
 struct ICloudStatusView: View {
+    var body: some View {
+        Form {
+            ICloudStatusSections()
+        }
+        .navigationTitle("Stato iCloud")
+    }
+}
+
+/// Contenuto dello stato iCloud senza `Form` propria, per poterlo incorporare nella tab
+/// "Avanzate" delle Preferenze Mac oltre che mostrarlo da solo su iOS (`ICloudStatusView` sopra).
+struct ICloudStatusSections: View {
     @FetchRequest(sortDescriptors: []) private var comics: FetchedResults<ComicEntity>
 
     private var isActive: Bool { LibraryStorage.isICloudAvailable }
 
     var body: some View {
-        Form {
+        Group {
             Section {
                 Label(
                     isActive ? "iCloud Drive attivo" : "iCloud Drive non disponibile",
@@ -30,6 +41,5 @@ struct ICloudStatusView: View {
                 )
             ) { EmptyView() }
         }
-        .navigationTitle("Stato iCloud")
     }
 }

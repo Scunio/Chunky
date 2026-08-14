@@ -68,7 +68,7 @@ enum ReaderIdleResetOption: Int, CaseIterable, Identifiable {
 }
 
 /// Icona "ⓘ" con spiegazione a comparsa, come nelle Impostazioni dell'app originale.
-private struct InfoButton: View {
+struct InfoButton: View {
     let text: String
     @State private var isPresented = false
 
@@ -90,13 +90,14 @@ private struct InfoButton: View {
             .font(.footnote)
             .padding()
             .frame(maxWidth: 280)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
 /// `compact: true` omette lo Spacer finale: usarlo per l'etichetta di un Picker, dove SwiftUI
 /// aggiunge già da sé il valore corrente e la freccina dopo l'intera label — uno Spacer qui la
 /// farebbe espandere in modo scomposto invece di restare compatta accanto al titolo.
-private func labelWithInfo(_ title: String, info: String, compact: Bool = false) -> some View {
+func labelWithInfo(_ title: String, info: String, compact: Bool = false) -> some View {
     HStack(spacing: compact ? 4 : nil) {
         Text(title)
         if !compact { Spacer() }
@@ -152,15 +153,14 @@ struct SettingsView: View {
                 }
             }
 
-            Section(
-                header: Text("Navigazione"),
-                footer: Text("Con \"Modalità una mano\" le zone di tap per cambiare pagina diventano orizzontali (alto/basso) invece che laterali, più comode da raggiungere con il pollice.")
-            ) {
+            Section(header: Text("Navigazione")) {
                 Toggle(isOn: $isTapToPanEnabled) {
                     labelWithInfo("Tap-to-pan", info: "Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati.")
                 }
-                Toggle("Modalità una mano", isOn: $isOneHandedModeEnabled)
-                    .disabled(tapPageTurnStyle == .disabled)
+                Toggle(isOn: $isOneHandedModeEnabled) {
+                    labelWithInfo("Modalità una mano", info: "Le zone di tap per cambiare pagina diventano orizzontali (alto/basso) invece che laterali, più comode da raggiungere con il pollice.")
+                }
+                .disabled(tapPageTurnStyle == .disabled)
                 Toggle(isOn: $isHotCornersEnabled) {
                     labelWithInfo("Hot corners", info: "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina.")
                 }
@@ -291,6 +291,13 @@ struct SettingsView: View {
                 NavigationLink("Licenze open source", destination: AcknowledgementsView())
             }
         }
+        #if os(macOS)
+        // Un `maxHeight` qui taglierebbe il contenuto in eccesso senza scroll (verificato: è
+        // esattamente quello che succedeva). Solo un limite di larghezza, e la finestra —
+        // resa ridimensionabile in ChunkyApp.swift — può aprirsi più bassa e lasciare che la
+        // Form scorra da sé, come qualunque lista/form scrollabile.
+        .frame(maxWidth: 600)
+        #endif
         .navigationTitle("Impostazioni")
     }
 

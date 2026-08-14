@@ -32,7 +32,7 @@ struct PanelSelectionView: View {
                     .overlay(selectionOverlay)
                     .gesture(dragGesture(in: proxy.size))
                     .onAppear { displaySize = proxy.size }
-                    .onChange(of: proxy.size) { newSize in
+                    .onChange(of: proxy.size) { _, newSize in
                         // Dopo una rotazione la vecchia selezione (in coordinate schermo)
                         // non corrisponde più a nulla nella nuova geometria: va scartata,
                         // altrimenti il rettangolo mostrato e il ritaglio calcolato sono sbagliati.

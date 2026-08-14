@@ -8,8 +8,19 @@ import SwiftUI
 struct ChunkyCommands: Commands {
     @FocusedValue(\.libraryActions) private var libraryActions: LibraryCommandActions?
     @FocusedValue(\.readerActions) private var readerActions: ReaderCommandActions?
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
+        // Le Preferenze sono una `Window("Impostazioni", id: "settings")` invece della scena
+        // `Settings` di sistema (vedi ChunkyApp.swift): serve ricreare a mano la voce di menu
+        // e la scorciatoia ⌘, che `Settings` avrebbe aggiunto da sola.
+        CommandGroup(replacing: .appSettings) {
+            Button("Impostazioni…") {
+                openWindow(id: "settings")
+            }
+            .keyboardShortcut(",", modifiers: .command)
+        }
+
         CommandMenu("Vai") {
             Button("Pagina precedente") {
                 readerActions?.previousPage()
