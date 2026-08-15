@@ -5,6 +5,10 @@ final class CBRPageProvider: ComicPageProvider {
     private let archive: Archive
     private let entries: [Entry]
     let comicInfoXML: Data?
+    /// Stesso motivo di `CBZPageProvider.extractionLock`: `Archive.extract` non è sicuro per
+    /// chiamate concorrenti, e la doppia pagina carica due pagine in parallelo su thread
+    /// diversi.
+    private let extractionLock = NSLock()
 
     private static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp"]
 
@@ -43,6 +47,8 @@ final class CBRPageProvider: ComicPageProvider {
         guard entries.indices.contains(index) else {
             throw ComicReadError.pageOutOfRange
         }
+        extractionLock.lock()
+        defer { extractionLock.unlock() }
         guard let data = try? archive.extract(entries[index]) else {
             throw ComicReadError.corruptArchive
         }
