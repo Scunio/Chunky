@@ -76,14 +76,16 @@ private struct ReaderContentView: View {
     /// basta a evitare lo spreco di spazio (due pagine strette con bande nere sopra/sotto).
     @State private var viewportSize: CGSize = .zero
     @State private var provider: ComicPageProvider?
-    #if os(macOS)
+    // Prefetch attorno alla pagina corrente su entrambe le piattaforme: era solo su macOS
+    // (il pager iOS ha una sua cache di view già costruite che evitava il problema più
+    // vistoso, ricostruire tutto a ogni pagina, ma non anticipa mai la decodifica prima che
+    // l'utente sfogli — ogni pagina nuova parte comunque da zero).
     @State private var pageCache: PageImageCache?
     // Duplicano le chiavi lette anche da `PageView`: servono qui per invalidare la cache
     // quando cambiano (vedi `.onChange` più sotto), non per l'elaborazione stessa.
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
     @AppStorage("upscalingEnabled") private var isUpscalingEnabled = false
     @AppStorage("autoTintContrastEnabled") private var isAutoTintContrastEnabled = false
-    #endif
     /// Indice della pagina "principale" (la prima, più a sinistra in LTR) dello spread corrente.
     @State private var currentPage: Int = 0
     @State private var loadError: String?
@@ -308,14 +310,12 @@ private struct ReaderContentView: View {
         .onChange(of: isDoublePageEnabled) { realignCurrentPageToSpreadStart() }
         .onChange(of: isDoublePageAutoMode) { realignCurrentPageToSpreadStart() }
         .onChange(of: viewportSize) { realignCurrentPageToSpreadStart() }
-        #if os(macOS)
         // Le voci in cache sono state elaborate con le opzioni precedenti: senza svuotarla,
         // una pagina già vista mostrerebbe il ritaglio/tint vecchio finché non esce dalla
         // finestra di prefetch.
         .onChange(of: isAutoCropEnabled) { purgePageCache() }
         .onChange(of: isUpscalingEnabled) { purgePageCache() }
         .onChange(of: isAutoTintContrastEnabled) { purgePageCache() }
-        #endif
         #if os(iOS)
         .sheet(isPresented: $isSharePresented) {
             if let shareImage = shareImage {
@@ -418,6 +418,30 @@ private struct ReaderContentView: View {
         isPageJumpPresented = false
     }
 
+    private func purgePageCache() {
+        guard let pageCache else { return }
+        Task { await pageCache.purge() }
+    }
+
+    /// Prefetch attorno alla pagina corrente, su entrambe le piattaforme.
+    private func prefetchAroundCurrentPage(provider: ComicPageProvider) async {
+        guard let pageCache else { return }
+        // Deve combaciare con `proxy.size` che `PageView.loadImage` userà davvero: in doppia
+        // pagina ogni `PageView` occupa circa metà larghezza del viewport (HStack(spacing: 0)
+        // in `PageSpreadView`), non l'intero viewport. Senza questo, `ProcessingOptions` non
+        // coincide mai tra prefetch e richiesta reale, e la cache va in miss ad ogni pagina —
+        // esattamente nella modalità (doppia pagina + upscaling) in cui costa di più.
+        let pageTargetSize = effectiveDoublePage
+            ? CGSize(width: viewportSize.width / 2, height: viewportSize.height)
+            : viewportSize
+        let options = PageImageCache.ProcessingOptions(
+            autoCrop: isAutoCropEnabled,
+            autoTintContrast: isAutoTintContrastEnabled,
+            upscaleTargetSize: isUpscalingEnabled ? pageTargetSize : nil
+        )
+        await pageCache.prefetch(around: currentPage, radius: 2, pageCount: provider.pageCount, options: options)
+    }
+
     #if os(macOS)
     /// La pagina (o lo spread) corrente, con la transizione dell'ultimo cambio pagina.
     ///
@@ -436,24 +460,6 @@ private struct ReaderContentView: View {
             .task(id: currentPage) {
                 await prefetchAroundCurrentPage(provider: provider)
             }
-    }
-
-    private func prefetchAroundCurrentPage(provider: ComicPageProvider) async {
-        guard let pageCache else { return }
-        // Deve combaciare con `proxy.size` che `PageView.loadImage` userà davvero: in doppia
-        // pagina ogni `PageView` occupa circa metà larghezza del viewport (HStack(spacing: 0)
-        // in `PageSpreadView`), non l'intero viewport. Senza questo, `ProcessingOptions` non
-        // coincide mai tra prefetch e richiesta reale, e la cache va in miss ad ogni pagina —
-        // esattamente nella modalità (doppia pagina + upscaling) in cui costa di più.
-        let pageTargetSize = effectiveDoublePage
-            ? CGSize(width: viewportSize.width / 2, height: viewportSize.height)
-            : viewportSize
-        let options = PageImageCache.ProcessingOptions(
-            autoCrop: isAutoCropEnabled,
-            autoTintContrast: isAutoTintContrastEnabled,
-            upscaleTargetSize: isUpscalingEnabled ? pageTargetSize : nil
-        )
-        await pageCache.prefetch(around: currentPage, radius: 2, pageCount: provider.pageCount, options: options)
     }
 
     /// Traduce lo stile del gesto che ha innescato il cambio nella transizione corrispondente:
@@ -494,10 +500,35 @@ private struct ReaderContentView: View {
     /// l'animazione giusta — cosa che `PageTurnPager` sa fare e il TabView no.
     @ViewBuilder
     private func iOSPager(provider: ComicPageProvider) -> some View {
-        if swipePageTurnStyle == .slide && tapPageTurnStyle == .slide {
-            nativeSwipePager(provider: provider)
-        } else {
-            programmaticPager(provider: provider)
+        Group {
+            if swipePageTurnStyle == .slide && tapPageTurnStyle == .slide {
+                nativeSwipePager(provider: provider)
+            } else {
+                programmaticPager(provider: provider)
+            }
+        }
+        // A livello del pager intero, non dentro `PageView.onAppear`: parte subito al cambio
+        // pagina, in parallelo con l'eventuale animazione, invece di aspettare che la pagina
+        // in arrivo lo richieda — stesso motivo per cui su macOS è su `pagerContent`.
+        .task(id: currentPage) {
+            await prefetchAroundCurrentPage(provider: provider)
+        }
+        // Stesse scorciatoie del menu "Vai" su Mac (`ChunkyCommands`), ma via `onKeyPress`
+        // invece di `.commands`: su iPad non c'è una menu bar da popolare, e `.commands`
+        // richiederebbe comunque la stessa infrastruttura `.focusedSceneValue` già pensata per
+        // finestre multiple del Mac, qui inutile con un'unica scena. Utile solo con tastiera
+        // esterna collegata; sul touch non cambia nulla.
+        .onKeyPress(.leftArrow) {
+            step(-1, provider: provider, style: tapPageTurnStyle)
+            return .handled
+        }
+        .onKeyPress(.rightArrow) {
+            step(1, provider: provider, style: tapPageTurnStyle)
+            return .handled
+        }
+        .onKeyPress(.space) {
+            step(1, provider: provider, style: tapPageTurnStyle)
+            return .handled
         }
     }
 
@@ -509,7 +540,7 @@ private struct ReaderContentView: View {
     /// scroll view, che continua a riconoscere il pan dal proprio recognizer.
     private func pageContent(provider: ComicPageProvider, start: Int) -> some View {
         ZStack {
-            PageSpreadView(provider: provider, leadingIndex: start, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed)
+            PageSpreadView(provider: provider, leadingIndex: start, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache)
                 .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
 
             tapZonesOrControlsToggle(provider: provider)
@@ -591,13 +622,6 @@ private struct ReaderContentView: View {
         }
     }
     #else
-    #if os(macOS)
-    private func purgePageCache() {
-        guard let pageCache else { return }
-        Task { await pageCache.purge() }
-    }
-    #endif
-
     private func macOSPager(provider: ComicPageProvider) -> some View {
         ZStack {
             pagerContent(provider: provider)
@@ -1104,9 +1128,7 @@ private struct ReaderContentView: View {
                 let loaded = try ComicPageProviderFactory.makeProvider(for: url, format: format)
                 DispatchQueue.main.async {
                     provider = loaded
-                    #if os(macOS)
                     pageCache = PageImageCache(provider: loaded)
-                    #endif
                     let clampedStart = min(startingPage, max(0, loaded.pageCount - 1))
                     let starts = spreadStarts(pageCount: loaded.pageCount)
                     let aligned = starts.last(where: { $0 <= clampedStart }) ?? 0
@@ -1176,6 +1198,7 @@ private struct PageTapZones: View {
         TapZoneRelay(
             oneHanded: oneHanded,
             oneHandedReversed: oneHandedReversed,
+            rightToLeft: rightToLeft,
             hotCorners: hotCorners,
             zonesEnabled: zonesEnabled,
             onPrevious: onPrevious,
@@ -1208,18 +1231,28 @@ private struct PageTapZones: View {
                                 y: proxy.size.height - PageTapZoneGeometry.cornerSize / 2
                             )
                     }
-                    let sideWidth = PageTapZoneGeometry.sideWidth(for: proxy.size.width)
+                    // Le larghezze qui devono rispecchiare quelle usate da `TapZoneRelay` per il
+                    // vero hit-testing (vedi `PageTapZoneGeometry.action`): in one-handed i due
+                    // lati fanno la stessa azione (nessuna asimmetria); altrimenti la zona larga
+                    // segue quale lato è "avanti" nell'ordine di lettura — a destra normalmente,
+                    // a sinistra con lettura RTL.
+                    let leftWidth = oneHanded
+                        ? PageTapZoneGeometry.oneHandedSideWidth(for: proxy.size.width)
+                        : (rightToLeft ? PageTapZoneGeometry.forwardSideWidth(for: proxy.size.width) : PageTapZoneGeometry.backSideWidth(for: proxy.size.width))
+                    let rightWidth = oneHanded
+                        ? PageTapZoneGeometry.oneHandedSideWidth(for: proxy.size.width)
+                        : (rightToLeft ? PageTapZoneGeometry.backSideWidth(for: proxy.size.width) : PageTapZoneGeometry.forwardSideWidth(for: proxy.size.width))
                     let verticalInset: CGFloat = hotCorners ? PageTapZoneGeometry.cornerSize : 0
                     let bandHeight = proxy.size.height - verticalInset * 2
                     accessibilityZone(label: previousOrSharedLabel, action: oneHanded ? sharedAction : onPrevious)
-                        .frame(width: sideWidth, height: bandHeight)
-                        .position(x: sideWidth / 2, y: verticalInset + bandHeight / 2)
+                        .frame(width: leftWidth, height: bandHeight)
+                        .position(x: leftWidth / 2, y: verticalInset + bandHeight / 2)
                     accessibilityZone(label: nextOrSharedLabel, action: oneHanded ? sharedAction : onNext)
-                        .frame(width: sideWidth, height: bandHeight)
-                        .position(x: proxy.size.width - sideWidth / 2, y: verticalInset + bandHeight / 2)
+                        .frame(width: rightWidth, height: bandHeight)
+                        .position(x: proxy.size.width - rightWidth / 2, y: verticalInset + bandHeight / 2)
                     accessibilityZone(label: "Mostra o nascondi i controlli", action: onToggleControls)
-                        .frame(width: max(proxy.size.width - sideWidth * 2, 0), height: bandHeight)
-                        .position(x: proxy.size.width / 2, y: verticalInset + bandHeight / 2)
+                        .frame(width: max(proxy.size.width - leftWidth - rightWidth, 0), height: bandHeight)
+                        .position(x: leftWidth + max(proxy.size.width - leftWidth - rightWidth, 0) / 2, y: verticalInset + bandHeight / 2)
                 }
             }
             .allowsHitTesting(false)
@@ -1250,7 +1283,26 @@ private struct PageTapZones: View {
 private enum PageTapZoneGeometry {
     static let cornerSize: CGFloat = 88
 
-    static func sideWidth(for totalWidth: CGFloat) -> CGFloat {
+    /// Zona "indietro": più stretta, come nei reader Kindle-style — si torna indietro molto
+    /// meno spesso di quanto si avanzi, quindi una zona larga qui aumenta solo i tocchi
+    /// accidentali che tornano alla pagina precedente invece di aprire i controlli.
+    static func backSideWidth(for totalWidth: CGFloat) -> CGFloat {
+        min(totalWidth * 0.11, 55)
+    }
+
+    /// Zona "avanti": più larga della zona indietro, per lo stesso motivo al contrario. Lo
+    /// stesso tetto (90pt) di prima dell'asimmetria, non più largo: verificato dal vivo che un
+    /// tetto più alto (120pt) arriva a coprire il bottone "···" della toolbar in alto, che senza
+    /// `hotCorners` attivo non ha un'esclusione verticale — un tocco lì avanzava anche la pagina.
+    static func forwardSideWidth(for totalWidth: CGFloat) -> CGFloat {
+        min(totalWidth * 0.18, 90)
+    }
+
+    /// Modalità "una mano": entrambi i lati fanno la stessa azione (vedi `sharedAction` in
+    /// `PageTapZones`), quindi l'asimmetria avanti/indietro non ha senso qui — un lato non è
+    /// "più avanti" dell'altro, sono la stessa identica azione duplicata per comodità del
+    /// pollice. Larghezza fissa, come prima dell'introduzione delle zone asimmetriche.
+    static func oneHandedSideWidth(for totalWidth: CGFloat) -> CGFloat {
         min(totalWidth * 0.18, 90)
     }
 
@@ -1263,6 +1315,7 @@ private enum PageTapZoneGeometry {
         in size: CGSize,
         oneHanded: Bool,
         oneHandedReversed: Bool,
+        rightToLeft: Bool,
         hotCorners: Bool,
         zonesEnabled: Bool
     ) -> Action? {
@@ -1278,12 +1331,28 @@ private enum PageTapZoneGeometry {
         let verticalInset: CGFloat = hotCorners ? cornerSize : 0
         guard point.y >= verticalInset, point.y <= size.height - verticalInset else { return nil }
 
-        let sideWidth = sideWidth(for: size.width)
-        if point.x <= sideWidth {
-            return oneHanded ? (oneHandedReversed ? .previous : .next) : .previous
+        if oneHanded {
+            // I due lati chiamano la stessa closure (vedi `sharedAction`): non c'è un lato
+            // "avanti" e uno "indietro" da rendere asimmetrici, sono la stessa azione.
+            let sideWidth = oneHandedSideWidth(for: size.width)
+            let sharedAction: Action = oneHandedReversed ? .previous : .next
+            if point.x <= sideWidth { return sharedAction }
+            if point.x >= size.width - sideWidth { return sharedAction }
+            return .toggleControls
         }
-        if point.x >= size.width - sideWidth {
-            return oneHanded ? (oneHandedReversed ? .previous : .next) : .next
+
+        // `onPrevious`/`onNext` sono legate a sinistra/destra a prescindere da `rightToLeft`
+        // (chi le implementa, `ReaderPagination.step`, inverte già la direzione per i manga) —
+        // qui cambia solo QUALE lato è "avanti" nell'ordine di lettura, e quindi quale prende
+        // la zona larga: a destra normalmente, a sinistra quando la lettura è RTL.
+        let leftWidth = rightToLeft ? forwardSideWidth(for: size.width) : backSideWidth(for: size.width)
+        let rightWidth = rightToLeft ? backSideWidth(for: size.width) : forwardSideWidth(for: size.width)
+
+        if point.x <= leftWidth {
+            return .previous
+        }
+        if point.x >= size.width - rightWidth {
+            return .next
         }
         return .toggleControls
     }
@@ -1292,6 +1361,7 @@ private enum PageTapZoneGeometry {
 private struct TapZoneRelay: UIViewRepresentable {
     let oneHanded: Bool
     let oneHandedReversed: Bool
+    let rightToLeft: Bool
     let hotCorners: Bool
     let zonesEnabled: Bool
     let onPrevious: () -> Void
@@ -1312,6 +1382,7 @@ private struct TapZoneRelay: UIViewRepresentable {
     func updateUIView(_ view: RelayView, context: Context) {
         context.coordinator.oneHanded = oneHanded
         context.coordinator.oneHandedReversed = oneHandedReversed
+        context.coordinator.rightToLeft = rightToLeft
         context.coordinator.hotCorners = hotCorners
         context.coordinator.zonesEnabled = zonesEnabled
         context.coordinator.onPrevious = onPrevious
@@ -1357,6 +1428,7 @@ private struct TapZoneRelay: UIViewRepresentable {
         weak var relayView: UIView?
         var oneHanded = false
         var oneHandedReversed = false
+        var rightToLeft = false
         var hotCorners = false
         var zonesEnabled = true
         var onPrevious: () -> Void = {}
@@ -1380,6 +1452,7 @@ private struct TapZoneRelay: UIViewRepresentable {
                 in: relayView.bounds.size,
                 oneHanded: oneHanded,
                 oneHandedReversed: oneHandedReversed,
+                rightToLeft: rightToLeft,
                 hotCorners: hotCorners,
                 zonesEnabled: zonesEnabled
             )
@@ -1544,7 +1617,8 @@ private struct PageSpreadView: View {
                     leadingIndex: leadingIndex,
                     rightToLeft: layoutDirection == .rightToLeft,
                     height: proxy.size.height,
-                    isZoomed: isZoomed
+                    isZoomed: isZoomed,
+                    imageCache: imageCache
                 )
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
             } else {
@@ -1585,6 +1659,7 @@ private struct SpreadPairView: View {
     let rightToLeft: Bool
     let height: CGFloat
     let isZoomed: Binding<Bool>
+    var imageCache: PageImageCache?
 
     @ObservedObject private var theme = AppTheme.shared
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
@@ -1592,6 +1667,8 @@ private struct SpreadPairView: View {
     @AppStorage("autoTintContrastEnabled") private var isAutoTintContrastEnabled = false
     @State private var leadingImage: PlatformImage?
     @State private var trailingImage: PlatformImage?
+    @State private var leadingFailed = false
+    @State private var trailingFailed = false
 
     var body: some View {
         Group {
@@ -1605,14 +1682,35 @@ private struct SpreadPairView: View {
             } else {
                 // Stima 2:3 a testa finché non si conoscono le proporzioni reali.
                 HStack(spacing: 0) {
-                    ProgressView().accentColor(.white).frame(width: height * 2 / 3, height: height)
-                    ProgressView().accentColor(.white).frame(width: height * 2 / 3, height: height)
+                    pageSlot(index: leadingIndex, failed: leadingFailed) {
+                        loadPage(index: leadingIndex) { leadingImage = $0 } onFailure: { leadingFailed = true }
+                    }
+                    .frame(width: height * 2 / 3, height: height)
+                    pageSlot(index: leadingIndex + 1, failed: trailingFailed) {
+                        loadPage(index: leadingIndex + 1) { trailingImage = $0 } onFailure: { trailingFailed = true }
+                    }
+                    .frame(width: height * 2 / 3, height: height)
                 }
             }
         }
         .onAppear {
-            loadPage(index: leadingIndex, targetHeight: height) { leadingImage = $0 }
-            loadPage(index: leadingIndex + 1, targetHeight: height) { trailingImage = $0 }
+            loadPage(index: leadingIndex) { leadingImage = $0 } onFailure: { leadingFailed = true }
+            loadPage(index: leadingIndex + 1) { trailingImage = $0 } onFailure: { trailingFailed = true }
+        }
+    }
+
+    /// Spinner finché si carica, bottone "Riprova" se la lettura è fallita — invece di uno
+    /// spinner bloccato per sempre e nessuna traccia visibile del problema (comportamento
+    /// originale, verificato dal vivo: bastava un fallimento di lettura, anche transitorio,
+    /// per bloccare la pagina indefinitamente). Vedi `ReaderDoublePageViewController` di
+    /// Aidoku, che ha lo stesso bottone per lo stesso motivo.
+    @ViewBuilder
+    private func pageSlot(index: Int, failed: Bool, retry: @escaping () -> Void) -> some View {
+        if failed {
+            Button("Riprova", action: retry)
+                .buttonStyle(.bordered)
+        } else {
+            ProgressView().accentColor(.white)
         }
     }
 
@@ -1623,19 +1721,37 @@ private struct SpreadPairView: View {
         }
     }
 
-    private func loadPage(index: Int, targetHeight: CGFloat, completion: @escaping (PlatformImage) -> Void) {
+    private func loadPage(index: Int, onSuccess: @escaping (PlatformImage) -> Void, onFailure: @escaping () -> Void) {
         let autoCrop = isAutoCropEnabled
         let upscale = isUpscalingEnabled
         let autoTintContrast = isAutoTintContrastEnabled
         // Larghezza target stimata 2:3 solo per l'eventuale upscaling — non influisce sul
         // layout, che deriva comunque dalle proporzioni reali una volta caricata l'immagine.
-        let targetSize = CGSize(width: targetHeight * 2 / 3, height: targetHeight)
+        let targetSize = CGSize(width: height * 2 / 3, height: height)
+
+        if let imageCache {
+            let options = PageImageCache.ProcessingOptions(
+                autoCrop: autoCrop,
+                autoTintContrast: autoTintContrast,
+                upscaleTargetSize: upscale ? targetSize : nil
+            )
+            Task {
+                if let loaded = await imageCache.image(at: index, options: options) {
+                    await MainActor.run { onSuccess(loaded) }
+                } else {
+                    await MainActor.run { onFailure() }
+                }
+            }
+            return
+        }
+
         DispatchQueue.global(qos: .userInitiated).async {
             var loaded: PlatformImage
             do {
                 loaded = try provider.image(atPage: index)
             } catch {
                 DiagnosticLog.log("Lettura pagina \(index) fallita: \((error as NSError).localizedDescription)")
+                DispatchQueue.main.async { onFailure() }
                 return
             }
             if autoCrop {
@@ -1648,7 +1764,7 @@ private struct SpreadPairView: View {
                 loaded = ImageProcessing.upscaleIfNeeded(loaded, targetSize: targetSize)
             }
             let final = loaded
-            DispatchQueue.main.async { completion(final) }
+            DispatchQueue.main.async { onSuccess(final) }
         }
     }
 }
@@ -1672,6 +1788,7 @@ private struct PageView: View {
     @AppStorage("doublePageZoomMode") private var doublePageZoomMode = PageZoomMode.auto
     @AppStorage("motionBlurEnabled") private var isMotionBlurEnabled = true
     @State private var image: PlatformImage?
+    @State private var loadFailed = false
     @State private var scale: CGFloat = 1
     @State private var lastScale: CGFloat = 1
     @State private var offset: CGSize = .zero
@@ -1734,7 +1851,7 @@ private struct PageView: View {
                             #endif
                         }
                     } else {
-                        ProgressView().accentColor(.white)
+                        pageSlot(targetSize: proxy.size) { loadImage(targetSize: proxy.size) }
                             .frame(width: proxy.size.width, height: proxy.size.height)
                     }
                 }
@@ -1783,11 +1900,37 @@ private struct PageView: View {
                     .onTapGesture(count: 2) { toggleZoom() }
                 #endif
             } else {
-                ProgressView().accentColor(.white)
-                    .frame(width: estimatedWidth, height: height)
+                pageSlot(targetSize: CGSize(width: estimatedWidth, height: height)) {
+                    loadImage(targetSize: CGSize(width: estimatedWidth, height: height))
+                }
+                .frame(width: estimatedWidth, height: height)
             }
         }
         .onAppear { loadImage(targetSize: CGSize(width: estimatedWidth, height: height)) }
+    }
+
+    /// Spinner finché si carica, bottone "Riprova" se la lettura è fallita — invece di uno
+    /// spinner bloccato per sempre senza traccia del problema (comportamento originale,
+    /// verificato dal vivo). Stessa idea di `SpreadPairView.pageSlot`, qui per il percorso a
+    /// pagina singola.
+    @ViewBuilder
+    private func pageSlot(targetSize: CGSize, retry: @escaping () -> Void) -> some View {
+        if loadFailed {
+            Button("Riprova") {
+                loadFailed = false
+                if let imageCache {
+                    Task {
+                        await imageCache.invalidate(index)
+                        retry()
+                    }
+                } else {
+                    retry()
+                }
+            }
+            .buttonStyle(.bordered)
+        } else {
+            ProgressView().accentColor(.white)
+        }
     }
 
     @ViewBuilder
@@ -1814,7 +1957,13 @@ private struct PageView: View {
             )
             Task {
                 let loaded = await imageCache.image(at: index, options: options)
-                await MainActor.run { self.image = loaded }
+                await MainActor.run {
+                    if let loaded {
+                        self.image = loaded
+                    } else {
+                        self.loadFailed = true
+                    }
+                }
             }
             return
         }
@@ -1828,8 +1977,10 @@ private struct PageView: View {
                 // spinner per sempre, senza traccia — verificato dal vivo con la doppia pagina
                 // (due letture concorrenti sullo stesso archivio CBZ/CBR, non thread-safe,
                 // producevano dati corrotti; risolto a monte in CBZ/CBRPageProvider, ma un log
-                // resta comunque utile per qualunque altro fallimento di lettura).
+                // resta comunque utile per qualunque altro fallimento di lettura). Con un
+                // bottone "Riprova" invece di restare bloccati per sempre — vedi `pageSlot`.
                 DiagnosticLog.log("Lettura pagina \(index) fallita: \((error as NSError).localizedDescription)")
+                DispatchQueue.main.async { self.loadFailed = true }
                 return
             }
             if autoCrop {
