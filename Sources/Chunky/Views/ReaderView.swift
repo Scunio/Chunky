@@ -1510,6 +1510,9 @@ private struct PageSpreadView: View {
     /// disco a ogni ricomparsa. `nil` su iOS, dove il problema non esiste (la cache di
     /// `UIHostingController` in `PageTurnPager` evita già la ricomparsa).
     var imageCache: PageImageCache?
+    #if os(iOS)
+    @Environment(\.layoutDirection) private var layoutDirection
+    #endif
 
     /// Vero solo se questo specifico spread contiene due pagine: con `coverIsAlone`, lo
     /// spread che inizia alla copertina (indice 0) resta largo 1 anche a passo 2.
@@ -1529,6 +1532,29 @@ private struct PageSpreadView: View {
         // causava la fascia nera tra le pagine (ciascuna centrata nella propria metà, con
         // margini indipendenti anziché uniti).
         GeometryReader { proxy in
+            #if os(iOS)
+            // Su iOS, con due pagine, un unico contenitore di zoom per l'intera coppia (come fa
+            // Aidoku, `ReaderDoublePageViewController`) invece di due `PageView` indipendenti:
+            // permette di ingrandire un dettaglio a cavallo delle due pagine, cosa impossibile
+            // con due scroll view separate — ed è anche il motivo per cui, coi due indipendenti,
+            // servirebbe indovinare quale delle due il pinch dovrebbe "vincere".
+            if showsSecondPage {
+                SpreadPairView(
+                    provider: provider,
+                    leadingIndex: leadingIndex,
+                    rightToLeft: layoutDirection == .rightToLeft,
+                    height: proxy.size.height,
+                    isZoomed: isZoomed
+                )
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
+            } else {
+                PageView(
+                    provider: provider, index: leadingIndex, isDoublePage: pagination.pageStep > 1,
+                    isZoomed: isZoomed, imageCache: imageCache, pairedHeight: nil
+                )
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
+            }
+            #else
             HStack(spacing: 0) {
                 PageView(
                     provider: provider, index: leadingIndex, isDoublePage: pagination.pageStep > 1,
@@ -1543,9 +1569,90 @@ private struct PageSpreadView: View {
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
+            #endif
         }
     }
 }
+
+#if os(iOS)
+/// Le due pagine di uno spread, caricate insieme e mostrate in un unico `UIScrollView`
+/// zoomabile (vedi `SpreadZoomableImageView`) invece di due indipendenti: permette il pinch
+/// su un dettaglio a cavallo del confine tra le pagine, e non serve decidere quale delle due
+/// "vince" il gesto.
+private struct SpreadPairView: View {
+    let provider: ComicPageProvider
+    let leadingIndex: Int
+    let rightToLeft: Bool
+    let height: CGFloat
+    let isZoomed: Binding<Bool>
+
+    @ObservedObject private var theme = AppTheme.shared
+    @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
+    @AppStorage("upscalingEnabled") private var isUpscalingEnabled = false
+    @AppStorage("autoTintContrastEnabled") private var isAutoTintContrastEnabled = false
+    @State private var leadingImage: PlatformImage?
+    @State private var trailingImage: PlatformImage?
+
+    var body: some View {
+        Group {
+            if let leadingImage, let trailingImage {
+                // L'ordine visivo (quale pagina sta a sinistra) segue il verso di lettura: nei
+                // manga (RTL) l'indice più basso sta a destra.
+                let ordered = rightToLeft ? [trailingImage, leadingImage] : [leadingImage, trailingImage]
+                SpreadZoomableImageView(images: ordered, isZoomed: isZoomed)
+                    .frame(height: height)
+                    .overlay(tintOverlay)
+            } else {
+                // Stima 2:3 a testa finché non si conoscono le proporzioni reali.
+                HStack(spacing: 0) {
+                    ProgressView().accentColor(.white).frame(width: height * 2 / 3, height: height)
+                    ProgressView().accentColor(.white).frame(width: height * 2 / 3, height: height)
+                }
+            }
+        }
+        .onAppear {
+            loadPage(index: leadingIndex, targetHeight: height) { leadingImage = $0 }
+            loadPage(index: leadingIndex + 1, targetHeight: height) { trailingImage = $0 }
+        }
+    }
+
+    @ViewBuilder
+    private var tintOverlay: some View {
+        if let tint = theme.pageTint, theme.pageTintOpacity > 0 {
+            tint.opacity(theme.pageTintOpacity).blendMode(.multiply)
+        }
+    }
+
+    private func loadPage(index: Int, targetHeight: CGFloat, completion: @escaping (PlatformImage) -> Void) {
+        let autoCrop = isAutoCropEnabled
+        let upscale = isUpscalingEnabled
+        let autoTintContrast = isAutoTintContrastEnabled
+        // Larghezza target stimata 2:3 solo per l'eventuale upscaling — non influisce sul
+        // layout, che deriva comunque dalle proporzioni reali una volta caricata l'immagine.
+        let targetSize = CGSize(width: targetHeight * 2 / 3, height: targetHeight)
+        DispatchQueue.global(qos: .userInitiated).async {
+            var loaded: PlatformImage
+            do {
+                loaded = try provider.image(atPage: index)
+            } catch {
+                DiagnosticLog.log("Lettura pagina \(index) fallita: \((error as NSError).localizedDescription)")
+                return
+            }
+            if autoCrop {
+                loaded = ImageProcessing.autoCropWhiteBorders(loaded)
+            }
+            if autoTintContrast {
+                loaded = ImageProcessing.autoTintAndContrast(loaded)
+            }
+            if upscale {
+                loaded = ImageProcessing.upscaleIfNeeded(loaded, targetSize: targetSize)
+            }
+            let final = loaded
+            DispatchQueue.main.async { completion(final) }
+        }
+    }
+}
+#endif
 
 private struct PageView: View {
     let provider: ComicPageProvider
@@ -1642,13 +1749,6 @@ private struct PageView: View {
     /// fissa, che è la causa dello spazio nero tra le pagine). Non copre "Adatta larghezza",
     /// che resta sullo scroll verticale per-pagina: le due nozioni non si combinano bene
     /// (l'una deriva l'altezza dalla larghezza, l'altra il contrario).
-    ///
-    /// NOTA: su iOS questo percorso usa ancora il vecchio `magnifyGesture`/`dragGesture`
-    /// SwiftUI (non `ZoomableImageView`, vedi sopra), perché qui la larghezza non è nota in
-    /// anticipo — deriva dalle proporzioni dell'immagine, e `UIViewRepresentable` non sa fare
-    /// da sé quel calcolo come fa `Image` con `.scaledToFit()`. In modalità doppia pagina il
-    /// pinch-to-zoom potrebbe quindi avere ancora lo stesso problema di arbitraggio gesture col
-    /// pager — non testato dal vivo.
     @ViewBuilder
     private func pairedContent(height: CGFloat) -> some View {
         // Stima 2:3 finché non si conoscono le proporzioni reali: evita che il placeholder
@@ -1656,6 +1756,20 @@ private struct PageView: View {
         let estimatedWidth = height * 2 / 3
         Group {
             if let image = image {
+                #if os(iOS)
+                // `sizeThatFits` su ZoomableImageView calcola la larghezza dall'altezza
+                // proposta, come farebbe `Image().scaledToFit()` — vedi il commento lì.
+                //
+                // NOTA: in doppia pagina una delle due `PageView` a volte resta bloccata sullo
+                // spinner di caricamento e non mostra mai l'immagine — verificato dal vivo che
+                // il bug esiste identico anche con il vecchio path SwiftUI qui sotto (`#else`),
+                // quindi non è legato a `ZoomableImageView`: è un problema preesistente nel
+                // caricamento/identità delle viste di `pairedContent` in doppia pagina, non
+                // ancora diagnosticato.
+                ZoomableImageView(image: image, isZoomed: isZoomed)
+                    .frame(height: height)
+                    .overlay(tintOverlay)
+                #else
                 image.asSwiftUIImage
                     .resizable()
                     .scaledToFit()
@@ -1667,6 +1781,7 @@ private struct PageView: View {
                     .gesture(magnifyGesture)
                     .gesture(dragGesture, including: scale > 1 ? .all : .subviews)
                     .onTapGesture(count: 2) { toggleZoom() }
+                #endif
             } else {
                 ProgressView().accentColor(.white)
                     .frame(width: estimatedWidth, height: height)
@@ -1705,7 +1820,18 @@ private struct PageView: View {
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
-            guard var loaded = try? provider.image(atPage: index) else { return }
+            var loaded: PlatformImage
+            do {
+                loaded = try provider.image(atPage: index)
+            } catch {
+                // Non un semplice `try?`: un fallimento qui lasciava la pagina bloccata sullo
+                // spinner per sempre, senza traccia — verificato dal vivo con la doppia pagina
+                // (due letture concorrenti sullo stesso archivio CBZ/CBR, non thread-safe,
+                // producevano dati corrotti; risolto a monte in CBZ/CBRPageProvider, ma un log
+                // resta comunque utile per qualunque altro fallimento di lettura).
+                DiagnosticLog.log("Lettura pagina \(index) fallita: \((error as NSError).localizedDescription)")
+                return
+            }
             if autoCrop {
                 loaded = ImageProcessing.autoCropWhiteBorders(loaded)
             }
@@ -1848,6 +1974,46 @@ private final class ZoomGestureRelayView: UIView {
     }
 }
 
+/// Identico a `ZoomGestureRelayView`, ma per `SpreadZoomableImageView.Coordinator`: i selettori
+/// `#selector` sono legati al tipo concreto, quindi non è possibile riusare la stessa classe fra
+/// le due (la duplicazione qui è il prezzo di quel vincolo di Objective-C, non una scelta).
+private final class SpreadZoomGestureRelayView: UIView {
+    weak var coordinator: SpreadZoomableImageView.Coordinator?
+    private var recognizers: [UIGestureRecognizer] = []
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { nil }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        for recognizer in recognizers {
+            recognizer.view?.removeGestureRecognizer(recognizer)
+        }
+        recognizers = []
+        guard let window, let coordinator else { return }
+
+        let pinch = UIPinchGestureRecognizer(target: coordinator, action: #selector(SpreadZoomableImageView.Coordinator.handlePinch(_:)))
+        pinch.delegate = coordinator
+        let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(SpreadZoomableImageView.Coordinator.handlePan(_:)))
+        pan.delegate = coordinator
+        pan.maximumNumberOfTouches = 1
+        let doubleTap = UITapGestureRecognizer(target: coordinator, action: #selector(SpreadZoomableImageView.Coordinator.handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.delegate = coordinator
+
+        for recognizer in [pinch, pan, doubleTap] as [UIGestureRecognizer] {
+            recognizer.cancelsTouchesInView = false
+            window.addGestureRecognizer(recognizer)
+        }
+        recognizers = [pinch, pan, doubleTap]
+    }
+
+    deinit {
+        for recognizer in recognizers {
+            recognizer.view?.removeGestureRecognizer(recognizer)
+        }
+    }
+}
+
 private struct ZoomableImageView: UIViewRepresentable {
     let image: UIImage?
     let isZoomed: Binding<Bool>
@@ -1891,6 +2057,27 @@ private struct ZoomableImageView: UIViewRepresentable {
             scrollView.setZoomScale(1, animated: false)
         }
         context.coordinator.layOutImage(in: scrollView)
+    }
+
+    /// Permette a `ZoomableImageView` di dimensionarsi come farebbe `Image().scaledToFit()`
+    /// quando riceve solo un'altezza (modalità doppia pagina, dove la larghezza deriva dalle
+    /// proporzioni dell'immagine): senza questo, un `UIViewRepresentable` non sa calcolare da
+    /// sé una larghezza da un'altezza proposta, e finirebbe o senza dimensioni o largo quanto
+    /// lo spazio disponibile invece che quanto l'immagine.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIScrollView, context: Context) -> CGSize? {
+        guard let image, image.size.height > 0 else { return nil }
+        let aspect = image.size.width / image.size.height
+        // Priorità all'altezza quando c'è: chi ci chiama con un'altezza esplicita (vedi
+        // `pairedContent`) lo fa apposta perché la larghezza deve derivare da quella, non da
+        // qualunque larghezza l'HStack proponga di suo (che può non essere nil anche quando
+        // la vera intenzione è "dimensionati tu dall'altezza").
+        if let height = proposal.height {
+            return CGSize(width: height * aspect, height: height)
+        }
+        if let width = proposal.width {
+            return CGSize(width: width, height: width / aspect)
+        }
+        return nil
     }
 
     final class Coordinator: NSObject, UIScrollViewDelegate, UIGestureRecognizerDelegate {
@@ -1990,6 +2177,192 @@ private struct ZoomableImageView: UIViewRepresentable {
 
         @objc func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
             guard let scrollView, let point = location(of: recognizer, in: scrollView) else { return }
+            if scrollView.zoomScale > 1.01 {
+                scrollView.setZoomScale(1, animated: true)
+            } else {
+                let targetScale: CGFloat = 2.5
+                let size = scrollView.bounds.size
+                let width = size.width / targetScale
+                let height = size.height / targetScale
+                let rect = CGRect(x: point.x - width / 2, y: point.y - height / 2, width: width, height: height)
+                scrollView.zoom(to: rect, animated: true)
+            }
+        }
+    }
+}
+
+/// Come `ZoomableImageView`, ma per due pagine affiancate zoomabili come un'unica unità (vedi
+/// il commento su `SpreadPairView`): un solo `UIScrollView`, contenuto = le due `UIImageView`
+/// una accanto all'altra. Stesso trucco della window per pinch/pan/doppio-tap, per lo stesso
+/// motivo — vedi il commento su `ZoomableImageView`.
+private struct SpreadZoomableImageView: UIViewRepresentable {
+    /// Esattamente due immagini, già nell'ordine visivo (sinistra, destra).
+    let images: [UIImage]
+    let isZoomed: Binding<Bool>
+
+    func makeCoordinator() -> Coordinator { Coordinator(isZoomed: isZoomed) }
+
+    func makeUIView(context: Context) -> UIScrollView {
+        let scrollView = SpreadZoomingScrollView()
+        scrollView.coordinator = context.coordinator
+        scrollView.delegate = context.coordinator
+        scrollView.minimumZoomScale = 1
+        scrollView.maximumZoomScale = 5
+        scrollView.isUserInteractionEnabled = false
+        scrollView.bounces = false
+        scrollView.bouncesZoom = false
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.backgroundColor = .clear
+        scrollView.contentInsetAdjustmentBehavior = .never
+
+        let container = UIView()
+        let leadingImageView = UIImageView()
+        let trailingImageView = UIImageView()
+        for imageView in [leadingImageView, trailingImageView] {
+            imageView.contentMode = .scaleAspectFit
+            container.addSubview(imageView)
+        }
+        scrollView.addSubview(container)
+        context.coordinator.container = container
+        context.coordinator.leadingImageView = leadingImageView
+        context.coordinator.trailingImageView = trailingImageView
+        context.coordinator.scrollView = scrollView
+
+        let relay = SpreadZoomGestureRelayView(frame: .zero)
+        relay.coordinator = context.coordinator
+        scrollView.addSubview(relay)
+
+        return scrollView
+    }
+
+    func updateUIView(_ scrollView: UIScrollView, context: Context) {
+        context.coordinator.isZoomed = isZoomed
+        context.coordinator.images = images
+        context.coordinator.layOutImages(in: scrollView)
+    }
+
+    /// Ricalcola il layout a ogni cambio di bounds reale, non solo quando SwiftUI richiama
+    /// `updateUIView` — stesso motivo di `ZoomingScrollView`.
+    final class SpreadZoomingScrollView: UIScrollView {
+        weak var coordinator: Coordinator?
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            coordinator?.layOutImages(in: self)
+        }
+    }
+
+    final class Coordinator: NSObject, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+        var isZoomed: Binding<Bool>
+        var images: [UIImage] = []
+        weak var container: UIView?
+        weak var leadingImageView: UIImageView?
+        weak var trailingImageView: UIImageView?
+        weak var scrollView: UIScrollView?
+
+        init(isZoomed: Binding<Bool>) { self.isZoomed = isZoomed }
+
+        func layOutImages(in scrollView: UIScrollView) {
+            guard
+                let container, let leadingImageView, let trailingImageView,
+                images.count == 2
+            else { return }
+            let boundsHeight = scrollView.bounds.height
+            guard boundsHeight > 0 else { return }
+            if leadingImageView.image !== images[0] { leadingImageView.image = images[0] }
+            if trailingImageView.image !== images[1] { trailingImageView.image = images[1] }
+
+            func fitWidth(_ image: UIImage) -> CGFloat {
+                guard image.size.height > 0 else { return 0 }
+                return boundsHeight * image.size.width / image.size.height
+            }
+            let leadingWidth = fitWidth(images[0])
+            let trailingWidth = fitWidth(images[1])
+            leadingImageView.frame = CGRect(x: 0, y: 0, width: leadingWidth, height: boundsHeight)
+            trailingImageView.frame = CGRect(x: leadingWidth, y: 0, width: trailingWidth, height: boundsHeight)
+
+            let contentSize = CGSize(width: leadingWidth + trailingWidth, height: boundsHeight)
+            if container.bounds.size != contentSize {
+                container.bounds = CGRect(origin: .zero, size: contentSize)
+                scrollView.contentSize = contentSize
+            }
+            center(container, in: scrollView)
+        }
+
+        private func center(_ container: UIView, in scrollView: UIScrollView) {
+            let boundsSize = scrollView.bounds.size
+            var frame = container.frame
+            frame.origin.x = frame.width < boundsSize.width ? (boundsSize.width - frame.width) / 2 : 0
+            frame.origin.y = frame.height < boundsSize.height ? (boundsSize.height - frame.height) / 2 : 0
+            container.frame = frame
+        }
+
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? { container }
+
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            if let container { center(container, in: scrollView) }
+            let zoomed = scrollView.zoomScale > 1.01
+            if isZoomed.wrappedValue != zoomed { isZoomed.wrappedValue = zoomed }
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool { true }
+
+        private func location(of recognizer: UIGestureRecognizer, in scrollView: UIScrollView) -> CGPoint? {
+            guard scrollView.window != nil else { return nil }
+            let point = recognizer.location(in: scrollView)
+            return scrollView.bounds.contains(point) ? point : nil
+        }
+
+        private var pinchStartScale: CGFloat = 1
+
+        @objc func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
+            guard let scrollView else { return }
+            switch recognizer.state {
+            case .began:
+                guard location(of: recognizer, in: scrollView) != nil else { return }
+                pinchStartScale = scrollView.zoomScale
+            case .changed:
+                guard location(of: recognizer, in: scrollView) != nil || scrollView.zoomScale > 1.01 else { return }
+                let target = min(max(pinchStartScale * recognizer.scale, scrollView.minimumZoomScale), scrollView.maximumZoomScale)
+                scrollView.zoomScale = target
+            default:
+                break
+            }
+        }
+
+        @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
+            guard
+                let scrollView,
+                scrollView.zoomScale > 1.01
+            else { return }
+            switch recognizer.state {
+            case .began:
+                guard location(of: recognizer, in: scrollView) != nil else { return }
+            case .changed:
+                let translation = recognizer.translation(in: scrollView)
+                var offset = scrollView.contentOffset
+                offset.x -= translation.x
+                offset.y -= translation.y
+                let maxX = max(scrollView.contentSize.width - scrollView.bounds.width, 0)
+                let maxY = max(scrollView.contentSize.height - scrollView.bounds.height, 0)
+                offset.x = min(max(offset.x, 0), maxX)
+                offset.y = min(max(offset.y, 0), maxY)
+                scrollView.contentOffset = offset
+                recognizer.setTranslation(.zero, in: scrollView)
+            default:
+                break
+            }
+        }
+
+        @objc func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
+            guard
+                let scrollView,
+                let point = location(of: recognizer, in: scrollView)
+            else { return }
             if scrollView.zoomScale > 1.01 {
                 scrollView.setZoomScale(1, animated: true)
             } else {
