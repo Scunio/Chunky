@@ -1324,6 +1324,19 @@ private struct PageView: View {
                             }
                             .frame(width: proxy.size.width, height: proxy.size.height)
                         } else {
+                            #if os(iOS)
+                            // `MagnificationGesture`/`DragGesture` SwiftUI, sovrapposti al pager a
+                            // scorrimento (`TabView(.page)`, backed da `UIPageViewController`), perdono
+                            // l'arbitraggio dei tocchi a due dita col suo scroll view interno — pinch e
+                            // pan restano morti (verificato dal vivo su device). Un vero `UIScrollView`
+                            // con zoom nativo (come fa l'app Foto: pinch/pan sono il comportamento di
+                            // sistema di uno scroll view zoomabile, non gesture aggiunte sopra) partecipa
+                            // allo stesso protocollo di coordinamento gesture di UIKit invece di dover
+                            // reinventarlo a mano.
+                            ZoomableImageView(image: image, isZoomed: isZoomed)
+                                .frame(width: proxy.size.width, height: proxy.size.height)
+                                .overlay(tintOverlay)
+                            #else
                             image.asSwiftUIImage
                                 .resizable()
                                 .scaledToFit()
@@ -1338,6 +1351,7 @@ private struct PageView: View {
                                 // non fa nulla (guard scale > 1).
                                 .gesture(dragGesture, including: scale > 1 ? .all : .subviews)
                                 .onTapGesture(count: 2) { toggleZoom() }
+                            #endif
                         }
                     } else {
                         ProgressView().accentColor(.white)
@@ -1355,6 +1369,13 @@ private struct PageView: View {
     /// fissa, che è la causa dello spazio nero tra le pagine). Non copre "Adatta larghezza",
     /// che resta sullo scroll verticale per-pagina: le due nozioni non si combinano bene
     /// (l'una deriva l'altezza dalla larghezza, l'altra il contrario).
+    ///
+    /// NOTA: su iOS questo percorso usa ancora il vecchio `magnifyGesture`/`dragGesture`
+    /// SwiftUI (non `ZoomableImageView`, vedi sopra), perché qui la larghezza non è nota in
+    /// anticipo — deriva dalle proporzioni dell'immagine, e `UIViewRepresentable` non sa fare
+    /// da sé quel calcolo come fa `Image` con `.scaledToFit()`. In modalità doppia pagina il
+    /// pinch-to-zoom potrebbe quindi avere ancora lo stesso problema di arbitraggio gesture col
+    /// pager — non testato dal vivo.
     @ViewBuilder
     private func pairedContent(height: CGFloat) -> some View {
         // Stima 2:3 finché non si conoscono le proporzioni reali: evita che il placeholder
@@ -1481,6 +1502,116 @@ private struct PageView: View {
 }
 
 #if os(iOS)
+/// Pinch-to-zoom e pan sulla pagina come in Foto: un vero `UIScrollView` con zoom nativo
+/// (`minimumZoomScale`/`maximumZoomScale` + `viewForZooming`), non gesture SwiftUI sovrapposte
+/// al pager. È lo `UIScrollView` stesso a "vincere" i tocchi a due dita quando c'è zoom da fare,
+/// con l'arbitraggio che UIKit già gestisce per questo identico caso — non un
+/// `UIGestureRecognizerDelegate` scritto a mano per riprodurlo (come si è dovuto fare per la
+/// luminosità a due dita, che non essendo zoom non può appoggiarsi allo stesso meccanismo).
+///
+/// Disabilita lo scrolling quando non zoomata (`isScrollEnabled = false` a scale 1): a riposo
+/// non c'è nulla da scorrere, e uno scroll view "vuoto" può comunque intercettare tocchi che
+/// altrimenti spetterebbero al pager sottostante.
+private struct ZoomableImageView: UIViewRepresentable {
+    let image: UIImage?
+    let isZoomed: Binding<Bool>
+
+    func makeCoordinator() -> Coordinator { Coordinator(isZoomed: isZoomed) }
+
+    func makeUIView(context: Context) -> UIScrollView {
+        let scrollView = UIScrollView()
+        scrollView.delegate = context.coordinator
+        scrollView.minimumZoomScale = 1
+        scrollView.maximumZoomScale = 5
+        scrollView.isScrollEnabled = false
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.backgroundColor = .clear
+        scrollView.contentInsetAdjustmentBehavior = .never
+
+        let imageView = UIImageView()
+        imageView.contentMode = .scaleAspectFit
+        imageView.isUserInteractionEnabled = true
+        scrollView.addSubview(imageView)
+        context.coordinator.imageView = imageView
+
+        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        scrollView.addGestureRecognizer(doubleTap)
+
+        return scrollView
+    }
+
+    func updateUIView(_ scrollView: UIScrollView, context: Context) {
+        context.coordinator.isZoomed = isZoomed
+        guard let imageView = context.coordinator.imageView else { return }
+        if imageView.image !== image {
+            imageView.image = image
+            // Cambio pagina: si riparte sempre da non zoomato, come nell'app originale (lo
+            // zoom non "segue" da una pagina all'altra).
+            scrollView.setZoomScale(1, animated: false)
+        }
+        context.coordinator.layOutImage(in: scrollView)
+    }
+
+    final class Coordinator: NSObject, UIScrollViewDelegate {
+        var isZoomed: Binding<Bool>
+        weak var imageView: UIImageView?
+
+        init(isZoomed: Binding<Bool>) { self.isZoomed = isZoomed }
+
+        func layOutImage(in scrollView: UIScrollView) {
+            guard let imageView, let image = imageView.image else { return }
+            let boundsSize = scrollView.bounds.size
+            guard boundsSize.width > 0, boundsSize.height > 0, image.size.width > 0, image.size.height > 0 else { return }
+            let aspect = image.size.width / image.size.height
+            var fitSize = boundsSize
+            if boundsSize.width / boundsSize.height > aspect {
+                fitSize.width = boundsSize.height * aspect
+            } else {
+                fitSize.height = boundsSize.width / aspect
+            }
+            if imageView.bounds.size != fitSize {
+                imageView.bounds = CGRect(origin: .zero, size: fitSize)
+                scrollView.contentSize = fitSize
+            }
+            center(imageView, in: scrollView)
+        }
+
+        private func center(_ imageView: UIImageView, in scrollView: UIScrollView) {
+            let boundsSize = scrollView.bounds.size
+            var frame = imageView.frame
+            frame.origin.x = frame.width < boundsSize.width ? (boundsSize.width - frame.width) / 2 : 0
+            frame.origin.y = frame.height < boundsSize.height ? (boundsSize.height - frame.height) / 2 : 0
+            imageView.frame = frame
+        }
+
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
+
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            if let imageView { center(imageView, in: scrollView) }
+            let zoomed = scrollView.zoomScale > 1.01
+            scrollView.isScrollEnabled = zoomed
+            if isZoomed.wrappedValue != zoomed { isZoomed.wrappedValue = zoomed }
+        }
+
+        @objc func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
+            guard let scrollView = recognizer.view as? UIScrollView else { return }
+            if scrollView.zoomScale > 1.01 {
+                scrollView.setZoomScale(1, animated: true)
+            } else {
+                let targetScale: CGFloat = 2.5
+                let point = recognizer.location(in: imageView)
+                let size = scrollView.bounds.size
+                let width = size.width / targetScale
+                let height = size.height / targetScale
+                let rect = CGRect(x: point.x - width / 2, y: point.y - height / 2, width: width, height: height)
+                scrollView.zoom(to: rect, animated: true)
+            }
+        }
+    }
+}
+
 /// Cambia quando cambia qualcosa che obbliga a ricostruire tutte le pagine da zero (il numero
 /// di pagine per spread, il verso di lettura, il fumetto stesso): i controller in cache
 /// mostrerebbero altrimenti spread composti con le regole vecchie.
