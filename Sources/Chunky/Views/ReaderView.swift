@@ -567,30 +567,27 @@ private struct ReaderContentView: View {
             )
     }
 
-    @ViewBuilder
     private func tapZonesOrControlsToggle(provider: ComicPageProvider) -> some View {
-        if tapPageTurnStyle != .disabled {
-            PageTapZones(oneHanded: isOneHandedModeEnabled, oneHandedReversed: isOneHandedZonesReversed, hotCorners: isHotCornersEnabled, rightToLeft: comic.readingDirection == .rightToLeft) {
-                // Con "Tap-to-pan" anche la zona "indietro" avanza: comodo se non riesci a
-                // raggiungere comodamente entrambi i lati dello schermo.
-                step(isTapToPanEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
-            } onNext: {
-                step(1, provider: provider, style: tapPageTurnStyle)
-            } onToggleControls: {
-                toggleControls()
-            } onExit: {
-                exitReader()
-            } onOpenSettings: {
-                isToolsPresented = true
-            } onToggleDoublePage: {
-                if isDoublePageAllowed { isDoublePageEnabled.toggle() }
-            }
-        } else {
-            Color.clear
-                .contentShape(Rectangle())
-                // simultaneousGesture, non .onTapGesture: quest'ultimo reclama il tocco in
-                // esclusiva e impedisce allo swipe nativo del TabView sottostante di funzionare.
-                .simultaneousGesture(TapGesture().onEnded { toggleControls() })
+        PageTapZones(
+            oneHanded: isOneHandedModeEnabled,
+            oneHandedReversed: isOneHandedZonesReversed,
+            hotCorners: isHotCornersEnabled,
+            zonesEnabled: tapPageTurnStyle != .disabled,
+            rightToLeft: comic.readingDirection == .rightToLeft
+        ) {
+            // Con "Tap-to-pan" anche la zona "indietro" avanza: comodo se non riesci a
+            // raggiungere comodamente entrambi i lati dello schermo.
+            step(isTapToPanEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
+        } onNext: {
+            step(1, provider: provider, style: tapPageTurnStyle)
+        } onToggleControls: {
+            toggleControls()
+        } onExit: {
+            exitReader()
+        } onOpenSettings: {
+            isToolsPresented = true
+        } onToggleDoublePage: {
+            if isDoublePageAllowed { isDoublePageEnabled.toggle() }
         }
     }
     #else
@@ -1131,9 +1128,284 @@ private struct ReaderContentView: View {
     }
 }
 
+#if os(iOS)
 /// Zone di tap per cambiare pagina: due terzi laterali (avanti/indietro) e una fascia centrale
 /// per mostrare/nascondere i controlli, oppure — in modalità "una mano" — l'intero lato
 /// sinistro/destro (senza fascia centrale, per restare comodi col pollice a schermo intero).
+///
+/// Non tre `Color.clear` sovrapposte al contenuto con `.contentShape` + `simultaneousGesture`
+/// (versione precedente): per l'hit-testing di UIKit, chi sta sopra in un ZStack vince sempre il
+/// tocco iniziale, a prescindere da `simultaneousGesture` — che arbitra fra gesture SwiftUI sulla
+/// stessa view, non fa passare i tocchi a un `UIViewRepresentable` fratello sottostante (il pager,
+/// lo scroll view dello zoom). Verificato dal vivo con log su `touchesBegan`: zero tocchi
+/// arrivavano al contenuto vero, nemmeno un tap semplice.
+///
+/// Qui invece — come fa `ReaderViewController.handleTap` in Aidoku
+/// (github.com/Aidoku/Aidoku/blob/main/iOS/UI/Reader/ReaderViewController.swift) — un solo
+/// `UITapGestureRecognizer`, e la zona toccata (sinistra/centro/destra/angoli) si calcola dalle
+/// coordinate del tocco invece di avere una view per zona. Agganciato alla `window` anziché a
+/// questa view (`hitTest` sempre `nil`, mai in cima all'hit-test): la `window` è antenata di
+/// qualunque vista colpita dall'hit-test, quindi riceve comunque il tocco — stessa tecnica già
+/// usata per la luminosità a due dita e per pinch/pan/doppio-tap in `ZoomableImageView`.
+///
+/// Le etichette di accessibilità restano SwiftUI (`allowsHitTesting(false)`, così non
+/// interferiscono con l'hit-test): VoiceOver naviga l'albero delle view indipendentemente
+/// dall'hit-test dei tocchi normali.
+private struct PageTapZones: View {
+    let oneHanded: Bool
+    /// In modalità "una mano", scambia quale lato (sinistro/destro) avanza e quale
+    /// retrocede: comodo per adattarsi a mano destra/sinistra o a come si tiene il telefono.
+    let oneHandedReversed: Bool
+    let hotCorners: Bool
+    /// Senza zone (tap page-turn disattivato): qualunque tocco mostra/nasconde i controlli,
+    /// come nell'app originale.
+    let zonesEnabled: Bool
+    /// Nei manga il lato sinistro è quello che *avanza*: serve solo alle etichette di
+    /// accessibilità, perché l'inversione vera del verso avviene già in `step`.
+    let rightToLeft: Bool
+    let onPrevious: () -> Void
+    let onNext: () -> Void
+    let onToggleControls: () -> Void
+    /// Angoli attivi con "Hot corners": in alto a sinistra esce dalla lettura, in alto a
+    /// destra apre le impostazioni, in basso a destra alterna la doppia pagina.
+    let onExit: () -> Void
+    let onOpenSettings: () -> Void
+    let onToggleDoublePage: () -> Void
+
+    var body: some View {
+        TapZoneRelay(
+            oneHanded: oneHanded,
+            oneHandedReversed: oneHandedReversed,
+            hotCorners: hotCorners,
+            zonesEnabled: zonesEnabled,
+            onPrevious: onPrevious,
+            onNext: onNext,
+            onToggleControls: onToggleControls,
+            onExit: onExit,
+            onOpenSettings: onOpenSettings,
+            onToggleDoublePage: onToggleDoublePage
+        )
+        .overlay(accessibilityOverlay)
+    }
+
+    /// Solo etichette/azioni per VoiceOver, invisibili ai tocchi normali: le vere zone (con le
+    /// stesse dimensioni, vedi `PageTapZoneGeometry`) le calcola `TapZoneRelay`.
+    @ViewBuilder
+    private var accessibilityOverlay: some View {
+        if zonesEnabled {
+            GeometryReader { proxy in
+                ZStack(alignment: .topLeading) {
+                    if hotCorners {
+                        accessibilityZone(label: "Esci dalla lettura", action: onExit)
+                            .frame(width: PageTapZoneGeometry.cornerSize, height: PageTapZoneGeometry.cornerSize)
+                        accessibilityZone(label: "Impostazioni", action: onOpenSettings)
+                            .frame(width: PageTapZoneGeometry.cornerSize, height: PageTapZoneGeometry.cornerSize)
+                            .position(x: proxy.size.width - PageTapZoneGeometry.cornerSize / 2, y: PageTapZoneGeometry.cornerSize / 2)
+                        accessibilityZone(label: "Doppia pagina", action: onToggleDoublePage)
+                            .frame(width: PageTapZoneGeometry.cornerSize, height: PageTapZoneGeometry.cornerSize)
+                            .position(
+                                x: proxy.size.width - PageTapZoneGeometry.cornerSize / 2,
+                                y: proxy.size.height - PageTapZoneGeometry.cornerSize / 2
+                            )
+                    }
+                    let sideWidth = PageTapZoneGeometry.sideWidth(for: proxy.size.width)
+                    let verticalInset: CGFloat = hotCorners ? PageTapZoneGeometry.cornerSize : 0
+                    let bandHeight = proxy.size.height - verticalInset * 2
+                    accessibilityZone(label: previousOrSharedLabel, action: oneHanded ? sharedAction : onPrevious)
+                        .frame(width: sideWidth, height: bandHeight)
+                        .position(x: sideWidth / 2, y: verticalInset + bandHeight / 2)
+                    accessibilityZone(label: nextOrSharedLabel, action: oneHanded ? sharedAction : onNext)
+                        .frame(width: sideWidth, height: bandHeight)
+                        .position(x: proxy.size.width - sideWidth / 2, y: verticalInset + bandHeight / 2)
+                    accessibilityZone(label: "Mostra o nascondi i controlli", action: onToggleControls)
+                        .frame(width: max(proxy.size.width - sideWidth * 2, 0), height: bandHeight)
+                        .position(x: proxy.size.width / 2, y: verticalInset + bandHeight / 2)
+                }
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    private var sharedAction: () -> Void { oneHandedReversed ? onPrevious : onNext }
+    /// `onPrevious`/`onNext` sono la zona sinistra e quella destra: nei manga la sinistra è
+    /// quella che manda avanti, quindi le etichette vanno scambiate.
+    private var previousLabel: String { rightToLeft ? "Pagina successiva" : "Pagina precedente" }
+    private var nextLabel: String { rightToLeft ? "Pagina precedente" : "Pagina successiva" }
+    private var sharedLabel: String { oneHandedReversed ? previousLabel : nextLabel }
+    private var previousOrSharedLabel: String { oneHanded ? sharedLabel : previousLabel }
+    private var nextOrSharedLabel: String { oneHanded ? sharedLabel : nextLabel }
+
+    private func accessibilityZone(label: String, action: @escaping () -> Void) -> some View {
+        Color.clear
+            .accessibilityElement()
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(label)
+            .accessibilityAction(.default, action)
+    }
+}
+
+/// Geometria delle zone, condivisa fra `TapZoneRelay` (che decide l'azione da un tocco reale) e
+/// l'overlay di accessibilità di `PageTapZones` (che deve posizionare gli stessi rettangoli):
+/// un'unica fonte di verità, altrimenti VoiceOver e il tocco reale rischiano di disallinearsi.
+private enum PageTapZoneGeometry {
+    static let cornerSize: CGFloat = 88
+
+    static func sideWidth(for totalWidth: CGFloat) -> CGFloat {
+        min(totalWidth * 0.18, 90)
+    }
+
+    enum Action {
+        case previous, next, toggleControls, exit, openSettings, toggleDoublePage
+    }
+
+    static func action(
+        at point: CGPoint,
+        in size: CGSize,
+        oneHanded: Bool,
+        oneHandedReversed: Bool,
+        hotCorners: Bool,
+        zonesEnabled: Bool
+    ) -> Action? {
+        guard size.width > 0, size.height > 0 else { return nil }
+        guard zonesEnabled else { return .toggleControls }
+
+        if hotCorners {
+            if point.x <= cornerSize, point.y <= cornerSize { return .exit }
+            if point.x >= size.width - cornerSize, point.y <= cornerSize { return .openSettings }
+            if point.x >= size.width - cornerSize, point.y >= size.height - cornerSize { return .toggleDoublePage }
+        }
+
+        let verticalInset: CGFloat = hotCorners ? cornerSize : 0
+        guard point.y >= verticalInset, point.y <= size.height - verticalInset else { return nil }
+
+        let sideWidth = sideWidth(for: size.width)
+        if point.x <= sideWidth {
+            return oneHanded ? (oneHandedReversed ? .previous : .next) : .previous
+        }
+        if point.x >= size.width - sideWidth {
+            return oneHanded ? (oneHandedReversed ? .previous : .next) : .next
+        }
+        return .toggleControls
+    }
+}
+
+private struct TapZoneRelay: UIViewRepresentable {
+    let oneHanded: Bool
+    let oneHandedReversed: Bool
+    let hotCorners: Bool
+    let zonesEnabled: Bool
+    let onPrevious: () -> Void
+    let onNext: () -> Void
+    let onToggleControls: () -> Void
+    let onExit: () -> Void
+    let onOpenSettings: () -> Void
+    let onToggleDoublePage: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> RelayView {
+        let view = RelayView()
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateUIView(_ view: RelayView, context: Context) {
+        context.coordinator.oneHanded = oneHanded
+        context.coordinator.oneHandedReversed = oneHandedReversed
+        context.coordinator.hotCorners = hotCorners
+        context.coordinator.zonesEnabled = zonesEnabled
+        context.coordinator.onPrevious = onPrevious
+        context.coordinator.onNext = onNext
+        context.coordinator.onToggleControls = onToggleControls
+        context.coordinator.onExit = onExit
+        context.coordinator.onOpenSettings = onOpenSettings
+        context.coordinator.onToggleDoublePage = onToggleDoublePage
+    }
+
+    /// Non intercetta mai l'hit-testing (vedi il commento su `PageTapZones` sopra): il suo
+    /// recognizer, agganciato alla window in `didMoveToWindow`, riceve comunque ogni tocco
+    /// perché la window è antenata di qualunque vista colpita dall'hit-test.
+    final class RelayView: UIView {
+        weak var coordinator: Coordinator?
+        private weak var recognizer: UITapGestureRecognizer?
+
+        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { nil }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if let recognizer {
+                recognizer.view?.removeGestureRecognizer(recognizer)
+                self.recognizer = nil
+            }
+            guard let window, let coordinator else { return }
+            coordinator.relayView = self
+            let tap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.handleTap(_:)))
+            tap.delegate = coordinator
+            tap.cancelsTouchesInView = false
+            window.addGestureRecognizer(tap)
+            recognizer = tap
+        }
+
+        deinit {
+            if let recognizer {
+                recognizer.view?.removeGestureRecognizer(recognizer)
+            }
+        }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        weak var relayView: UIView?
+        var oneHanded = false
+        var oneHandedReversed = false
+        var hotCorners = false
+        var zonesEnabled = true
+        var onPrevious: () -> Void = {}
+        var onNext: () -> Void = {}
+        var onToggleControls: () -> Void = {}
+        var onExit: () -> Void = {}
+        var onOpenSettings: () -> Void = {}
+        var onToggleDoublePage: () -> Void = {}
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool { true }
+
+        @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
+            guard let relayView, relayView.window != nil else { return }
+            let point = recognizer.location(in: relayView)
+            guard relayView.bounds.contains(point) else { return }
+            let action = PageTapZoneGeometry.action(
+                at: point,
+                in: relayView.bounds.size,
+                oneHanded: oneHanded,
+                oneHandedReversed: oneHandedReversed,
+                hotCorners: hotCorners,
+                zonesEnabled: zonesEnabled
+            )
+            switch action {
+            case .previous: onPrevious()
+            case .next: onNext()
+            case .toggleControls: onToggleControls()
+            case .exit: onExit()
+            case .openSettings: onOpenSettings()
+            case .toggleDoublePage: onToggleDoublePage()
+            case nil: break
+            }
+        }
+    }
+}
+#else
+/// Zone di tap/click per cambiare pagina: due terzi laterali (avanti/indietro) e una fascia
+/// centrale per mostrare/nascondere i controlli, oppure — in modalità "una mano" — l'intero
+/// lato sinistro/destro.
+///
+/// Qui restano tre `Color.clear` con `.contentShape` + `simultaneousGesture`: il problema di
+/// hit-testing per cui la versione iOS è stata riscritta (vedi sopra) nasce dalla competizione
+/// con `TabView(.page)`/`UIPageViewController` e con lo `UIScrollView` di zoom di
+/// `ZoomableImageView` — nessuno dei due esiste su macOS, dove il pager non è a scorrimento
+/// touch e lo zoom di `PageView` resta sul `MagnificationGesture` SwiftUI nella stessa
+/// gerarchia. Non c'è quindi lo stesso motivo per abbandonare l'approccio semplice.
 private struct PageTapZones: View {
     let oneHanded: Bool
     /// In modalità "una mano", scambia quale lato (sinistro/destro) avanza e quale
@@ -1221,6 +1493,7 @@ private struct PageTapZones: View {
             .accessibilityLabel(label)
     }
 }
+#endif
 
 /// Mostra una singola pagina, o due affiancate in modalità doppia pagina. In un ambiente
 /// con layoutDirection .rightToLeft, l'HStack viene automaticamente rispecchiato da SwiftUI:
@@ -1502,16 +1775,79 @@ private struct PageView: View {
 }
 
 #if os(iOS)
-/// Pinch-to-zoom e pan sulla pagina come in Foto: un vero `UIScrollView` con zoom nativo
-/// (`minimumZoomScale`/`maximumZoomScale` + `viewForZooming`), non gesture SwiftUI sovrapposte
-/// al pager. È lo `UIScrollView` stesso a "vincere" i tocchi a due dita quando c'è zoom da fare,
-/// con l'arbitraggio che UIKit già gestisce per questo identico caso — non un
-/// `UIGestureRecognizerDelegate` scritto a mano per riprodurlo (come si è dovuto fare per la
-/// luminosità a due dita, che non essendo zoom non può appoggiarsi allo stesso meccanismo).
+/// Pinch-to-zoom, pan da zoomata e doppio-tap sulla pagina come in Foto: un vero `UIScrollView`
+/// con zoom nativo, non gesture SwiftUI sovrapposte al pager.
 ///
-/// Disabilita lo scrolling quando non zoomata (`isScrollEnabled = false` a scale 1): a riposo
-/// non c'è nulla da scorrere, e uno scroll view "vuoto" può comunque intercettare tocchi che
-/// altrimenti spetterebbero al pager sottostante.
+/// Il piano iniziale era lasciare che fosse lo `UIScrollView` stesso a "vincere" i tocchi a due
+/// dita, appoggiandosi al riconoscimento simultaneo che UIKit gestisce già per gli scroll view
+/// annidati. Non basta: `PageTapZones` (le zone invisibili tap-per-girare-pagina) sta *sopra*
+/// il contenuto nello stesso ZStack e con `.contentShape(Rectangle())` copre l'intera pagina —
+/// per le regole di hit-testing di UIKit è lei a vincere il tocco iniziale, sempre, a
+/// prescindere da quale pager sta sotto. Verificato dal vivo con log su `touchesBegan`: zero
+/// tocchi arrivavano allo scroll view, nemmeno un tap singolo.
+///
+/// La soluzione è la stessa già usata per la luminosità a due dita (vedi `WindowPanRelayView`
+/// sotto): un recognizer agganciato alla `window`, non a questa view, con `hitTest` che
+/// restituisce sempre `nil`. La `window` è antenata di *qualunque* vista colpita dall'hit-test
+/// (`PageTapZones` compresa), quindi i suoi recognizer ricevono comunque tutti i tocchi — pinch
+/// e pan a due dita compresi — indipendentemente da chi "vince" l'hit-test per il tocco
+/// iniziale. Il pinch/pan native di `UIScrollView` (il suo `pinchGestureRecognizer` interno)
+/// resta inutilizzato per lo stesso motivo per cui era morto il `MagnificationGesture` SwiftUI
+/// originale: guida lo zoom "a mano" da un recognizer esterno, sullo stesso `UIScrollView`, che
+/// resta comunque il modo più semplice per avere gratis il rendering con pan/rubber-banding.
+///
+/// Più `PageView` possono essere vive contemporaneamente (il pager tiene in cache le pagine
+/// adiacenti per lo swipe fluido): ogni recognizer agisce solo se il punto del gesto cade nei
+/// bounds del proprio scroll view, così solo la pagina davvero visibile risponde.
+private final class ZoomingScrollView: UIScrollView {
+    weak var coordinator: ZoomableImageView.Coordinator?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        coordinator?.layOutImage(in: self)
+    }
+}
+
+/// Non intercetta mai l'hit-testing (vedi il commento su `ZoomableImageView` sopra): i suoi
+/// recognizer, agganciati alla window, ricevono comunque ogni tocco perché la window è
+/// antenata di qualunque vista colpita dall'hit-test.
+private final class ZoomGestureRelayView: UIView {
+    weak var coordinator: ZoomableImageView.Coordinator?
+    private var recognizers: [UIGestureRecognizer] = []
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { nil }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        for recognizer in recognizers {
+            recognizer.view?.removeGestureRecognizer(recognizer)
+        }
+        recognizers = []
+        guard let window, let coordinator else { return }
+
+        let pinch = UIPinchGestureRecognizer(target: coordinator, action: #selector(ZoomableImageView.Coordinator.handlePinch(_:)))
+        pinch.delegate = coordinator
+        let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(ZoomableImageView.Coordinator.handlePan(_:)))
+        pan.delegate = coordinator
+        pan.maximumNumberOfTouches = 1
+        let doubleTap = UITapGestureRecognizer(target: coordinator, action: #selector(ZoomableImageView.Coordinator.handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.delegate = coordinator
+
+        for recognizer in [pinch, pan, doubleTap] as [UIGestureRecognizer] {
+            recognizer.cancelsTouchesInView = false
+            window.addGestureRecognizer(recognizer)
+        }
+        recognizers = [pinch, pan, doubleTap]
+    }
+
+    deinit {
+        for recognizer in recognizers {
+            recognizer.view?.removeGestureRecognizer(recognizer)
+        }
+    }
+}
+
 private struct ZoomableImageView: UIViewRepresentable {
     let image: UIImage?
     let isZoomed: Binding<Bool>
@@ -1519,11 +1855,14 @@ private struct ZoomableImageView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(isZoomed: isZoomed) }
 
     func makeUIView(context: Context) -> UIScrollView {
-        let scrollView = UIScrollView()
+        let scrollView = ZoomingScrollView()
+        scrollView.coordinator = context.coordinator
         scrollView.delegate = context.coordinator
         scrollView.minimumZoomScale = 1
         scrollView.maximumZoomScale = 5
-        scrollView.isScrollEnabled = false
+        scrollView.isUserInteractionEnabled = false
+        scrollView.bounces = false
+        scrollView.bouncesZoom = false
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.showsVerticalScrollIndicator = false
         scrollView.backgroundColor = .clear
@@ -1531,13 +1870,13 @@ private struct ZoomableImageView: UIViewRepresentable {
 
         let imageView = UIImageView()
         imageView.contentMode = .scaleAspectFit
-        imageView.isUserInteractionEnabled = true
         scrollView.addSubview(imageView)
         context.coordinator.imageView = imageView
+        context.coordinator.scrollView = scrollView
 
-        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
-        doubleTap.numberOfTapsRequired = 2
-        scrollView.addGestureRecognizer(doubleTap)
+        let relay = ZoomGestureRelayView(frame: .zero)
+        relay.coordinator = context.coordinator
+        scrollView.addSubview(relay)
 
         return scrollView
     }
@@ -1554,9 +1893,11 @@ private struct ZoomableImageView: UIViewRepresentable {
         context.coordinator.layOutImage(in: scrollView)
     }
 
-    final class Coordinator: NSObject, UIScrollViewDelegate {
+    final class Coordinator: NSObject, UIScrollViewDelegate, UIGestureRecognizerDelegate {
         var isZoomed: Binding<Bool>
         weak var imageView: UIImageView?
+        weak var scrollView: UIScrollView?
+        private var pinchStartScale: CGFloat = 1
 
         init(isZoomed: Binding<Bool>) { self.isZoomed = isZoomed }
 
@@ -1591,17 +1932,68 @@ private struct ZoomableImageView: UIViewRepresentable {
         func scrollViewDidZoom(_ scrollView: UIScrollView) {
             if let imageView { center(imageView, in: scrollView) }
             let zoomed = scrollView.zoomScale > 1.01
-            scrollView.isScrollEnabled = zoomed
             if isZoomed.wrappedValue != zoomed { isZoomed.wrappedValue = zoomed }
         }
 
+        /// Riceve ogni tocco a prescindere da chi vince l'hit-test (vedi commento su
+        /// `ZoomableImageView`): deve quindi coesistere con tap zone, swipe pagina e con gli
+        /// altri recognizer di questo stesso relay.
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool { true }
+
+        private func location(of recognizer: UIGestureRecognizer, in scrollView: UIScrollView) -> CGPoint? {
+            guard scrollView.window != nil else { return nil }
+            let point = recognizer.location(in: scrollView)
+            return scrollView.bounds.contains(point) ? point : nil
+        }
+
+        @objc func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
+            guard let scrollView else { return }
+            switch recognizer.state {
+            case .began:
+                guard location(of: recognizer, in: scrollView) != nil else { return }
+                pinchStartScale = scrollView.zoomScale
+            case .changed:
+                guard location(of: recognizer, in: scrollView) != nil || scrollView.zoomScale > 1.01 else { return }
+                let target = min(max(pinchStartScale * recognizer.scale, scrollView.minimumZoomScale), scrollView.maximumZoomScale)
+                scrollView.zoomScale = target
+            default:
+                break
+            }
+        }
+
+        @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
+            // Solo pan-da-zoomata: a riposo (scala 1) il trascinamento a un dito resta allo
+            // swipe pagina/tap zone sottostanti, esattamente come nella versione SwiftUI
+            // originale (`including: scale > 1 ? .all : .subviews`).
+            guard let scrollView, scrollView.zoomScale > 1.01 else { return }
+            switch recognizer.state {
+            case .began:
+                guard location(of: recognizer, in: scrollView) != nil else { return }
+            case .changed:
+                let translation = recognizer.translation(in: scrollView)
+                var offset = scrollView.contentOffset
+                offset.x -= translation.x
+                offset.y -= translation.y
+                let maxX = max(scrollView.contentSize.width - scrollView.bounds.width, 0)
+                let maxY = max(scrollView.contentSize.height - scrollView.bounds.height, 0)
+                offset.x = min(max(offset.x, 0), maxX)
+                offset.y = min(max(offset.y, 0), maxY)
+                scrollView.contentOffset = offset
+                recognizer.setTranslation(.zero, in: scrollView)
+            default:
+                break
+            }
+        }
+
         @objc func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
-            guard let scrollView = recognizer.view as? UIScrollView else { return }
+            guard let scrollView, let point = location(of: recognizer, in: scrollView) else { return }
             if scrollView.zoomScale > 1.01 {
                 scrollView.setZoomScale(1, animated: true)
             } else {
                 let targetScale: CGFloat = 2.5
-                let point = recognizer.location(in: imageView)
                 let size = scrollView.bounds.size
                 let width = size.width / targetScale
                 let height = size.height / targetScale
