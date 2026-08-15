@@ -88,6 +88,15 @@ actor PageImageCache {
         accessOrder.removeAll()
     }
 
+    /// Da chiamare prima di ritentare una pagina la cui lettura è fallita: non toglie nulla se
+    /// non c'è nulla in cache (un fallimento non arriva mai a `store`), ma un secondo tentativo
+    /// dopo un fallimento parziale — es. l'archivio era temporaneamente irraggiungibile da
+    /// iCloud — non deve trovare un'eventuale voce stantia e restituirla senza riprovare.
+    func invalidate(_ index: Int) {
+        entries.removeValue(forKey: index)
+        accessOrder.removeAll { $0 == index }
+    }
+
     private func process(index: Int, options: ProcessingOptions) -> PlatformImage? {
         guard var loaded = try? provider.image(atPage: index) else { return nil }
         if options.autoCrop {
