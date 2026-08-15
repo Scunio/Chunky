@@ -930,6 +930,13 @@ private struct ReaderContentView: View {
                 let label = upperBound - currentPage > 1
                     ? "\(currentPage + 1)–\(upperBound) / \(provider.pageCount)"
                     : "\(currentPage + 1) / \(provider.pageCount)"
+                // Larghezza della colonna calcolata sul caso peggiore ("100–101 / 164"),
+                // non sull'etichetta corrente: fissa evita che lo slider salti a ogni
+                // pagina, ma deve crescere con le cifre e con la doppia pagina, altrimenti
+                // l'etichetta va a capo.
+                let digits = String(provider.pageCount).count
+                let labelChars = effectiveDoublePage ? digits * 3 + 4 : digits * 2 + 3
+                let labelWidth = max(70, CGFloat(labelChars) * 7 + 8)
                 HStack(spacing: 4) {
                     // Colonna a larghezza fissa: la larghezza del numero di pagina varia
                     // (es. "1 / 20" vs "10–11 / 20") e senza pre-allocare lo spazio lo
@@ -937,6 +944,8 @@ private struct ReaderContentView: View {
                     VStack(spacing: 0) {
                         Text(label)
                             .font(.caption.monospacedDigit())
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                         // Scambia quale metà (sopra/sotto) avanza/retrocede in modalità una mano.
                         Button(action: { isOneHandedZonesReversed.toggle() }) {
                             Image(systemName: "chevron.right")
@@ -945,7 +954,7 @@ private struct ReaderContentView: View {
                                 .frame(width: 20, height: 24)
                         }
                     }
-                    .frame(width: 70)
+                    .frame(width: labelWidth)
                     pageSlider(provider: provider)
                     if isDoublePageAllowed {
                         // Cicla singola → doppia → automatica pagina.
