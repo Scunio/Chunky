@@ -540,7 +540,7 @@ private struct ReaderContentView: View {
     /// scroll view, che continua a riconoscere il pan dal proprio recognizer.
     private func pageContent(provider: ComicPageProvider, start: Int) -> some View {
         ZStack {
-            PageSpreadView(provider: provider, leadingIndex: start, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache)
+            PageSpreadView(provider: provider, leadingIndex: start, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache, isActive: start == currentPage)
                 .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
 
             tapZonesOrControlsToggle(provider: provider)

@@ -437,6 +437,15 @@ struct PageSpreadView: View {
     /// `UIHostingController` in `PageTurnPager` evita già la ricomparsa).
     var imageCache: PageImageCache?
     #if os(iOS)
+    /// Vero solo per lo spread davvero mostrato: il pager tiene vivi anche 1-2 spread vicini
+    /// per lo swipe, e ognuno monta il proprio `ZoomableImageView`/`SpreadZoomableImageView`
+    /// con gesture recognizer agganciati alla `window` (vedi il commento lì). Senza questo
+    /// flag, il pinch/doppio-tap su QUALUNQUE spread arriva anche a quelli fuori schermo —
+    /// verificato dal vivo con log di debug: un pinch su una pagina faceva scattare `.began`
+    /// su tre `Coordinator` diversi contemporaneamente, e uno spread pre-caricato poteva
+    /// restare con uno zoom "fantasma" che poi appariva ritagliato non appena diventava quello
+    /// visibile.
+    var isActive: Bool = true
     @Environment(\.layoutDirection) private var layoutDirection
     #endif
 
@@ -471,13 +480,14 @@ struct PageSpreadView: View {
                     rightToLeft: layoutDirection == .rightToLeft,
                     height: proxy.size.height,
                     isZoomed: isZoomed,
-                    imageCache: imageCache
+                    imageCache: imageCache,
+                    isActive: isActive
                 )
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
             } else {
                 PageView(
                     provider: provider, index: leadingIndex, isDoublePage: pagination.pageStep > 1,
-                    isZoomed: isZoomed, imageCache: imageCache, pairedHeight: nil
+                    isZoomed: isZoomed, imageCache: imageCache, pairedHeight: nil, isActive: isActive
                 )
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
             }
@@ -513,6 +523,7 @@ private struct SpreadPairView: View {
     let height: CGFloat
     let isZoomed: Binding<Bool>
     var imageCache: PageImageCache?
+    var isActive: Bool = true
 
     @ObservedObject private var theme = AppTheme.shared
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
@@ -529,7 +540,7 @@ private struct SpreadPairView: View {
                 // L'ordine visivo (quale pagina sta a sinistra) segue il verso di lettura: nei
                 // manga (RTL) l'indice più basso sta a destra.
                 let ordered = rightToLeft ? [trailingImage, leadingImage] : [leadingImage, trailingImage]
-                SpreadZoomableImageView(images: ordered, isZoomed: isZoomed)
+                SpreadZoomableImageView(images: ordered, isZoomed: isZoomed, isActive: isActive)
                     .frame(height: height)
                     .overlay(tintOverlay)
             } else {
@@ -633,6 +644,10 @@ private struct PageView: View {
     /// un'altra pagina "toccante" (vedi `PageSpreadView`): in quel caso la larghezza segue le
     /// proporzioni dell'immagine invece di riempire una metà fissa del riquadro.
     var pairedHeight: CGFloat?
+    /// Solo iOS: vero solo per la pagina davvero mostrata, non per le vicine tenute vive dal
+    /// pager per lo swipe — vedi il commento su `PageSpreadView.isActive`. Ignorato su macOS,
+    /// dove non esiste questo pre-caricamento e lo zoom resta su gesture SwiftUI ordinarie.
+    var isActive: Bool = true
     @ObservedObject private var theme = AppTheme.shared
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
     @AppStorage("upscalingEnabled") private var isUpscalingEnabled = false
@@ -683,7 +698,7 @@ private struct PageView: View {
                             // sistema di uno scroll view zoomabile, non gesture aggiunte sopra) partecipa
                             // allo stesso protocollo di coordinamento gesture di UIKit invece di dover
                             // reinventarlo a mano.
-                            ZoomableImageView(image: image, isZoomed: isZoomed)
+                            ZoomableImageView(image: image, isZoomed: isZoomed, isActive: isActive)
                                 .frame(width: proxy.size.width, height: proxy.size.height)
                                 .overlay(tintOverlay)
                             #else
@@ -736,7 +751,7 @@ private struct PageView: View {
                 // quindi non è legato a `ZoomableImageView`: è un problema preesistente nel
                 // caricamento/identità delle viste di `pairedContent` in doppia pagina, non
                 // ancora diagnosticato.
-                ZoomableImageView(image: image, isZoomed: isZoomed)
+                ZoomableImageView(image: image, isZoomed: isZoomed, isActive: isActive)
                     .frame(height: height)
                     .overlay(tintOverlay)
                 #else
@@ -1021,6 +1036,7 @@ private final class SpreadZoomGestureRelayView: UIView {
 private struct ZoomableImageView: UIViewRepresentable {
     let image: UIImage?
     let isZoomed: Binding<Bool>
+    var isActive: Bool = true
 
     func makeCoordinator() -> Coordinator { Coordinator(isZoomed: isZoomed) }
 
@@ -1053,6 +1069,7 @@ private struct ZoomableImageView: UIViewRepresentable {
 
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
         context.coordinator.isZoomed = isZoomed
+        context.coordinator.isActive = isActive
         guard let imageView = context.coordinator.imageView else { return }
         if imageView.image !== image {
             imageView.image = image
@@ -1086,6 +1103,11 @@ private struct ZoomableImageView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UIScrollViewDelegate, UIGestureRecognizerDelegate {
         var isZoomed: Binding<Bool>
+        /// Vedi `ZoomableImageView.isActive` / `PageSpreadView.isActive`: senza questo, pinch,
+        /// pan e doppio-tap agiscono anche sulla pagina vicina che il pager tiene viva per lo
+        /// swipe, non solo su quella davvero mostrata — verificato dal vivo, tre `Coordinator`
+        /// diversi ricevevano lo stesso pinch.
+        var isActive = true
         weak var imageView: UIImageView?
         weak var scrollView: UIScrollView?
         private var pinchStartScale: CGFloat = 1
@@ -1141,7 +1163,7 @@ private struct ZoomableImageView: UIViewRepresentable {
         }
 
         @objc func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
-            guard let scrollView else { return }
+            guard isActive, let scrollView else { return }
             switch recognizer.state {
             case .began:
                 guard location(of: recognizer, in: scrollView) != nil else { return }
@@ -1159,7 +1181,7 @@ private struct ZoomableImageView: UIViewRepresentable {
             // Solo pan-da-zoomata: a riposo (scala 1) il trascinamento a un dito resta allo
             // swipe pagina/tap zone sottostanti, esattamente come nella versione SwiftUI
             // originale (`including: scale > 1 ? .all : .subviews`).
-            guard let scrollView, scrollView.zoomScale > 1.01 else { return }
+            guard isActive, let scrollView, scrollView.zoomScale > 1.01 else { return }
             switch recognizer.state {
             case .began:
                 guard location(of: recognizer, in: scrollView) != nil else { return }
@@ -1180,7 +1202,7 @@ private struct ZoomableImageView: UIViewRepresentable {
         }
 
         @objc func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
-            guard let scrollView, let point = location(of: recognizer, in: scrollView) else { return }
+            guard isActive, let scrollView, let point = location(of: recognizer, in: scrollView) else { return }
             if scrollView.zoomScale > 1.01 {
                 scrollView.setZoomScale(1, animated: true)
             } else {
@@ -1203,6 +1225,7 @@ private struct SpreadZoomableImageView: UIViewRepresentable {
     /// Esattamente due immagini, già nell'ordine visivo (sinistra, destra).
     let images: [UIImage]
     let isZoomed: Binding<Bool>
+    var isActive: Bool = true
 
     func makeCoordinator() -> Coordinator { Coordinator(isZoomed: isZoomed) }
 
@@ -1242,6 +1265,7 @@ private struct SpreadZoomableImageView: UIViewRepresentable {
 
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
         context.coordinator.isZoomed = isZoomed
+        context.coordinator.isActive = isActive
         context.coordinator.images = images
         context.coordinator.layOutImages(in: scrollView)
     }
@@ -1259,6 +1283,9 @@ private struct SpreadZoomableImageView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UIScrollViewDelegate, UIGestureRecognizerDelegate {
         var isZoomed: Binding<Bool>
+        /// Vedi `ZoomableImageView.Coordinator.isActive`: stesso problema, stessa soluzione,
+        /// per lo spread a due pagine.
+        var isActive = true
         var images: [UIImage] = []
         weak var container: UIView?
         weak var leadingImageView: UIImageView?
@@ -1324,7 +1351,7 @@ private struct SpreadZoomableImageView: UIViewRepresentable {
         private var pinchStartScale: CGFloat = 1
 
         @objc func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
-            guard let scrollView else { return }
+            guard isActive, let scrollView else { return }
             switch recognizer.state {
             case .began:
                 guard location(of: recognizer, in: scrollView) != nil else { return }
@@ -1340,6 +1367,7 @@ private struct SpreadZoomableImageView: UIViewRepresentable {
 
         @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
             guard
+                isActive,
                 let scrollView,
                 scrollView.zoomScale > 1.01
             else { return }
@@ -1364,6 +1392,7 @@ private struct SpreadZoomableImageView: UIViewRepresentable {
 
         @objc func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
             guard
+                isActive,
                 let scrollView,
                 let point = location(of: recognizer, in: scrollView)
             else { return }
