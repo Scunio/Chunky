@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// Card di ricerca testuale, sovrapposta alla pagina già visibile come `PanelSelectionView` e
-/// `pageJumpCard`: la pagina resta sotto, così si vede subito il risultato del salto senza
-/// uscire e rientrare da una schermata a parte.
+/// Text search card, overlaid on the already-visible page like `PanelSelectionView` and
+/// `pageJumpCard`: the page stays underneath, so the result of the jump is visible right away
+/// without leaving and re-entering a separate screen.
 ///
-/// I risultati compaiono man mano che `ComicTextIndex` scansiona: la riga di avanzamento in
-/// basso esiste perché, altrimenti, "nessun risultato" durante la scansione sarebbe
-/// indistinguibile da "questa parola non c'è".
+/// Results appear as `ComicTextIndex` scans: the progress line at the bottom exists because,
+/// otherwise, "no results" during the scan would be indistinguishable from "this word isn't
+/// there".
 struct ReaderFindView: View {
     @ObservedObject var index: ComicTextIndex
     @Binding var query: String
@@ -15,8 +15,8 @@ struct ReaderFindView: View {
 
     @FocusState private var isFieldFocused: Bool
 
-    /// Oltre questo numero l'elenco smette di essere consultabile e inizia solo a costare:
-    /// chi ha così tanti riscontri deve restringere la ricerca, non scorrere mille righe.
+    /// Beyond this number the list stops being usable and starts just costing: anyone with
+    /// this many matches should narrow the search, not scroll through a thousand lines.
     private static let maximumResults = 200
 
     private var matches: [ComicTextMatch] {
@@ -35,10 +35,10 @@ struct ReaderFindView: View {
         .background(Color.black.opacity(0.9))
         .cornerRadius(16)
         .padding()
-        // La card ha fondo nero ma non sta dentro l'header: senza forzare lo schema, i colori
-        // semantici (`.secondary` dei numeri di pagina e dei messaggi) restano quelli dello
-        // schema chiaro, cioè grigio scuro su nero — illeggibili. Stessa correzione che
-        // `ReaderContentView.header` applica al suo materiale.
+        // The card has a black background but isn't inside the header: without forcing the
+        // scheme, the semantic colors (`.secondary` for page numbers and messages) stay those
+        // of the light scheme, i.e. dark gray on black — unreadable. Same fix that
+        // `ReaderContentView.header` applies to its own material.
         .environment(\.colorScheme, .dark)
         .onAppear { isFieldFocused = true }
     }
@@ -137,67 +137,119 @@ struct ReaderFindView: View {
     }
 }
 
-/// Evidenzia sulla pagina visibile le righe che corrispondono alla ricerca.
+/// Highlights on the visible pages the lines that match the search — one page, or the two of a
+/// spread side by side, already in the visual order the reading direction implies.
 ///
-/// Carica l'immagine solo per conoscerne le dimensioni in pixel: senza quelle non si può
-/// convertire un rettangolo normalizzato in coordinate schermo, perché la geometria dipende
-/// dalle proporzioni della pagina. Vale la stessa avvertenza di `PanelSelectionView`: si
-/// riferisce alla pagina originale, quindi chi la mostra deve escludere i casi in cui a schermo
-/// c'è qualcosa di diverso (doppia pagina, ritaglio automatico).
+/// Loads each image only to know its pixel dimensions (and, with auto-crop on, its content
+/// rectangle): without those, a normalized rectangle can't be converted into screen coordinates,
+/// because the geometry depends on the page's proportions.
 struct ReaderFindHighlightOverlay: View {
-    /// Osservato qui, non a monte: i rettangoli cambiano man mano che la scansione procede, e
-    /// un indice tenuto in un `@State` del lettore non ne propagherebbe gli aggiornamenti.
+    /// Observed here, not upstream: the rectangles change as the scan proceeds, and an index
+    /// kept in a `@State` of the reader wouldn't propagate its updates.
     @ObservedObject var index: ComicTextIndex
     let query: String
-    let pageIndex: Int
+    /// The pages currently on screen, already in left-to-right visual order: one for a single
+    /// page, two for a spread.
+    let displayedPages: [Int]
     let provider: ComicPageProvider
 
-    @State private var imageSize: CGSize = .zero
+    @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
 
-    private var boxes: [CGRect] { index.highlights(for: query, onPage: pageIndex) }
+    private struct PageGeometry {
+        let imageSize: CGSize
+        let cropRect: CGRect?
+    }
+
+    @State private var geometries: [Int: PageGeometry] = [:]
+
+    /// Width of a given page in the spread when it's `height` tall: the same formula as
+    /// `SpreadZoomableImageView.Coordinator.layOutImages`/`PageView.pairedContent`, so the
+    /// highlight boxes line up with the page actually drawn.
+    private func slotWidth(for page: Int, height: CGFloat) -> CGFloat {
+        guard let geometry = geometries[page] else { return 0 }
+        let size = displaySize(for: geometry)
+        guard size.height > 0 else { return 0 }
+        return height * size.width / size.height
+    }
+
+    private func displaySize(for geometry: PageGeometry) -> CGSize {
+        guard isAutoCropEnabled, let cropRect = geometry.cropRect else { return geometry.imageSize }
+        return cropRect.size
+    }
 
     var body: some View {
         GeometryReader { proxy in
+            let slots = layoutSlots(in: proxy.size)
             ZStack(alignment: .topLeading) {
-                if imageSize.width > 0 {
-                    ForEach(Array(boxes.enumerated()), id: \.offset) { _, box in
-                        let rect = PageTextRecognizer.screenRect(
-                            forNormalized: box,
-                            imageSize: imageSize,
-                            displaySize: proxy.size
-                        )
-                        // Riempimento giallo *più* bordo scuro: le pagine di un fumetto sono
-                        // tanto bianche quanto nere, e da sola nessuna delle due cose basta —
-                        // il giallo traslucido sparisce su carta chiara, il bordo scuro sparisce
-                        // su una vignetta notturna. Insieme si vedono su qualsiasi sfondo.
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color.yellow.opacity(0.45))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 3)
-                                    .strokeBorder(Color.orange, lineWidth: 2)
-                            )
-                            .shadow(color: .black.opacity(0.35), radius: 2, x: 0, y: 1)
-                            .frame(width: rect.width, height: rect.height)
-                            .offset(x: rect.minX, y: rect.minY)
-                    }
+                ForEach(slots, id: \.page) { slot in
+                    highlights(onPage: slot.page, in: slot.frame)
                 }
             }
         }
         .allowsHitTesting(false)
-        .task(id: pageIndex) { await loadImageSize() }
+        .task(id: displayedPages) { await loadGeometries() }
     }
 
-    private func loadImageSize() async {
-        let page = pageIndex
-        let size: CGSize = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                guard let cgImage = (try? provider.image(atPage: page))?.cgImageRepresentation else {
-                    continuation.resume(returning: .zero)
-                    return
+    private struct Slot { let page: Int; let frame: CGRect }
+
+    /// Splits the available space between the displayed pages, each sized in proportion to its
+    /// own dimensions (or its content rectangle, with auto-crop on) and as tall as the whole
+    /// box — then centers the pair, exactly like the reader does.
+    private func layoutSlots(in size: CGSize) -> [Slot] {
+        guard size.height > 0, !displayedPages.isEmpty else { return [] }
+        let widths = displayedPages.map { slotWidth(for: $0, height: size.height) }
+        guard widths.allSatisfy({ $0 > 0 }) else { return [] }
+
+        let totalWidth = widths.reduce(0, +)
+        var originX = max((size.width - totalWidth) / 2, 0)
+        var slots: [Slot] = []
+        for (page, width) in zip(displayedPages, widths) {
+            slots.append(Slot(page: page, frame: CGRect(x: originX, y: 0, width: width, height: size.height)))
+            originX += width
+        }
+        return slots
+    }
+
+    @ViewBuilder
+    private func highlights(onPage page: Int, in frame: CGRect) -> some View {
+        if let geometry = geometries[page] {
+            let cropRect = isAutoCropEnabled ? geometry.cropRect : nil
+            ForEach(Array(index.highlights(for: query, onPage: page).enumerated()), id: \.offset) { _, box in
+                if let rect = PageTextRecognizer.screenRect(
+                    forNormalized: box, imageSize: geometry.imageSize, cropRect: cropRect, displaySize: frame.size
+                ) {
+                    // Yellow fill *plus* dark border: comic pages are as often white as black,
+                    // and neither alone is enough — the translucent yellow disappears on light
+                    // paper, the dark border disappears on a night-time panel. Together they
+                    // show up on any background.
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.yellow.opacity(0.45))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3)
+                                .strokeBorder(Color.orange, lineWidth: 2)
+                        )
+                        .shadow(color: .black.opacity(0.35), radius: 2, x: 0, y: 1)
+                        .frame(width: rect.width, height: rect.height)
+                        .offset(x: frame.minX + rect.minX, y: frame.minY + rect.minY)
                 }
-                continuation.resume(returning: CGSize(width: cgImage.width, height: cgImage.height))
             }
         }
-        imageSize = size
+    }
+
+    private func loadGeometries() async {
+        let pages = displayedPages
+        let loaded: [Int: PageGeometry] = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                var result: [Int: PageGeometry] = [:]
+                for page in pages {
+                    guard let image = try? provider.image(atPage: page),
+                          let cgImage = image.cgImageRepresentation else { continue }
+                    let size = CGSize(width: cgImage.width, height: cgImage.height)
+                    result[page] = PageGeometry(imageSize: size, cropRect: ImageProcessing.contentCropRect(image))
+                }
+                continuation.resume(returning: result)
+            }
+        }
+        geometries = loaded
     }
 }

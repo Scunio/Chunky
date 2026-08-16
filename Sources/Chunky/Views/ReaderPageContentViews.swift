@@ -3,62 +3,57 @@ import SwiftUI
 import UIKit
 #endif
 
-// Contenuto di una pagina o di uno spread: quale immagine mostrare, come caricarla e come
-// dimensionarla. Estratto da `ReaderSupportViews.swift`; lo strato di zoom sta in
-// `ReaderZoomViews.swift`, il pager in `ReaderPagerViews.swift`.
+// Content of a page or spread: which image to show, how to load it and how to size it.
+// Extracted from `ReaderSupportViews.swift`; the zoom layer lives in
+// `ReaderZoomViews.swift`, the pager in `ReaderPagerViews.swift`.
 
-/// Mostra una singola pagina, o due affiancate in modalità doppia pagina. In un ambiente
-/// con layoutDirection .rightToLeft, l'HStack viene automaticamente rispecchiato da SwiftUI:
-/// la pagina con indice più basso resta quindi a destra, come da convenzione manga.
+/// Shows a single page, or two side by side in double-page mode. In an environment with
+/// layoutDirection .rightToLeft, the HStack is automatically mirrored by SwiftUI: the page
+/// with the lower index therefore ends up on the right, as per manga convention.
 struct PageSpreadView: View {
     let provider: ComicPageProvider
     let leadingIndex: Int
-    /// Con la copertina "da sola" attiva, non tutti gli spread hanno la stessa larghezza (la
-    /// copertina è 1 pagina, il resto 2), quindi serve la paginazione intera per sapere se
-    /// *questo* spread specifico ne mostra una o due.
+    /// With "cover alone" enabled, not every spread has the same width (the cover is 1
+    /// page, the rest are 2), so the full pagination is needed to know whether *this*
+    /// particular spread shows one page or two.
     let pagination: ReaderPagination
     let isZoomed: Binding<Bool>
-    /// Solo macOS: quando presente, le `PageView` la consultano invece di ridecodificare da
-    /// disco a ogni ricomparsa. `nil` su iOS, dove il problema non esiste (la cache di
-    /// `UIHostingController` in `PageTurnPager` evita già la ricomparsa).
+    /// macOS only: when present, `PageView`s consult it instead of re-decoding from disk on
+    /// every reappearance. `nil` on iOS, where the problem doesn't exist (the
+    /// `UIHostingController` cache in `PageTurnPager` already avoids the reappearance).
     var imageCache: PageImageCache?
     #if os(iOS)
-    /// Vero solo per lo spread davvero mostrato: il pager tiene vivi anche 1-2 spread vicini
-    /// per lo swipe, e ognuno monta il proprio `ZoomableImageView`/`SpreadZoomableImageView`
-    /// con gesture recognizer agganciati alla `window` (vedi il commento lì). Senza questo
-    /// flag, il pinch/doppio-tap su QUALUNQUE spread arriva anche a quelli fuori schermo —
-    /// verificato dal vivo con log di debug: un pinch su una pagina faceva scattare `.began`
-    /// su tre `Coordinator` diversi contemporaneamente, e uno spread pre-caricato poteva
-    /// restare con uno zoom "fantasma" che poi appariva ritagliato non appena diventava quello
-    /// visibile.
+    /// True only for the spread that's actually shown: the pager also keeps 1-2 nearby
+    /// spreads alive for swiping, and each one mounts its own
+    /// `ZoomableImageView`/`SpreadZoomableImageView` with gesture recognizers attached to the
+    /// `window` (see the comment there). Without this flag, pinch/double-tap on ANY spread
+    /// also reaches the ones off-screen — verified live with debug logs: a pinch on one page
+    /// triggered `.began` on three different `Coordinator`s at the same time, and a
+    /// preloaded spread could end up with a "ghost" zoom that then appeared cropped as soon
+    /// as it became the visible one.
     var isActive: Bool = true
     @Environment(\.layoutDirection) private var layoutDirection
     #endif
 
-    /// Vero solo se questo specifico spread contiene due pagine: con `coverIsAlone`, lo
-    /// spread che inizia alla copertina (indice 0) resta largo 1 anche a passo 2.
-    private var showsSecondPage: Bool {
-        guard pagination.pageStep > 1, leadingIndex + 1 < pagination.pageCount else { return false }
-        let starts = pagination.spreadStarts
-        guard let spreadIndex = starts.firstIndex(of: leadingIndex) else { return pagination.pageStep > 1 }
-        let nextStart = spreadIndex + 1 < starts.count ? starts[spreadIndex + 1] : pagination.pageCount
-        return nextStart - leadingIndex >= 2
-    }
+    /// True only if this specific spread contains two pages: with `coverIsAlone`, the
+    /// spread that starts at the cover (index 0) stays 1 wide even at step 2.
+    private var showsSecondPage: Bool { pagination.showsSecondPage(from: leadingIndex) }
 
     var body: some View {
-        // Il GeometryReader qui (non più dentro ogni PageView) è ciò che permette alle due
-        // pagine di uno spread di toccarsi: passando un'altezza fissa e lasciando che la
-        // larghezza segua le proporzioni dell'immagine, l'HStack le dimensiona in base al
-        // loro contenuto invece di dividere lo spazio a metà a prescindere — che è quello che
-        // causava la fascia nera tra le pagine (ciascuna centrata nella propria metà, con
-        // margini indipendenti anziché uniti).
+        // The GeometryReader here (no longer inside each PageView) is what lets the two
+        // pages of a spread touch each other: by passing a fixed height and letting the
+        // width follow the image's proportions, the HStack sizes them based on their own
+        // content instead of always splitting the space in half — which is what caused the
+        // black band between pages (each centered within its own half, with independent
+        // margins instead of joined ones).
         GeometryReader { proxy in
             #if os(iOS)
-            // Su iOS, con due pagine, un unico contenitore di zoom per l'intera coppia (come fa
-            // Aidoku, `ReaderDoublePageViewController`) invece di due `PageView` indipendenti:
-            // permette di ingrandire un dettaglio a cavallo delle due pagine, cosa impossibile
-            // con due scroll view separate — ed è anche il motivo per cui, coi due indipendenti,
-            // servirebbe indovinare quale delle due il pinch dovrebbe "vincere".
+            // On iOS, with two pages, a single zoom container for the whole pair (as Aidoku
+            // does with `ReaderDoublePageViewController`) instead of two independent
+            // `PageView`s: this allows zooming into a detail that straddles the two pages,
+            // which is impossible with two separate scroll views — and it's also why, with
+            // two independent ones, you'd need to guess which of the two the pinch should
+            // "win".
             if showsSecondPage {
                 SpreadPairView(
                     provider: provider,
@@ -98,10 +93,10 @@ struct PageSpreadView: View {
 }
 
 #if os(iOS)
-/// Le due pagine di uno spread, caricate insieme e mostrate in un unico `UIScrollView`
-/// zoomabile (vedi `SpreadZoomableImageView`) invece di due indipendenti: permette il pinch
-/// su un dettaglio a cavallo del confine tra le pagine, e non serve decidere quale delle due
-/// "vince" il gesto.
+/// The two pages of a spread, loaded together and shown in a single zoomable `UIScrollView`
+/// (see `SpreadZoomableImageView`) instead of two independent ones: this allows pinching a
+/// detail that straddles the boundary between the pages, and there's no need to decide
+/// which of the two "wins" the gesture.
 private struct SpreadPairView: View {
     let provider: ComicPageProvider
     let leadingIndex: Int
@@ -123,14 +118,14 @@ private struct SpreadPairView: View {
     var body: some View {
         Group {
             if let leadingImage, let trailingImage {
-                // L'ordine visivo (quale pagina sta a sinistra) segue il verso di lettura: nei
-                // manga (RTL) l'indice più basso sta a destra.
+                // The visual order (which page is on the left) follows the reading direction:
+                // in manga (RTL) the lower index is on the right.
                 let ordered = rightToLeft ? [trailingImage, leadingImage] : [leadingImage, trailingImage]
                 SpreadZoomableImageView(images: ordered, isZoomed: isZoomed, isActive: isActive)
                     .frame(height: height)
                     .overlay(tintOverlay)
             } else {
-                // Stima 2:3 a testa finché non si conoscono le proporzioni reali.
+                // 2:3 estimate for each until the real proportions are known.
                 HStack(spacing: 0) {
                     pageSlot(index: leadingIndex, failed: leadingFailed) {
                         loadPage(index: leadingIndex) { leadingImage = $0 } onFailure: { leadingFailed = true }
@@ -149,11 +144,11 @@ private struct SpreadPairView: View {
         }
     }
 
-    /// Spinner finché si carica, bottone "Riprova" se la lettura è fallita — invece di uno
-    /// spinner bloccato per sempre e nessuna traccia visibile del problema (comportamento
-    /// originale, verificato dal vivo: bastava un fallimento di lettura, anche transitorio,
-    /// per bloccare la pagina indefinitamente). Vedi `ReaderDoublePageViewController` di
-    /// Aidoku, che ha lo stesso bottone per lo stesso motivo.
+    /// Spinner while loading, "Retry" button if the read failed — instead of a spinner
+    /// stuck forever with no visible trace of the problem (original behavior, verified
+    /// live: a single read failure, even a transient one, was enough to block the page
+    /// indefinitely). See Aidoku's `ReaderDoublePageViewController`, which has the same
+    /// button for the same reason.
     @ViewBuilder
     private func pageSlot(index: Int, failed: Bool, retry: @escaping () -> Void) -> some View {
         if failed {
@@ -175,8 +170,8 @@ private struct SpreadPairView: View {
         let autoCrop = isAutoCropEnabled
         let upscale = isUpscalingEnabled
         let autoTintContrast = isAutoTintContrastEnabled
-        // Larghezza target stimata 2:3 solo per l'eventuale upscaling — non influisce sul
-        // layout, che deriva comunque dalle proporzioni reali una volta caricata l'immagine.
+        // Target width estimated 2:3, only for any upscaling — it doesn't affect the
+        // layout, which derives from the real proportions anyway once the image is loaded.
         let targetSize = CGSize(width: height * 2 / 3, height: height)
 
         if let imageCache {
@@ -226,13 +221,14 @@ private struct PageView: View {
     let isDoublePage: Bool
     let isZoomed: Binding<Bool>
     var imageCache: PageImageCache?
-    /// Non-nil solo per una pagina che fa davvero parte di uno spread a due, affiancata a
-    /// un'altra pagina "toccante" (vedi `PageSpreadView`): in quel caso la larghezza segue le
-    /// proporzioni dell'immagine invece di riempire una metà fissa del riquadro.
+    /// Non-nil only for a page that's really part of a two-page spread, side by side with
+    /// another "touching" page (see `PageSpreadView`): in that case the width follows the
+    /// image's proportions instead of filling a fixed half of the frame.
     var pairedHeight: CGFloat?
-    /// Solo iOS: vero solo per la pagina davvero mostrata, non per le vicine tenute vive dal
-    /// pager per lo swipe — vedi il commento su `PageSpreadView.isActive`. Ignorato su macOS,
-    /// dove non esiste questo pre-caricamento e lo zoom resta su gesture SwiftUI ordinarie.
+    /// iOS only: true only for the page that's actually shown, not for the nearby ones kept
+    /// alive by the pager for swiping — see the comment on `PageSpreadView.isActive`.
+    /// Ignored on macOS, where this preloading doesn't exist and zoom stays on ordinary
+    /// SwiftUI gestures.
     var isActive: Bool = true
     @ObservedObject private var theme = AppTheme.shared
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
@@ -247,13 +243,14 @@ private struct PageView: View {
     @State private var lastScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
-    /// Sfoca leggermente l'immagine in proporzione alla velocità del trascinamento mentre si fa
-    /// pan su una pagina ingrandita — non un filtro estetico permanente, sparisce a fine gesto.
+    /// Slightly blurs the image in proportion to the drag speed while panning on a zoomed
+    /// page — not a permanent aesthetic filter, it disappears at the end of the gesture.
     @State private var motionBlurRadius: CGFloat = 0
 
-    /// "Automatico"/"Adatta pagina" mostrano l'intera pagina (comportamento storico, invariato).
-    /// "Adatta larghezza" è l'unico caso che cambia layout: scala alla larghezza disponibile e,
-    /// se il risultato eccede l'altezza dello schermo, rende la pagina scorrevole verticalmente.
+    /// "Automatic"/"Fit page" show the whole page (historical behavior, unchanged).
+    /// "Fit width" is the only case that changes the layout: it scales to the available
+    /// width and, if the result exceeds the screen's height, makes the page scrollable
+    /// vertically.
     private var effectiveZoomMode: PageZoomMode {
         isDoublePage ? doublePageZoomMode : singlePageZoomMode
     }
@@ -276,14 +273,14 @@ private struct PageView: View {
                             .frame(width: proxy.size.width, height: proxy.size.height)
                         } else {
                             #if os(iOS)
-                            // `MagnificationGesture`/`DragGesture` SwiftUI, sovrapposti al pager a
-                            // scorrimento (`TabView(.page)`, backed da `UIPageViewController`), perdono
-                            // l'arbitraggio dei tocchi a due dita col suo scroll view interno — pinch e
-                            // pan restano morti (verificato dal vivo su device). Un vero `UIScrollView`
-                            // con zoom nativo (come fa l'app Foto: pinch/pan sono il comportamento di
-                            // sistema di uno scroll view zoomabile, non gesture aggiunte sopra) partecipa
-                            // allo stesso protocollo di coordinamento gesture di UIKit invece di dover
-                            // reinventarlo a mano.
+                            // SwiftUI's `MagnificationGesture`/`DragGesture`, layered on top of the
+                            // scrolling pager (`TabView(.page)`, backed by `UIPageViewController`),
+                            // lose the two-finger touch arbitration against its internal scroll
+                            // view — pinch and pan stay dead (verified live on device). A real
+                            // `UIScrollView` with native zoom (as the Photos app does: pinch/pan are
+                            // the system behavior of a zoomable scroll view, not gestures bolted on
+                            // top) takes part in UIKit's own gesture coordination protocol instead of
+                            // having to reinvent it by hand.
                             ZoomableImageView(image: image, isZoomed: isZoomed, isActive: isActive)
                                 .frame(width: proxy.size.width, height: proxy.size.height)
                                 .overlay(tintOverlay)
@@ -297,9 +294,9 @@ private struct PageView: View {
                                 .blur(radius: motionBlurRadius)
                                 .overlay(tintOverlay)
                                 .gesture(magnifyGesture)
-                                // Attivo solo da zoomata: a scale 1 non deve intercettare il drag,
-                                // altrimenti ruba il tocco allo swipe-pagina sottostante anche se poi
-                                // non fa nulla (guard scale > 1).
+                                // Active only when zoomed in: at scale 1 it must not intercept the
+                                // drag, otherwise it steals the touch from the page swipe underneath
+                                // even though it then does nothing (guard scale > 1).
                                 .gesture(dragGesture, including: scale > 1 ? .all : .subviews)
                                 .onTapGesture(count: 2) { toggleZoom() }
                             #endif
@@ -315,28 +312,28 @@ private struct PageView: View {
         }
     }
 
-    /// Percorso per una pagina che tocca l'altra metà dello spread: altezza fissa, larghezza
-    /// derivata dalle proporzioni dell'immagine (nessun `GeometryReader` a imporre una metà
-    /// fissa, che è la causa dello spazio nero tra le pagine). Non copre "Adatta larghezza",
-    /// che resta sullo scroll verticale per-pagina: le due nozioni non si combinano bene
-    /// (l'una deriva l'altezza dalla larghezza, l'altra il contrario).
+    /// Path for a page that touches the other half of the spread: fixed height, width
+    /// derived from the image's proportions (no `GeometryReader` imposing a fixed half,
+    /// which is the cause of the black gap between pages). Doesn't cover "Fit width", which
+    /// stays on the per-page vertical scroll: the two notions don't combine well (one
+    /// derives height from width, the other the opposite).
     @ViewBuilder
     private func pairedContent(height: CGFloat) -> some View {
-        // Stima 2:3 finché non si conoscono le proporzioni reali: evita che il placeholder
-        // salti di dimensione quando l'immagine arriva.
+        // 2:3 estimate until the real proportions are known: avoids the placeholder jumping
+        // in size when the image arrives.
         let estimatedWidth = height * 2 / 3
         Group {
             if let image = image {
                 #if os(iOS)
-                // `sizeThatFits` su ZoomableImageView calcola la larghezza dall'altezza
-                // proposta, come farebbe `Image().scaledToFit()` — vedi il commento lì.
+                // `sizeThatFits` on ZoomableImageView computes the width from the proposed
+                // height, the way `Image().scaledToFit()` would — see the comment there.
                 //
-                // NOTA: su iOS questo ramo oggi non viene mai raggiunto — `PageSpreadView`
-                // passa sempre `pairedHeight: nil` e affida lo spread a `SpreadPairView`.
-                // Resta qui solo perché `PageView` è condivisa tra le due piattaforme.
-                // Il vecchio problema dello spinner bloccato su una delle due pagine
-                // riguardava proprio questo percorso e resta quindi aperto solo su macOS,
-                // dove `pairedContent` è ancora in uso (vedi il ramo `#else`).
+                // NOTE: on iOS this branch is never actually reached today — `PageSpreadView`
+                // always passes `pairedHeight: nil` and hands the spread off to
+                // `SpreadPairView`. It stays here only because `PageView` is shared between
+                // the two platforms. The old problem of the spinner stuck on one of the two
+                // pages was specifically about this path, and therefore remains open only on
+                // macOS, where `pairedContent` is still in use (see the `#else` branch).
                 ZoomableImageView(image: image, isZoomed: isZoomed, isActive: isActive, widthFollowsHeight: true)
                     .frame(height: height)
                     .overlay(tintOverlay)
@@ -363,10 +360,9 @@ private struct PageView: View {
         .onAppear { loadImage(targetSize: CGSize(width: estimatedWidth, height: height)) }
     }
 
-    /// Spinner finché si carica, bottone "Riprova" se la lettura è fallita — invece di uno
-    /// spinner bloccato per sempre senza traccia del problema (comportamento originale,
-    /// verificato dal vivo). Stessa idea di `SpreadPairView.pageSlot`, qui per il percorso a
-    /// pagina singola.
+    /// Spinner while loading, "Retry" button if the read failed — instead of a spinner
+    /// stuck forever with no trace of the problem (original behavior, verified live). Same
+    /// idea as `SpreadPairView.pageSlot`, here for the single-page path.
     @ViewBuilder
     private func pageSlot(targetSize: CGSize, retry: @escaping () -> Void) -> some View {
         if loadFailed {
@@ -401,9 +397,9 @@ private struct PageView: View {
         let autoTintContrast = isAutoTintContrastEnabled
 
         if let imageCache {
-            // Percorso macOS: la cache è quasi sempre già calda grazie al prefetch avviato da
-            // `ReaderContentView` quando `currentPage` cambia — questa chiamata torna quasi
-            // subito invece di ridecodificare da disco.
+            // macOS path: the cache is almost always already warm thanks to the prefetch
+            // started by `ReaderContentView` when `currentPage` changes — this call returns
+            // almost immediately instead of re-decoding from disk.
             let options = PageImageCache.ProcessingOptions(
                 autoCrop: autoCrop,
                 autoTintContrast: autoTintContrast,
@@ -427,12 +423,12 @@ private struct PageView: View {
             do {
                 loaded = try provider.image(atPage: index)
             } catch {
-                // Non un semplice `try?`: un fallimento qui lasciava la pagina bloccata sullo
-                // spinner per sempre, senza traccia — verificato dal vivo con la doppia pagina
-                // (due letture concorrenti sullo stesso archivio CBZ/CBR, non thread-safe,
-                // producevano dati corrotti; risolto a monte in CBZ/CBRPageProvider, ma un log
-                // resta comunque utile per qualunque altro fallimento di lettura). Con un
-                // bottone "Riprova" invece di restare bloccati per sempre — vedi `pageSlot`.
+                // Not a plain `try?`: a failure here used to leave the page stuck on the
+                // spinner forever, with no trace — verified live with double-page mode (two
+                // concurrent reads on the same CBZ/CBR archive, not thread-safe, produced
+                // corrupted data; fixed upstream in CBZ/CBRPageProvider, but a log is still
+                // useful for any other read failure). With a "Retry" button instead of
+                // staying stuck forever — see `pageSlot`.
                 DiagnosticLog.log("Lettura pagina \(index) fallita: \((error as NSError).localizedDescription)")
                 DispatchQueue.main.async { self.loadFailed = true }
                 return
