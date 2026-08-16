@@ -23,6 +23,9 @@ struct ContentView: View {
     /// query non sempre notifica un cambiamento avvenuto mentre l'app era in background, quindi
     /// un rescan periodico a bassa frequenza copre quel caso senza dipendere dal solo evento.
     @State private var periodicRescanTask: Task<Void, Never>?
+    /// Le modifiche remote di CloudKit arrivano in raffiche di notifiche: come per il tracker,
+    /// una sola passata di deduplica dopo che si sono calmate.
+    @State private var deduplicationTask: Task<Void, Never>?
 
     var body: some View {
         rootNavigation
@@ -33,11 +36,20 @@ struct ContentView: View {
                 ICloudDownloadTracker.shared.start()
                 syncSyncFolderIfNeeded()
                 adoptFilesDroppedInDocuments()
+                viewModel.deduplicateLibrary(context: context)
                 startPeriodicRescan()
             }
             .onDisappear {
                 debounceTask?.cancel()
                 periodicRescanTask?.cancel()
+                deduplicationTask?.cancel()
+            }
+            // I duplicati non nascono solo qui: l'altro dispositivo con lo stesso account crea il
+            // proprio record per lo stesso file, e arriva da CloudKit. Questa è la notifica che
+            // segnala l'arrivo di modifiche remote — la cartella di sincronizzazione può anche
+            // essere disattivata, quindi non basta agganciarsi a `rebuildLibrary`.
+            .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
+                scheduleDebouncedDeduplication()
             }
             // ContentView è radice sempre viva per tutta la sessione: l'aggiornamento di
             // `allRelativePaths` innesca qui il rescan indipendentemente da cosa sta guardando
@@ -50,6 +62,7 @@ struct ContentView: View {
                 // Il momento in cui i file trascinati dal Finder possono essere comparsi è
                 // esattamente questo: l'utente li copia con l'app in background e poi la riapre.
                 adoptFilesDroppedInDocuments()
+                viewModel.deduplicateLibrary(context: context)
             }
     }
 
@@ -59,6 +72,15 @@ struct ContentView: View {
             try? await Task.sleep(nanoseconds: 800_000_000)
             guard !Task.isCancelled else { return }
             syncSyncFolderIfNeeded()
+        }
+    }
+
+    private func scheduleDebouncedDeduplication() {
+        deduplicationTask?.cancel()
+        deduplicationTask = Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            viewModel.deduplicateLibrary(context: context)
         }
     }
 

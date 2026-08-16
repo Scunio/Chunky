@@ -595,13 +595,31 @@ struct LibraryView: View {
         )
     }
 
+    /// Il testo lo decide il view model (`importStatus`): la stessa passata di scansione che
+    /// gira in automatico a ogni foreground mostrava "Importazione…" anche quando non stava
+    /// importando niente, senza dire cosa stesse facendo.
+    ///
+    /// Colori espliciti e non ereditati: il riquadro è scuro fisso, ma `.foregroundColor(theme.text)`
+    /// e `.accentColor(theme.accent)` più in basso si applicano anche a questo overlay — con un
+    /// tema dal testo scuro, spinner ed etichetta finivano neri su nero e restava solo un
+    /// rettangolo vuoto senza nulla scritto dentro.
     private var importingOverlay: some View {
         Group {
             if viewModel.isImporting {
-                ProgressView("Importazione…")
-                    .padding()
-                    .background(Color(white: 0.15).opacity(0.9))
-                    .cornerRadius(12)
+                HStack(spacing: 12) {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.white)
+                    Text(viewModel.importStatus ?? "Importazione…")
+                        .font(.callout)
+                        .foregroundColor(.white)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .background(Color(white: 0.15).opacity(0.92))
+                .cornerRadius(12)
+                .shadow(radius: 8)
+                .accessibilityElement(children: .combine)
             } else {
                 EmptyView()
             }
