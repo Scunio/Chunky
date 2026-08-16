@@ -96,9 +96,9 @@ struct ComicTextIndexTests {
         #expect(name != ComicTextIndex.sanitized("x-coredata://ABC-123/ComicEntity/p43"))
     }
 
-    /// Senza `deleteIndex`, l'indice di un fumetto rimosso dalla libreria resterebbe orfano per
-    /// sempre in Application Support: qui si verifica il round-trip completo attraverso la sola
-    /// API pubblica, non il percorso interno del file (privato apposta).
+    /// Without `deleteIndex`, the index of a comic removed from the library would stay orphaned
+    /// forever in Application Support: this verifies the full round-trip through the public
+    /// API alone, not the internal file path (private on purpose).
     @Test("deleteIndex rimuove l'indice persistito, non solo quello in memoria")
     func deleteIndexRemovesPersistedFile() async throws {
         let identifier = "test-\(UUID().uuidString)"

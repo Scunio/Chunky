@@ -1,11 +1,11 @@
 import Foundation
 import Testing
 
-/// Copre le due funzioni pure estratte per far convivere la registrazione immediata di un
-/// fumetto e il suo completamento posticipato: un fumetto iCloud non ancora scaricato entra in
-/// libreria senza aprire l'archivio, e copertina/pagine/metadati arrivano dopo. Le due strade
-/// devono ricavare titolo e serie allo stesso modo, altrimenti il fumetto si rinominerebbe da
-/// solo appena finisce di scaricarsi.
+/// Covers the two pure functions extracted to let immediate registration of a comic
+/// coexist with its deferred completion: an iCloud comic not yet downloaded enters the
+/// library without opening the archive, and cover/pages/metadata arrive later. The two paths
+/// must derive the title and series the same way, otherwise the comic would rename
+/// itself as soon as it finishes downloading.
 @Suite("Segnaposto iCloud")
 struct LibraryPlaceholderTests {
     @Test("Senza ComicInfo resta il nome del file")

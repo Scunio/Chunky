@@ -13,8 +13,8 @@ struct DiagnosticsView: View {
     }
 }
 
-/// Contenuto della diagnostica senza `Form` propria, per poterlo incorporare nella tab
-/// "Avanzate" delle Preferenze Mac oltre che mostrarlo da solo su iOS (`DiagnosticsView` sopra).
+/// Diagnostics content without its own `Form`, so it can be embedded in the "Advanced"
+/// tab of Mac Preferences as well as shown standalone on iOS (`DiagnosticsView` above).
 struct DiagnosticsSections: View {
     @Environment(\.managedObjectContext) private var context
     @EnvironmentObject private var viewModel: LibraryViewModel

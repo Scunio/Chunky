@@ -5,9 +5,9 @@ import UIKit
 import AppKit
 #endif
 
-/// Pannello "Tools" condiviso da libreria e reader (icona chiave inglese): un vero elenco con
-/// navigazione — non un Menu a tendina, che su questo target non riesce a spingere le
-/// NavigationLink al suo interno (verificato dal vivo: il tap non naviga da nessuna parte).
+/// "Tools" panel shared by library and reader (wrench icon): a real list with
+/// navigation — not a dropdown Menu, which on this target fails to push the
+/// NavigationLinks inside it (verified live: the tap doesn't navigate anywhere).
 struct ToolsPanelView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var brightness: Double = ToolsPanelView.currentBrightness()
