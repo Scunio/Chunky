@@ -26,25 +26,38 @@ final class LibraryViewModel: ObservableObject {
     /// comunque un'altra alla fine (ed è proprio quello che serve: lo stato su disco è cambiato).
     private let pendingLock = NSLock()
     private var pendingScans: Set<ScanKind> = []
-    /// Quante operazioni stanno mostrando l'indicatore di caricamento (vedi `beginStatus`).
-    private var statusDepth = 0
+    /// Operazioni che stanno mostrando l'indicatore di caricamento, dalla più vecchia alla più
+    /// recente, ciascuna col proprio testo corrente (vedi `beginStatus`).
+    private var statusStack: [(token: Int, text: String)] = []
+    private var nextStatusToken = 0
 
     private enum ScanKind: Hashable {
         case rebuild
         case adopt
         case deduplicate
+        case placeholderMetadata
     }
+
+    /// Percorsi il cui archivio si è rifiutato di aprirsi durante il completamento dei
+    /// segnaposto. Un file corrotto resta indistinguibile da uno appena scaricato (zero pagine,
+    /// nessuna copertina) e verrebbe riaperto a ogni passata: qui li ricordiamo per la durata
+    /// della sessione. Non è persistito apposta — un riavvio dell'app è l'occasione giusta per
+    /// riprovare, il file nel frattempo può essere stato risincronizzato.
+    private var pathsWithUnreadableArchive: Set<String> = []
 
     // MARK: - Import esplicito
 
     func importFiles(_ urls: [URL], into context: NSManagedObjectContext) {
         let backgroundContext = sharedScanContext(for: context)
-        beginStatus(urls.count == 1 ? "Importazione…" : "Importazione di \(urls.count) fumetti…")
+        let statusToken = beginStatus(urls.count == 1 ? "Importazione…" : "Importazione di \(urls.count) fumetti…")
 
         workQueue.async { [weak self] in
             guard let self = self else { return }
-            defer { self.endStatus() }
-            for url in urls {
+            defer { self.endStatus(token: statusToken) }
+            for (index, url) in urls.enumerated() {
+                if urls.count > 1 {
+                    self.updateStatus("Importazione di \(index + 1) di \(urls.count)…", token: statusToken)
+                }
                 self.importSingleFile(url, into: backgroundContext)
             }
             self.deduplicateComics(in: backgroundContext)
@@ -90,6 +103,49 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
+    /// Quanto si ricava aprendo l'archivio di un fumetto. Nessun oggetto Core Data dentro:
+    /// l'analisi è la parte lenta e vive fuori dal contesto, l'inserimento è a parte.
+    struct ComicAnalysis {
+        let pageCount: Int
+        let coverData: Data?
+        let metadata: ComicInfoMetadata?
+    }
+
+    /// Apre l'archivio e ne ricava pagine, copertina e metadati ComicInfo. `nil` se il file non
+    /// è apribile (archivio corrotto o protetto): il chiamante decide se registrarlo comunque.
+    ///
+    /// Costosa: decomprime la pagina 0 per intero. Non va mai chiamata su un file che è ancora
+    /// un segnaposto iCloud — vedi `registerComic`.
+    static func analyzeComic(at url: URL, format: ComicFormat) -> ComicAnalysis? {
+        guard let provider = try? ComicPageProviderFactory.makeProvider(for: url, format: format) else {
+            return nil
+        }
+
+        var coverData: Data?
+        if provider.pageCount > 0 {
+            let rawCoverData = (try? provider.rawData(atPage: 0)).flatMap { $0 }
+            if let rawCoverData = rawCoverData {
+                coverData = ThumbnailGenerator.makeThumbnailData(fromSourceData: rawCoverData)
+            } else if let coverImage = try? provider.image(atPage: 0) {
+                coverData = ThumbnailGenerator.makeThumbnailData(from: coverImage)
+            }
+        }
+
+        let metadata = provider.comicInfoXML.flatMap { ComicInfoMetadata.parse(from: $0) }
+        return ComicAnalysis(pageCount: provider.pageCount, coverData: coverData, metadata: metadata)
+    }
+
+    /// Titolo da mostrare: quello del ComicInfo se c'è, altrimenti serie + numero, altrimenti
+    /// il nome del file. Condiviso fra la registrazione e il completamento posticipato dei
+    /// segnaposto iCloud, così un fumetto non cambia titolo a seconda di quando è stato letto.
+    static func displayTitle(from metadata: ComicInfoMetadata?, fallbackTitle: String) -> String {
+        if let title = metadata?.title { return title }
+        if let series = metadata?.series {
+            return metadata?.number.map { "\(series) #\($0)" } ?? series
+        }
+        return fallbackTitle
+    }
+
     /// Analizza ed inserisce in Core Data un file GIÀ presente nella cartella della libreria
     /// (nessuna copia). Usato da `rebuildLibrary`, dove il file esiste ma manca il record.
     ///
@@ -103,29 +159,20 @@ final class LibraryViewModel: ObservableObject {
         let defaultDirectionRawValue = UserDefaults.standard.string(forKey: "defaultReadingDirection")
         let defaultDirection = ReadingDirection(rawValue: defaultDirectionRawValue ?? "") ?? .leftToRight
 
-        var pageCount = 0
-        var coverData: Data?
-        var metadata: ComicInfoMetadata?
-        if let provider = try? ComicPageProviderFactory.makeProvider(for: destinationURL, format: format) {
-            pageCount = provider.pageCount
-            if provider.pageCount > 0 {
-                let rawCoverData = (try? provider.rawData(atPage: 0)).flatMap { $0 }
-                if let rawCoverData = rawCoverData {
-                    coverData = ThumbnailGenerator.makeThumbnailData(fromSourceData: rawCoverData)
-                } else if let coverImage = try? provider.image(atPage: 0) {
-                    coverData = ThumbnailGenerator.makeThumbnailData(from: coverImage)
-                }
-            }
-            if let xml = provider.comicInfoXML {
-                metadata = ComicInfoMetadata.parse(from: xml)
-            }
-        }
+        // Un fumetto iCloud non ancora scaricato si registra "vuoto", senza aprire l'archivio:
+        // leggerlo ne forzerebbe la materializzazione, cioè il download completo del file — e
+        // con una libreria appena sincronizzata significa scaricare decine di fumetti in serie,
+        // senza che l'utente l'abbia chiesto e senza che i download compaiano da nessuna parte.
+        // Copertina e numero pagine li mette `backfillPlaceholderMetadata` quando il file arriva.
+        let isPlaceholder = LibraryStorage.isPendingDownload(destinationURL)
+        let analysis = isPlaceholder ? nil : Self.analyzeComic(at: destinationURL, format: format)
+
+        let pageCount = analysis?.pageCount ?? 0
+        let coverData = analysis?.coverData
+        let metadata = analysis?.metadata
 
         let fallbackTitle = (relativePath as NSString).deletingPathExtension
-        let title = metadata?.title ?? metadata?.series.map { series in
-            metadata?.number.map { "\(series) #\($0)" } ?? series
-        } ?? fallbackTitle
-
+        let title = Self.displayTitle(from: metadata, fallbackTitle: fallbackTitle)
         let seriesName = metadata?.series ?? Self.deriveSeriesName(fromFallbackTitle: fallbackTitle)
 
         context.performAndWait {
@@ -144,7 +191,11 @@ final class LibraryViewModel: ObservableObject {
             comic.pageCount = Int32(pageCount)
             comic.coverImageData = coverData
             try? context.save()
-            DiagnosticLog.log("Importato \"\(title)\" (\(format.rawValue), \(pageCount) pagine)")
+            if isPlaceholder {
+                DiagnosticLog.log("Registrato \"\(title)\" (\(format.rawValue), da scaricare da iCloud)")
+            } else {
+                DiagnosticLog.log("Importato \"\(title)\" (\(format.rawValue), \(pageCount) pagine)")
+            }
         }
     }
 
@@ -185,23 +236,45 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    /// Contate, non booleane: un import esplicito può partire mentre una scansione automatica è
-    /// ancora in coda sulla stessa `workQueue`, e la prima che finisce non deve spegnere
-    /// l'indicatore mentre l'altra sta ancora lavorando.
-    private func beginStatus(_ text: String) {
+    /// Una pila, non un contatore: un import esplicito può partire mentre una scansione
+    /// automatica è ancora in corso sulla stessa `workQueue`, e la prima che finisce non deve
+    /// spegnere l'indicatore mentre l'altra sta ancora lavorando. Tenere anche il testo di
+    /// ciascuna operazione (e non solo quante sono) serve alle passate lunghe: possono
+    /// aggiornare il proprio conteggio anche mentre un'altra ha temporaneamente l'etichetta, e
+    /// quando questa finisce l'indicatore torna alla frase giusta invece di restare congelato
+    /// su quella di un'operazione ormai conclusa.
+    @discardableResult
+    private func beginStatus(_ text: String) -> Int {
         pendingLock.lock()
-        statusDepth += 1
+        nextStatusToken += 1
+        let token = nextStatusToken
+        statusStack.append((token: token, text: text))
         pendingLock.unlock()
+        publishStatus(text)
+        return token
+    }
+
+    /// Cambia il testo dell'operazione `token` senza toccare la pila. Pubblica solo se quella
+    /// operazione è in cima, cioè se è la sua etichetta a essere visibile in questo momento.
+    private func updateStatus(_ text: String, token: Int) {
+        pendingLock.lock()
+        guard let index = statusStack.firstIndex(where: { $0.token == token }) else {
+            pendingLock.unlock()
+            return
+        }
+        statusStack[index].text = text
+        let isVisible = index == statusStack.count - 1
+        pendingLock.unlock()
+        guard isVisible else { return }
         publishStatus(text)
     }
 
-    private func endStatus() {
+    private func endStatus(token: Int) {
         pendingLock.lock()
-        statusDepth = max(0, statusDepth - 1)
-        let isIdle = statusDepth == 0
+        statusStack.removeAll { $0.token == token }
+        let resumed = statusStack.last?.text
         pendingLock.unlock()
-        guard isIdle else { return }
-        publishStatus(nil)
+        publishStatus(resumed)
     }
 
     private func publishStatus(_ status: String?) {
@@ -292,13 +365,17 @@ final class LibraryViewModel: ObservableObject {
         let newPaths = candidates.filter { !knownPaths.contains($0) }
         guard !newPaths.isEmpty else { return }
 
-        beginStatus(newPaths.count == 1 ? "Aggiungo 1 fumetto…" : "Aggiungo \(newPaths.count) fumetti…")
-        defer { endStatus() }
-        for relativePath in newPaths {
+        let statusToken = beginStatus(newPaths.count == 1 ? "Aggiungo 1 fumetto…" : "Aggiungo \(newPaths.count) fumetti…")
+        defer { endStatus(token: statusToken) }
+        let startedAt = Date()
+        for (index, relativePath) in newPaths.enumerated() {
+            if newPaths.count > 1 {
+                updateStatus("Aggiungo \(index + 1) di \(newPaths.count)…", token: statusToken)
+            }
             guard let format = ComicFormat(fileExtension: (relativePath as NSString).pathExtension) else { continue }
             registerComic(relativePath: relativePath, format: format, into: context)
         }
-        DiagnosticLog.log("File Sharing: aggiunti \(newPaths.count) fumetti dalla cartella Documents")
+        DiagnosticLog.log("File Sharing: aggiunti \(newPaths.count) fumetti dalla cartella Documents in \(Self.formatted(duration: Date().timeIntervalSince(startedAt)))")
         deduplicateComics(in: context)
         backfillSeriesNames(in: context)
     }
@@ -342,22 +419,121 @@ final class LibraryViewModel: ObservableObject {
         // L'indicatore si accende solo ora, non all'inizio della passata: la scansione gira a ogni
         // foreground e ogni 3 minuti, e quasi sempre non trova niente da fare — mostrare
         // "Importazione…" in quei casi lasciava l'utente davanti a un banner senza spiegazione.
-        let showsIndicator = !unknownComicFiles.isEmpty
-        if showsIndicator {
-            beginStatus(unknownComicFiles.count == 1 ? "Aggiungo 1 fumetto…" : "Aggiungo \(unknownComicFiles.count) fumetti…")
-        }
-        defer { if showsIndicator { endStatus() } }
+        let statusToken = unknownComicFiles.isEmpty
+            ? nil
+            : beginStatus(unknownComicFiles.count == 1 ? "Aggiungo 1 fumetto…" : "Aggiungo \(unknownComicFiles.count) fumetti…")
+        defer { if let statusToken = statusToken { endStatus(token: statusToken) } }
 
-        for url in unknownComicFiles {
+        let startedAt = Date()
+        for (index, url) in unknownComicFiles.enumerated() {
+            if let statusToken = statusToken, unknownComicFiles.count > 1 {
+                updateStatus("Aggiungo \(index + 1) di \(unknownComicFiles.count)…", token: statusToken)
+            }
             guard let format = ComicFormat(fileExtension: url.pathExtension) else { continue }
             registerComic(relativePath: url.lastPathComponent, format: format, into: context)
         }
 
         if removedCount > 0 || !unknownComicFiles.isEmpty {
-            DiagnosticLog.log("Rebuild library: rimossi \(removedCount), ritrovati \(unknownComicFiles.count)")
+            let elapsed = Self.formatted(duration: Date().timeIntervalSince(startedAt))
+            DiagnosticLog.log("Rebuild library: rimossi \(removedCount), ritrovati \(unknownComicFiles.count) in \(elapsed)")
         }
 
         deduplicateComics(in: context)
         backfillSeriesNames(in: context)
+    }
+
+    // MARK: - Completamento dei segnaposto iCloud
+
+    /// Riempie copertina, numero pagine e metadati dei fumetti registrati come segnaposto
+    /// iCloud (vedi `registerComic`), ora che i loro byte sono arrivati in locale.
+    func backfillPlaceholderMetadata(context: NSManagedObjectContext) {
+        let backgroundContext = sharedScanContext(for: context)
+        enqueue(.placeholderMetadata) { [weak self] in
+            self?.performBackfillPlaceholderMetadata(in: backgroundContext)
+        }
+    }
+
+    func performBackfillPlaceholderMetadata(in context: NSManagedObjectContext) {
+        var candidates: [(objectID: NSManagedObjectID, relativePath: String, format: ComicFormat)] = []
+        context.performAndWait {
+            let request = ComicEntity.fetchRequest()
+            // Le stesse due condizioni che `registerComic` lascia su un segnaposto. Non serve un
+            // attributo dedicato nel modello: sarebbe uno stato locale del dispositivo che
+            // CloudKit sincronizzerebbe sugli altri, dove il file magari è già scaricato.
+            request.predicate = NSPredicate(format: "pageCount == 0 AND coverImageData == nil")
+            guard let comics = try? context.fetch(request) else { return }
+            for comic in comics {
+                guard let relativePath = comic.relativePath, !relativePath.isEmpty else { continue }
+                guard !pathsWithUnreadableArchive.contains(relativePath) else { continue }
+                let url = LibraryStorage.fileURL(forRelativePath: relativePath)
+                guard FileManager.default.fileExists(atPath: url.path),
+                      !LibraryStorage.isPendingDownload(url) else { continue }
+                candidates.append((comic.objectID, relativePath, comic.format))
+            }
+        }
+        guard !candidates.isEmpty else { return }
+
+        let statusToken = beginStatus(candidates.count == 1
+            ? "Preparo 1 fumetto…"
+            : "Preparo \(candidates.count) fumetti…")
+        defer { endStatus(token: statusToken) }
+
+        let startedAt = Date()
+        var completed = 0
+        for (index, candidate) in candidates.enumerated() {
+            if candidates.count > 1 {
+                updateStatus("Preparo \(index + 1) di \(candidates.count)…", token: statusToken)
+            }
+            let url = LibraryStorage.fileURL(forRelativePath: candidate.relativePath)
+            // Un archivio che si apre ma non contiene pagine lascerebbe il record identico a
+            // com'era, quindi candidato anche alla prossima passata: per questa lista vale come
+            // illeggibile, altrimenti ogni scansione lo riaprirebbe per niente.
+            let analysis = Self.analyzeComic(at: url, format: candidate.format)
+            guard let analysis = analysis, analysis.pageCount > 0 || analysis.coverData != nil else {
+                pathsWithUnreadableArchive.insert(candidate.relativePath)
+                DiagnosticLog.log("Nessuna pagina leggibile in \"\(candidate.relativePath)\" dopo il download")
+                continue
+            }
+            apply(analysis, toComicWith: candidate.objectID, relativePath: candidate.relativePath, in: context)
+            completed += 1
+        }
+
+        if completed > 0 {
+            let elapsed = Self.formatted(duration: Date().timeIntervalSince(startedAt))
+            DiagnosticLog.log("Completati \(completed) fumetti scaricati da iCloud in \(elapsed)")
+        }
+    }
+
+    /// Il titolo viene riscritto solo se il ComicInfo ne propone uno diverso dal nome del file:
+    /// altrimenti un fumetto che l'utente ha già visto in griglia cambierebbe nome da solo.
+    private func apply(
+        _ analysis: ComicAnalysis,
+        toComicWith objectID: NSManagedObjectID,
+        relativePath: String,
+        in context: NSManagedObjectContext
+    ) {
+        context.performAndWait {
+            guard let comic = try? context.existingObject(with: objectID) as? ComicEntity else { return }
+            comic.pageCount = Int32(analysis.pageCount)
+            comic.coverImageData = analysis.coverData
+
+            let fallbackTitle = (relativePath as NSString).deletingPathExtension
+            let title = Self.displayTitle(from: analysis.metadata, fallbackTitle: fallbackTitle)
+            if title != fallbackTitle {
+                comic.title = title
+            }
+            if let series = analysis.metadata?.series {
+                comic.seriesName = series
+            }
+            try? context.save()
+        }
+    }
+
+    /// Durata leggibile per il log di Diagnostica: distinguere "12s" da "4m 30s" dice subito se
+    /// una passata lenta è analisi degli archivi o attesa della rete.
+    static func formatted(duration: TimeInterval) -> String {
+        let seconds = Int(duration.rounded())
+        guard seconds >= 60 else { return "\(seconds)s" }
+        return "\(seconds / 60)m \(seconds % 60)s"
     }
 }
