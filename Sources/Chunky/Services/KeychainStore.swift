@@ -1,20 +1,20 @@
 import Foundation
 import Security
 
-/// Wrapper minimale sul Keychain per le credenziali degli account remoti (WebDAV, OPDS con
-/// autenticazione) e per il passcode del blocco genitori. Le password non vengono mai
-/// salvate in Core Data.
+/// Minimal wrapper over the Keychain for remote account credentials (WebDAV, OPDS with
+/// authentication) and for the parental lock passcode. Passwords are never
+/// saved in Core Data.
 ///
-/// Tutte le query usano `kSecUseDataProtectionKeychain`. Senza questa chiave, su macOS gli
-/// elementi finiscono nel portachiavi "file-based" storico invece che in quello moderno
-/// condiviso con iOS: comportamento diverso tra le due piattaforme e nessuna protezione
-/// legata allo sblocco del dispositivo. Su iOS la chiave è ininfluente.
-/// Le tre operazioni Keychain usate dall'app, isolate dietro un protocollo.
+/// All queries use `kSecUseDataProtectionKeychain`. Without this key, on macOS
+/// items end up in the legacy "file-based" keychain instead of the modern one
+/// shared with iOS: different behavior between the two platforms and no protection
+/// tied to device unlock. On iOS the key has no effect.
+/// The three Keychain operations used by the app, isolated behind a protocol.
 ///
-/// Serve a rendere verificabile la migrazione dal portachiavi storico: i test non possono
-/// usare il portachiavi reale, perché l'entitlement data-protection appartiene al processo
-/// ospite e un bundle di test non firmato non ce l'ha. Senza questa cucitura, l'unico pezzo
-/// di logica che può davvero regredire resterebbe senza test.
+/// This exists to make the migration away from the legacy keychain testable: tests can't
+/// use the real keychain, because the data-protection entitlement belongs to the host
+/// process and an unsigned test bundle doesn't have it. Without this seam, the one piece
+/// of logic that could actually regress would be left without tests.
 protocol KeychainAccessing {
     func copyMatching(_ query: [String: Any]) -> (status: OSStatus, data: Data?)
     func add(_ attributes: [String: Any]) -> OSStatus
@@ -40,7 +40,7 @@ struct SystemKeychain: KeychainAccessing {
 enum KeychainStore {
     private static let service = "com.scunio.Chunky.remoteAccounts"
 
-    /// Sostituibile nei test. In produzione resta sempre il portachiavi di sistema.
+    /// Replaceable in tests. In production it's always the system keychain.
     static var backend: KeychainAccessing = SystemKeychain()
 
     private static func baseQuery(account: String, useDataProtection: Bool) -> [String: Any] {
@@ -57,12 +57,12 @@ enum KeychainStore {
 
     static func savePassword(_ password: String, forAccount id: UUID) {
         let account = id.uuidString
-        // Cancella da entrambi i portachiavi: se l'elemento esisteva nel vecchio, lasciarlo lì
-        // creerebbe due valori divergenti per lo stesso account.
-        // L'ordine conta: prima si scrive nel portachiavi moderno, e solo se la scrittura
-        // riesce si cancella la copia storica. Cancellando per primo, un `add` fallito
-        // (build senza l'entitlement data-protection) distruggerebbe l'unica copia
-        // esistente della password o del passcode genitori, in silenzio.
+        // Delete from both keychains: if the item existed in the old one, leaving it
+        // there would create two diverging values for the same account.
+        // Order matters: first write to the modern keychain, and only if the write
+        // succeeds delete the legacy copy. Deleting first, a failed `add`
+        // (a build without the data-protection entitlement) would silently destroy
+        // the only existing copy of the password or of the parental passcode.
         _ = backend.delete(baseQuery(account: account, useDataProtection: true))
 
         var attributes = baseQuery(account: account, useDataProtection: true)
@@ -82,9 +82,9 @@ enum KeychainStore {
         if let password = read(account: account, useDataProtection: true) {
             return password
         }
-        // Migrazione: gli utenti Mac che avevano già salvato una password la trovano nel
-        // portachiavi storico. La si rilegge una volta e la si riscrive in quello moderno,
-        // altrimenti l'aggiornamento farebbe sparire credenziali e passcode genitori.
+        // Migration: Mac users who had already saved a password find it in the
+        // legacy keychain. It's read once here and rewritten to the modern one,
+        // otherwise the update would make credentials and the parental passcode disappear.
         guard let legacy = read(account: account, useDataProtection: false) else { return nil }
         savePassword(legacy, forAccount: id)
         return legacy

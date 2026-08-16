@@ -14,9 +14,9 @@ struct CBZPageProviderTests {
         #expect(try provider("sample-noinfo.cbz").pageCount == 2)
     }
 
-    /// Le pagine della fixture sono rosso/verde/blu in quest'ordine: se l'ordinamento
-    /// `localizedStandardCompare` si rompe, il colore lo rivela mentre un semplice
-    /// "immagine non nil" no.
+    /// The fixture's pages are red/green/blue in this order: if the `localizedStandardCompare`
+    /// ordering breaks, the color reveals it, whereas a simple
+    /// "image not nil" check would not.
     @Test("Restituisce le pagine nell'ordine dell'archivio", arguments: [
         (0, PixelProbe.RGB.red), (1, PixelProbe.RGB.green), (2, PixelProbe.RGB.blue)
     ])
@@ -72,9 +72,9 @@ struct PDFPageProviderTests {
         #expect(try provider().pageCount == 2)
     }
 
-    /// La fixture ha il quadrante colorato in ALTO A SINISTRA e il resto bianco.
-    /// Un rendering capovolto verticalmente metterebbe il colore in basso: è il motivo
-    /// per cui la fixture è asimmetrica.
+    /// The fixture has the colored quadrant in the TOP LEFT, with the rest white.
+    /// A vertically flipped rendering would put the color at the bottom: that's why
+    /// the fixture is asymmetric.
     @Test("La pagina non è capovolta verticalmente", arguments: [
         (0, PixelProbe.RGB.red), (1, PixelProbe.RGB.blue)
     ])
@@ -89,15 +89,15 @@ struct PDFPageProviderTests {
         #expect(bottomLeft.isCloseTo(.white), "in basso a sinistra atteso bianco, ottenuto \(bottomLeft)")
     }
 
-    /// `NSImage(size:)` con lockFocus produceva su macOS un'immagine la cui dimensione
-    /// non corrispondeva ai pixel effettivi.
+    /// `NSImage(size:)` with lockFocus used to produce, on macOS, an image whose size
+    /// didn't match the actual pixels.
     @Test("L'immagine renderizzata ha pixel reali con le proporzioni della pagina")
     func renderedSizeMatchesPage() throws {
         let image = try provider().image(atPage: 0)
         let cgImage = try #require(image.cgImageRepresentation)
         #expect(cgImage.width > 0)
         #expect(cgImage.height > 0)
-        // La fixture è 100×200 punti: il rendering deve restare verticale.
+        // The fixture is 100×200 points: the rendering must remain vertical.
         #expect(cgImage.height == cgImage.width * 2)
     }
 
@@ -110,8 +110,8 @@ struct PDFPageProviderTests {
 
 @Suite("CBR")
 struct CBRPageProviderTests {
-    /// La fixture .cbr richiede un compressore RAR, che non è disponibile ovunque:
-    /// finché manca, il test si segnala come saltato invece di fallire in modo opaco.
+    /// The .cbr fixture requires a RAR compressor, which isn't available everywhere:
+    /// as long as it's missing, the test reports itself as skipped instead of failing opaquely.
     @Test("Legge le pagine da un archivio RAR")
     func readsPages() throws {
         try withKnownIssue("Fixture sample.cbr non presente nel bundle", isIntermittent: true) {

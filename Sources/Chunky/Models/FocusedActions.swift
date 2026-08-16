@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// Azioni che la libreria espone alla menu bar del Mac tramite `.focusedSceneValue`.
+/// Actions the library exposes to the Mac menu bar via `.focusedSceneValue`.
 ///
-/// Il resto della vista non sa che una menu bar esiste: qui si limita a pubblicare ciò che
-/// già fa in risposta al tocco di un pulsante, e la menu bar (in `Platform/ChunkyCommands.swift`)
-/// li richiama con lo stesso effetto. Le voci reader (pagina successiva/precedente) hanno lo
-/// stesso trattamento, ma pubblicate a parte da `ReaderCommandActions` qui sotto: preferito e
-/// info restano invece raggiungibili solo dall'interfaccia del reader, non dalla menu bar.
+/// The rest of the view doesn't know a menu bar exists: it just publishes what it
+/// already does in response to a button tap, and the menu bar (in `Platform/ChunkyCommands.swift`)
+/// invokes them with the same effect. The reader items (next/previous page) get the
+/// same treatment, but published separately by `ReaderCommandActions` below: favorite and
+/// info, on the other hand, remain reachable only from the reader's own interface, not from the menu bar.
 struct LibraryCommandActions {
     var importFiles: () -> Void
     var newGroup: () -> Void
@@ -30,9 +30,9 @@ extension FocusedValues {
     }
 }
 
-/// Cambio pagina pubblicato dalla finestra reader attiva. `.commands` instrada attraverso il
-/// normale meccanismo delle scorciatoie di menu: se un campo di testo ha il focus, è lui a
-/// ricevere Spazio/frecce per primo, non il comando.
+/// Page change published by the active reader window. `.commands` routes through the
+/// normal menu shortcut mechanism: if a text field has focus, it receives Space/arrows
+/// first, not the command.
 struct ReaderCommandActions {
     var previousPage: () -> Void
     var nextPage: () -> Void

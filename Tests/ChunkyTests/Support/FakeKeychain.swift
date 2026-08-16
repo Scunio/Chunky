@@ -1,9 +1,9 @@
 import Foundation
 import Security
 
-/// Portachiavi in memoria per i test. Distingue gli elementi in base a
-/// `kSecUseDataProtectionKeychain`, perché è esattamente la differenza che la migrazione
-/// deve saper attraversare: legge dal portachiavi storico e riscrive in quello moderno.
+/// In-memory keychain for tests. Distinguishes items based on
+/// `kSecUseDataProtectionKeychain`, because that's exactly the distinction the migration
+/// needs to be able to cross: it reads from the legacy keychain and rewrites into the modern one.
 final class FakeKeychain: KeychainAccessing {
     private struct Key: Hashable {
         let service: String
@@ -14,8 +14,8 @@ final class FakeKeychain: KeychainAccessing {
     private var items: [Key: Data] = [:]
     private(set) var addCount = 0
 
-    /// Simula un portachiavi che rifiuta le scritture, come accade in una build priva
-    /// dell'entitlement data-protection.
+    /// Simulates a keychain that rejects writes, as happens in a build lacking the
+    /// data-protection entitlement.
     var addStatusOverride: OSStatus?
 
     private func key(from dictionary: [String: Any]) -> Key {
@@ -44,10 +44,10 @@ final class FakeKeychain: KeychainAccessing {
         items.removeValue(forKey: key(from: query)) == nil ? errSecItemNotFound : errSecSuccess
     }
 
-    // MARK: - Utilità per i test
+    // MARK: - Test utilities
 
-    /// Scrive direttamente nel portachiavi "storico", simulando un'installazione precedente
-    /// all'introduzione di `kSecUseDataProtectionKeychain`.
+    /// Writes directly into the "legacy" keychain, simulating an installation that predates
+    /// the introduction of `kSecUseDataProtectionKeychain`.
     func seedLegacy(service: String, account: String, password: String) {
         items[Key(service: service, account: account, dataProtection: false)] = Data(password.utf8)
     }

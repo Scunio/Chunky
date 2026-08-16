@@ -14,8 +14,8 @@ struct DoublePagePolicyTests {
         #expect(DoublePagePolicy.isAllowed(viewportSize: CGSize(width: 1000, height: 600), isCompactWidth: false))
     }
 
-    /// È esattamente il gap che macOS aveva: una finestra alta e stretta mostrava comunque
-    /// due pagine, perché lì il valore era hardcoded a `true` invece di guardare il viewport.
+    /// This is exactly the gap macOS had: a tall, narrow window would still show
+    /// two pages, because there the value was hardcoded to `true` instead of looking at the viewport.
     @Test("Viewport più alta che larga: doppia pagina NON consentita")
     func tallViewportNotAllowed() {
         #expect(!DoublePagePolicy.isAllowed(viewportSize: CGSize(width: 500, height: 1200), isCompactWidth: false))

@@ -1,11 +1,11 @@
 import XCTest
 
-/// Gli UI test usano XCTest, non Swift Testing: XCUITest non ha un equivalente nel nuovo
-/// framework. Non provare a unificarli.
+/// UI tests use XCTest, not Swift Testing: XCUITest has no equivalent in the new framework.
+/// Don't try to unify them.
 ///
-/// Sono volutamente pochi: gli UI test sono lenti e fragili, e servono solo a proteggere le
-/// regressioni che i test unitari non possono vedere. I test specifici del Mac nativo
-/// (sidebar, ⌘, Preferenze, finestre multiple) arrivano quando quelle funzioni esistono.
+/// They're deliberately few: UI tests are slow and fragile, and only serve to guard against
+/// regressions that unit tests can't see. Native-Mac-specific tests (sidebar, ⌘, Preferences,
+/// multiple windows) will come once those features exist.
 final class LaunchUITests: XCTestCase {
     override func setUp() {
         super.setUp()
@@ -21,8 +21,8 @@ final class LaunchUITests: XCTestCase {
 
     func testAppLaunchesAndShowsLibrary() {
         let app = launchApp()
-        // Il titolo "Chunky" è l'intestazione della libreria: se non compare, l'avvio è
-        // finito su StorageErrorView o sul blocco genitori.
+        // The "Chunky" title is the library's header: if it doesn't appear, launch ended up
+        // on StorageErrorView or on the parental-controls lock screen.
         XCTAssertTrue(app.staticTexts["Chunky"].waitForExistence(timeout: 20),
                       "La libreria non è comparsa entro il timeout")
     }
@@ -30,8 +30,8 @@ final class LaunchUITests: XCTestCase {
     func testLibraryShowsImportAffordanceWhenEmpty() {
         let app = launchApp()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
-        // Con libreria vuota l'unico ingresso visibile all'import è questo pulsante.
-        // Se la libreria non è vuota il test non ha nulla da verificare.
+        // With an empty library the only visible entry point to import is this button.
+        // If the library isn't empty, the test has nothing to verify.
         let importButton = app.buttons["Importa fumetti"]
         if importButton.waitForExistence(timeout: 5) {
             XCTAssertTrue(importButton.isHittable)

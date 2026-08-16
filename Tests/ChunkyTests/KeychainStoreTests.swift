@@ -3,11 +3,11 @@ import Testing
 
 private let service = "com.scunio.Chunky.remoteAccounts"
 
-/// I test usano un portachiavi finto: l'entitlement `kSecUseDataProtectionKeychain` appartiene
-/// al processo ospite, e un bundle di test non firmato non ce l'ha, quindi il portachiavi
-/// reale non è raggiungibile da qui. Ciò che conta e che può regredire è la logica —
-/// scrittura nel portachiavi moderno, lettura con fallback su quello storico, migrazione — ed
-/// è esattamente ciò che questi test coprono.
+/// The tests use a fake keychain: the `kSecUseDataProtectionKeychain` entitlement belongs
+/// to the host process, and an unsigned test bundle doesn't have it, so the real
+/// keychain isn't reachable from here. What matters and can regress is the logic —
+/// writing to the modern keychain, reading with fallback to the legacy one, migration — and
+/// that's exactly what these tests cover.
 @Suite("Keychain", .serialized)
 struct KeychainStoreTests {
     private func withFakeKeychain(_ body: (FakeKeychain) throws -> Void) rethrows {
@@ -77,9 +77,9 @@ struct KeychainStoreTests {
         }
     }
 
-    /// Il caso dell'utente che aggiorna: la password esiste solo nel portachiavi storico.
-    /// Senza migrazione, l'aggiornamento farebbe sparire le credenziali degli account
-    /// remoti e il passcode del blocco genitori.
+    /// The case of a user who updates: the password only exists in the legacy keychain.
+    /// Without migration, the update would make the remote account credentials
+    /// and the parental lock passcode vanish.
     @Test("Una password nel portachiavi storico viene letta e migrata")
     func migratesLegacyEntry() {
         withFakeKeychain { fake in
@@ -87,15 +87,15 @@ struct KeychainStoreTests {
             fake.seedLegacy(service: service, account: id.uuidString, password: "vecchia")
 
             #expect(KeychainStore.password(forAccount: id) == "vecchia")
-            // Dopo la migrazione il valore sta nel portachiavi moderno...
+            // After migration the value lives in the modern keychain...
             #expect(fake.value(service: service, account: id.uuidString, dataProtection: true) == "vecchia")
-            // ...e non è rimasto duplicato in quello storico.
+            // ...and no duplicate is left in the legacy one.
             #expect(fake.value(service: service, account: id.uuidString, dataProtection: false) == nil)
         }
     }
 
-    /// Se la scrittura nel portachiavi moderno fallisce, la copia storica deve restare:
-    /// è l'unica che l'utente ha ancora.
+    /// If writing to the modern keychain fails, the legacy copy must remain:
+    /// it's the only one the user still has.
     @Test("Una scrittura fallita non distrugge la copia storica")
     func failedWriteKeepsLegacyCopy() {
         withFakeKeychain { fake in

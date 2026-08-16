@@ -67,9 +67,9 @@ struct PageTextRecognizerTests {
         #expect(!PageTextRecognizer.recognitionLanguages.isEmpty)
     }
 
-    /// Con l'auto-crop attivo la pagina disegnata a schermo non è quella su cui è girato l'OCR:
-    /// senza questa variante, un rettangolo normalizzato sulla pagina originale finirebbe
-    /// nel punto sbagliato non appena la pagina viene ritagliata.
+    /// With auto-crop active, the page drawn on screen isn't the one OCR ran on:
+    /// without this variant, a rectangle normalized against the original page would end up
+    /// in the wrong spot as soon as the page gets cropped.
     @Test("Con cropRect nil il risultato è identico alla conversione senza ritaglio")
     func nilCropRectMatchesUncroppedConversion() {
         let box = CGRect(x: 0.1, y: 0.8, width: 0.3, height: 0.1)

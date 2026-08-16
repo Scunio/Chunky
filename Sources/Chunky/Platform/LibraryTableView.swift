@@ -1,9 +1,9 @@
 #if os(macOS)
 import SwiftUI
 
-/// Alternativa alla griglia per librerie grandi: colonne ordinabili invece di copertine.
-/// Solo macOS — `Table` non ha un analogo pieno su iOS/iPadOS in questo SDK, e la griglia
-/// resta comunque l'idioma naturale lì.
+/// Alternative to the grid for large libraries: sortable columns instead of covers.
+/// macOS only — `Table` has no full equivalent on iOS/iPadOS in this SDK, and the grid
+/// remains the natural idiom there anyway.
 struct LibraryTableView: View {
     let comics: [ComicEntity]
     let onSelect: (ComicEntity) -> Void
@@ -32,8 +32,8 @@ struct LibraryTableView: View {
                     .foregroundColor(.secondary)
             }
         }
-        // `Table` seleziona per riga; l'apertura resta un doppio clic, perché un singolo clic
-        // che aprisse subito impedirebbe di selezionare una riga senza aprirla.
+        // `Table` selects by row; opening stays a double click, because a single click
+        // that opened right away would make it impossible to select a row without opening it.
         .contextMenu(forSelectionType: ComicEntity.ID.self) { _ in
         } primaryAction: { ids in
             guard let id = ids.first, let comic = sortedComics.first(where: { $0.id == id }) else { return }
@@ -41,8 +41,8 @@ struct LibraryTableView: View {
         }
     }
 
-    /// Stessa logica di `LibraryView.status(for:)` (privata a quel file): non reimplementa la
-    /// formula di `isFinished`, la riusa da `ComicEntity` per non farla divergere.
+    /// Same logic as `LibraryView.status(for:)` (private to that file): it doesn't reimplement
+    /// the `isFinished` formula, it reuses it from `ComicEntity` so it can't diverge.
     private func statusLabel(for comic: ComicEntity) -> String {
         if comic.lastReadPage <= 0 { return "Non letto" }
         if comic.isFinished { return "Terminato" }
@@ -53,8 +53,8 @@ struct LibraryTableView: View {
 private extension ComicEntity {
     var wrappedTitle: String { title ?? "" }
     var wrappedSeriesName: String { seriesName ?? "" }
-    /// `Date?` non conforma a `Comparable` in un modo che `KeyPathComparator` accetti
-    /// direttamente: si ordina sul timestamp, con le date mancanti in fondo.
+    /// `Date?` doesn't conform to `Comparable` in a way `KeyPathComparator` accepts
+    /// directly: sorting is done on the timestamp, with missing dates last.
     var dateAddedSortKey: TimeInterval { dateAdded?.timeIntervalSince1970 ?? 0 }
 }
 #endif

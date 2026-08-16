@@ -354,8 +354,8 @@ private struct ReaderContentView: View {
                 }
             }
 
-            // Sovrapposta direttamente alla pagina già visibile (non un'altra schermata/sheet):
-            // si vede ancora la pagina sotto, non un fumetto ricaricato a sé stante.
+            // Overlaid directly on the already-visible page (not another screen/sheet):
+            // the page underneath is still visible, not a comic reloaded as its own thing.
             if isPanelSelectionPresented, let provider = provider {
                 PanelSelectionView(pageIndex: currentPage, provider: provider) { cropped in
                     isPanelSelectionPresented = false
@@ -366,13 +366,13 @@ private struct ReaderContentView: View {
             }
         }
         #if os(iOS)
-        // Su iPad uno swipe orizzontale che parte vicino al bordo inferiore rischia di essere
-        // rubato dal gesto di sistema (Dock/App Switcher). defersSystemGestures dà priorità
-        // alla nostra DragGesture di cambio pagina finché il tocco è in corso su quel bordo.
+        // On iPad a horizontal swipe starting near the bottom edge risks being stolen by
+        // the system gesture (Dock/App Switcher). defersSystemGestures gives priority to
+        // our page-change DragGesture as long as the touch is in progress on that edge.
         .defersSystemGestures(on: .bottom)
-        // Sempre nascosta, non legata a isControlsVisible: altrimenti la sua comparsa/scomparsa
-        // anima la safe area proprio mentre la pagina (sotto .ignoresSafeArea()) dovrebbe restare
-        // ferma, causando lo spostamento verticale visibile al mostrare/nascondere i controlli.
+        // Always hidden, not tied to isControlsVisible: otherwise its appearance/disappearance
+        // animates the safe area right when the page (under .ignoresSafeArea()) should stay
+        // still, causing the visible vertical shift when the controls are shown/hidden.
         .statusBar(hidden: true)
         #endif
         .onAppear {
@@ -381,9 +381,9 @@ private struct ReaderContentView: View {
         }
         .onDisappear {
             idleResetWorkItem?.cancel()
-            // La scansione OCR è la cosa più costosa che il lettore possa avere in corso:
-            // lasciarla girare dopo l'uscita scalderebbe il telefono per un risultato che
-            // nessuno sta più guardando.
+            // OCR scanning is the most expensive thing the reader could have in progress:
+            // letting it keep running after exiting would heat up the phone for a result
+            // nobody is looking at anymore.
             textIndex?.cancelScanning()
         }
         .onChange(of: currentPage) { _, newValue in
@@ -395,9 +395,9 @@ private struct ReaderContentView: View {
         .onChange(of: isDoublePageEnabled) { realignCurrentPageToSpreadStart() }
         .onChange(of: isDoublePageAutoMode) { realignCurrentPageToSpreadStart() }
         .onChange(of: viewportSize) { realignCurrentPageToSpreadStart() }
-        // Le voci in cache sono state elaborate con le opzioni precedenti: senza svuotarla,
-        // una pagina già vista mostrerebbe il ritaglio/tint vecchio finché non esce dalla
-        // finestra di prefetch.
+        // Cached entries were processed with the previous options: without clearing it, a
+        // page already seen would show the old crop/tint until it falls outside the
+        // prefetch window.
         .onChange(of: isAutoCropEnabled) { purgePageCache() }
         .onChange(of: isUpscalingEnabled) { purgePageCache() }
         .onChange(of: isAutoTintContrastEnabled) { purgePageCache() }
@@ -453,7 +453,7 @@ private struct ReaderContentView: View {
         try? context.save()
     }
 
-    /// Card per saltare direttamente a una pagina specifica, aperta dal menu "..." dell'header.
+    /// Card to jump directly to a specific page, opened from the header's "..." menu.
     private func pageJumpCard(provider: ComicPageProvider) -> some View {
         VStack(spacing: 16) {
             Text("Vai a pagina")
@@ -492,14 +492,14 @@ private struct ReaderContentView: View {
         .cornerRadius(16)
     }
 
-    /// Apre la card di ricerca, creando l'indice al primo utilizzo e facendo ripartire la
-    /// scansione dalla pagina corrente: se l'indice esisteva già da una sessione precedente,
-    /// riprende solo le pagine che gli mancano.
+    /// Opens the search card, creating the index on first use and restarting the scan from
+    /// the current page: if the index already existed from a previous session, it only
+    /// resumes the pages it's missing.
     private func presentFind() {
         guard let provider = provider else { return }
-        // Chi arriva in fondo al fumetto ha già a schermo la conferma "continua con…": le due
-        // card si sovrapporrebbero. Aprire la ricerca è una risposta a quella domanda ("no,
-        // voglio cercare qualcosa"), quindi la conferma esce di scena.
+        // Whoever reaches the end of the comic already has the "continue with…" confirmation
+        // on screen: the two cards would overlap. Opening the search is an answer to that
+        // question ("no, I want to search for something"), so the confirmation exits the scene.
         pendingNextComic = nil
         if textIndex == nil {
             textIndex = ComicTextIndex(
@@ -538,14 +538,15 @@ private struct ReaderContentView: View {
         Task { await pageCache.purge() }
     }
 
-    /// Prefetch attorno alla pagina corrente, su entrambe le piattaforme.
+    /// Prefetch around the current page, on both platforms.
     private func prefetchAroundCurrentPage(provider: ComicPageProvider) async {
         guard let pageCache else { return }
-        // Deve combaciare con `proxy.size` che `PageView.loadImage` userà davvero: in doppia
-        // pagina ogni `PageView` occupa circa metà larghezza del viewport (HStack(spacing: 0)
-        // in `PageSpreadView`), non l'intero viewport. Senza questo, `ProcessingOptions` non
-        // coincide mai tra prefetch e richiesta reale, e la cache va in miss ad ogni pagina —
-        // esattamente nella modalità (doppia pagina + upscaling) in cui costa di più.
+        // Must match the `proxy.size` that `PageView.loadImage` will actually use: in
+        // double page each `PageView` takes up about half the viewport's width
+        // (HStack(spacing: 0) in `PageSpreadView`), not the whole viewport. Without this,
+        // `ProcessingOptions` never matches between prefetch and the real request, and the
+        // cache misses on every page — exactly in the mode (double page + upscaling) where
+        // it costs the most.
         let pageTargetSize = effectiveDoublePage
             ? CGSize(width: viewportSize.width / 2, height: viewportSize.height)
             : viewportSize
@@ -558,35 +559,36 @@ private struct ReaderContentView: View {
     }
 
     #if os(macOS)
-    /// La pagina (o lo spread) corrente, con la transizione dell'ultimo cambio pagina.
+    /// The current page (or spread), with the last page change's transition.
     ///
-    /// L'ordine dei due `.environment` è voluto: quello più esterno vale per il layer della
-    /// transizione, così i bordi di `.move(edge:)` si risolvono sempre in LTR e il verso lo
-    /// decidiamo noi in `pageTurnTransition`; quello interno rispecchia lo spread per i manga.
+    /// The order of the two `.environment` calls is deliberate: the outer one applies to
+    /// the transition layer, so `.move(edge:)`'s edges always resolve in LTR and we decide
+    /// the direction ourselves in `pageTurnTransition`; the inner one mirrors the spread for manga.
     private func pagerContent(provider: ComicPageProvider) -> some View {
         PageSpreadView(provider: provider, leadingIndex: currentPage, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache)
             .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
             .id(currentPage)
             .transition(pageTurnTransition)
             .environment(\.layoutDirection, .leftToRight)
-            // Avviato appena `currentPage` cambia, non dentro `PageView.onAppear`: così il
-            // prefetch parte subito, in parallelo con l'animazione di transizione, invece di
-            // aspettare che la pagina in arrivo lo richieda.
+            // Started as soon as `currentPage` changes, not inside `PageView.onAppear`: this
+            // way prefetch starts right away, in parallel with the transition animation,
+            // instead of waiting for the incoming page to request it.
             .task(id: currentPage) {
                 await prefetchAroundCurrentPage(provider: provider)
             }
     }
 
-    /// Traduce lo stile del gesto che ha innescato il cambio nella transizione corrispondente:
-    /// scorrimento laterale, dissolvenza o taglio netto (per "Immediato" l'animazione è già
-    /// disattivata in `step`, qui basta non aggiungere effetti).
+    /// Translates the style of the gesture that triggered the change into the corresponding
+    /// transition: side slide, fade or hard cut (for "Immediate" the animation is already
+    /// disabled in `step`, here it's enough to add no effects).
     private var pageTurnTransition: AnyTransition {
         switch turnStyle {
         case .fade:
             return .opacity
         case .slide:
-            // La pagina con indice più alto sta a destra in LTR e a sinistra nei manga: è da
-            // lì che deve entrare quando l'indice cresce, e dal lato opposto quando cala.
+            // The page with the higher index is on the right in LTR and on the left in
+            // manga: that's where it must enter from when the index increases, and from
+            // the opposite side when it decreases.
             let indexIncreasing = turnDirection > 0
             let rightToLeft = comic.readingDirection == .rightToLeft
             let entering: Edge = (indexIncreasing != rightToLeft) ? .trailing : .leading
@@ -602,42 +604,42 @@ private struct ReaderContentView: View {
     #endif
 
     #if os(iOS)
-    /// Quando lo swipe deve seguire il dito si usa `TabView(.page)`: il paging interattivo di
-    /// `UIPageViewController` non porta a termine la transizione dentro questa gerarchia (il pan
-    /// parte, il dataSource restituisce la pagina vicina, ma `didFinishAnimating` non arriva mai —
-    /// verificato anche con il contenuto ridotto a un colore pieno, quindi non è colpa dei gesti
-    /// della pagina né degli overlay). Il TabView invece funziona, al prezzo di non poter
-    /// sostituire la propria animazione di slide.
+    /// When the swipe must follow the finger, `TabView(.page)` is used: `UIPageViewController`'s
+    /// interactive paging doesn't complete the transition within this hierarchy (the pan
+    /// starts, the dataSource returns the neighbouring page, but `didFinishAnimating` never
+    /// arrives — also verified with the content reduced to a solid color, so it's not the
+    /// fault of the page's gestures or the overlays). TabView, on the other hand, works, at
+    /// the cost of not being able to replace its own slide animation.
     ///
-    /// Per gli altri stili serve proprio quello: "Immediato" e "Dissolvenza" non sono
-    /// rappresentabili da un trascinamento continuo, quindi lì il paging a gesto è spento, lo
-    /// swipe viene riconosciuto come gesto discreto e la pagina gira in modo programmatico con
-    /// l'animazione giusta — cosa che `PageTurnPager` sa fare e il TabView no.
+    /// For the other styles that's exactly what's needed: "Immediate" and "Fade" can't be
+    /// represented by a continuous drag, so there gesture-driven paging is switched off, the
+    /// swipe is recognized as a discrete gesture and the page turns programmatically with
+    /// the right animation — something `PageTurnPager` can do and TabView can't.
     @ViewBuilder
     private func iOSPager(provider: ComicPageProvider) -> some View {
-        // Un solo pager per tutti gli stili. Prima erano due: `TabView(.page)` quando swipe e
-        // tap erano entrambi "Scorrimento", pager programmatico altrimenti. Il TabView è caduto
-        // perché non sa sospendere il proprio scorrimento a pagina ingrandita, quindi il
-        // trascinamento per spostare la pagina zoomata cambiava pagina.
+        // A single pager for all styles. There used to be two: `TabView(.page)` when swipe
+        // and tap were both "Scroll", programmatic pager otherwise. TabView fell because it
+        // can't suspend its own scrolling when the page is zoomed in, so dragging to pan
+        // around the zoomed page changed the page.
         //
-        // `PageCollectionPager` sospende lo scorrimento con `isScrollEnabled`, che è una
-        // proprietà e non un rimontaggio: `UIPageViewController` per la stessa cosa obbligava a
-        // staccare il `dataSource`, e quindi a riconfigurare i propri gesture recognizer mentre
-        // il dito era ancora sullo schermo.
+        // `PageCollectionPager` suspends scrolling with `isScrollEnabled`, which is a
+        // property and not a remount: `UIPageViewController`, for the same thing, forced you
+        // to detach the `dataSource`, and therefore to reconfigure its own gesture
+        // recognizers while the finger was still on the screen.
         Group {
             programmaticPager(provider: provider)
         }
-        // A livello del pager intero, non dentro `PageView.onAppear`: parte subito al cambio
-        // pagina, in parallelo con l'eventuale animazione, invece di aspettare che la pagina
-        // in arrivo lo richieda — stesso motivo per cui su macOS è su `pagerContent`.
+        // At the whole pager's level, not inside `PageView.onAppear`: starts right away on
+        // a page change, in parallel with any animation, instead of waiting for the
+        // incoming page to request it — same reason it's on `pagerContent` on macOS.
         .task(id: currentPage) {
             await prefetchAroundCurrentPage(provider: provider)
         }
-        // Stesse scorciatoie del menu "Vai" su Mac (`ChunkyCommands`), ma via `onKeyPress`
-        // invece di `.commands`: su iPad non c'è una menu bar da popolare, e `.commands`
-        // richiederebbe comunque la stessa infrastruttura `.focusedSceneValue` già pensata per
-        // finestre multiple del Mac, qui inutile con un'unica scena. Utile solo con tastiera
-        // esterna collegata; sul touch non cambia nulla.
+        // Same shortcuts as the "Go to" menu on Mac (`ChunkyCommands`), but via `onKeyPress`
+        // instead of `.commands`: on iPad there's no menu bar to populate, and `.commands`
+        // would still need the same `.focusedSceneValue` infrastructure already designed
+        // for the Mac's multiple windows, useless here with a single scene. Only useful
+        // with an external keyboard connected; nothing changes for touch.
         .onKeyPress(.leftArrow) {
             step(-1, provider: provider, style: tapPageTurnStyle)
             return .handled
@@ -652,12 +654,13 @@ private struct ReaderContentView: View {
         }
     }
 
-    /// Le zone di tap stanno *dentro* il contenuto della pagina, non sovrapposte al pager in uno
-    /// ZStack: una view sovrapposta (anche `Color.clear`) è un fratello disegnato sopra la scroll
-    /// view del pager e l'hit-test UIKit le assegna ogni tocco, swipe compresi — il pager non ne
-    /// riceve nessuno e il cambio pagina resta morto (`simultaneousGesture` non cambia l'hit-test,
-    /// riguarda solo l'arbitraggio fra gesture). Da dentro il contenuto sono invece subview della
-    /// scroll view, che continua a riconoscere il pan dal proprio recognizer.
+    /// The tap zones live *inside* the page content, not overlaid on the pager in a ZStack:
+    /// an overlaid view (even a `Color.clear`) is a sibling drawn on top of the pager's
+    /// scroll view, and UIKit's hit-test assigns it every touch, swipes included — the
+    /// pager receives none of them and the page change stays dead (`simultaneousGesture`
+    /// doesn't change the hit-test, it only concerns arbitration between gestures). From
+    /// inside the content they're instead subviews of the scroll view, which keeps
+    /// recognizing the pan from its own recognizer.
     private func pageContent(provider: ComicPageProvider, start: Int) -> some View {
         ZStack {
             PageSpreadView(provider: provider, leadingIndex: start, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache, isActive: start == currentPage)
@@ -691,9 +694,9 @@ private struct ReaderContentView: View {
         }
     }
 
-    /// Riconosce lo swipe come gesto discreto (soglia superata = una pagina) per gli stili che
-    /// il paging interattivo non sa rendere. `simultaneousGesture` per non rubare il tocco alle
-    /// zone di tap sottostanti.
+    /// Recognizes the swipe as a discrete gesture (threshold exceeded = one page) for the
+    /// styles that interactive paging can't render. `simultaneousGesture` so as not to steal
+    /// the touch from the tap zones underneath.
     private func discreteSwipeCatcher(provider: ComicPageProvider) -> some View {
         Color.clear
             .contentShape(Rectangle())
@@ -717,8 +720,8 @@ private struct ReaderContentView: View {
             topInset: isControlsVisible ? headerHeight : 0,
             bottomInset: isControlsVisible ? footerHeight : 0
         ) {
-            // Con "Tap-to-pan" anche la zona "indietro" avanza: comodo se non riesci a
-            // raggiungere comodamente entrambi i lati dello schermo.
+            // With "Tap-to-pan" the "back" zone also advances: handy if you can't
+            // comfortably reach both sides of the screen.
             step(isTapToPanEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
         } onNext: {
             step(1, provider: provider, style: tapPageTurnStyle)
@@ -761,10 +764,10 @@ private struct ReaderContentView: View {
             guard swipePageTurnStyle != .disabled, !isZoomed else { return }
             step(direction, provider: provider, style: swipePageTurnStyle)
         })
-        // Pubblicata solo mentre questa vista è viva, quindi solo mentre una finestra reader è
-        // davvero in scena — nessun filtro sul blocco genitori qui, perché con `lock.isLocked`
-        // `ReaderWindowContainer` mostra `ParentalLockGateView` al posto di `ReaderView`,
-        // quindi questo codice non è proprio montato.
+        // Published only while this view is alive, so only while a reader window is really
+        // on stage — no parental-lock filter here, because with `lock.isLocked`
+        // `ReaderWindowContainer` shows `ParentalLockGateView` instead of `ReaderView`, so
+        // this code simply isn't mounted at all.
         .focusedSceneValue(\.readerActions, ReaderCommandActions(
             previousPage: { step(-1, provider: provider, style: tapPageTurnStyle) },
             nextPage: { step(1, provider: provider, style: tapPageTurnStyle) }
@@ -772,11 +775,12 @@ private struct ReaderContentView: View {
     }
     #endif
 
-    /// Avanza/retrocede di uno spread, rispettando la direzione di lettura corrente (manga = invertita).
-    /// `style` è quello del gesto che ha innescato il cambio (tap o swipe/tastiera hanno
-    /// impostazioni indipendenti) e decide l'animazione, che viene resa da `pageTurnTransition`.
-    /// Quando è attivo il pager nativo (swipe e tap entrambi su "Scorrimento") lo slide dello
-    /// swipe non passa da qui: lo gestisce il TabView seguendo il dito.
+    /// Moves forward/back by one spread, respecting the current reading direction (manga =
+    /// reversed). `style` is that of the gesture that triggered the change (tap or
+    /// swipe/keyboard have independent settings) and decides the animation, rendered by
+    /// `pageTurnTransition`. When the native pager is active (swipe and tap both on
+    /// "Scroll") the swipe's slide doesn't go through here: the TabView handles it by
+    /// following the finger.
     private func step(_ direction: Int, provider: ComicPageProvider, style: TapPageTurnStyle) {
         switch pagination(pageCount: provider.pageCount).step(from: currentPage, direction: direction) {
         case .endReached(let triggersNextComic):
@@ -805,8 +809,9 @@ private struct ReaderContentView: View {
         isControlsVisible.toggle()
     }
 
-    /// Timer "vetrina/kiosk": se il lettore resta inattivo per il tempo scelto in Impostazioni,
-    /// torna automaticamente a pagina 1. Ogni interazione (tap, cambio pagina) lo riavvia.
+    /// "Showcase/kiosk" timer: if the reader stays inactive for the time chosen in
+    /// Settings, it automatically returns to page 1. Every interaction (tap, page change)
+    /// restarts it.
     private func resetIdleTimerIfNeeded() {
         idleResetWorkItem?.cancel()
         guard readerIdleReset.rawValue > 0 else { return }
@@ -819,7 +824,7 @@ private struct ReaderContentView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + Double(readerIdleReset.rawValue), execute: workItem)
     }
 
-    /// Il fumetto successivo a quello corrente nell'ordine mostrato in libreria, se esiste.
+    /// The comic after the current one in the order shown in the library, if it exists.
     private var nextComicInLibrary: ComicEntity? {
         guard let index = libraryComics.firstIndex(where: { $0.objectID == comic.objectID }) else { return nil }
         let nextIndex = index + 1
@@ -827,8 +832,8 @@ private struct ReaderContentView: View {
         return libraryComics[nextIndex]
     }
 
-    /// Card di conferma mostrata a fine lettura: chiede esplicitamente se aprire il prossimo
-    /// fumetto in libreria, mostrandone copertina e titolo prima di procedere.
+    /// Confirmation card shown at the end of reading: explicitly asks whether to open the
+    /// next comic in the library, showing its cover and title before proceeding.
     private func nextComicConfirmation(_ next: ComicEntity) -> some View {
         VStack(spacing: 16) {
             Text("Fine del fumetto")
@@ -882,9 +887,9 @@ private struct ReaderContentView: View {
     }
 
     #if os(iOS)
-    /// Indicatore della luminosità durante il gesto a due dita: stesso ruolo dell'HUD di
-    /// sistema (che non compare quando la luminosità la cambia l'app), cioè far vedere che il
-    /// gesto sta funzionando e a che livello si è arrivati.
+    /// Brightness indicator during the two-finger gesture: same role as the system HUD
+    /// (which doesn't appear when the app changes the brightness), i.e. showing that the
+    /// gesture is working and at what level it has reached.
     private func brightnessIndicator(level: Double) -> some View {
         VStack(spacing: 10) {
             Image(systemName: level < 0.35 ? "sun.min.fill" : "sun.max.fill")
@@ -931,10 +936,10 @@ private struct ReaderContentView: View {
         }
     }
 
-    /// Barre dei controlli, con la misura della loro altezza su iOS: serve alle zone di tap
-    /// per non reagire ai tocchi che cadono sulle barre (vedi `PageTapZones.topInset`).
-    /// Proprietà a sé e non in linea nel `body` perché il body del lettore è già al limite di
-    /// quello che il compilatore riesce a inferire in tempi ragionevoli.
+    /// Control bars, with the measurement of their height on iOS: needed by the tap zones
+    /// so they don't react to touches that fall on the bars (see `PageTapZones.topInset`).
+    /// A separate property rather than inline in the `body` because the reader's body is
+    /// already at the limit of what the compiler can infer in a reasonable time.
     private var controlsChrome: some View {
         VStack {
             #if os(iOS)
@@ -968,15 +973,16 @@ private struct ReaderContentView: View {
                 }
                 .frame(minHeight: 44)
             }
-            // Ritaglio: apre la selezione riquadro (si seleziona sempre un'area, non c'è un
-            // tasto "condividi tutta la pagina" a parte).
+            // Crop: opens the panel selection (an area is always selected, there's no
+            // separate "share the whole page" button).
             Button(action: { isPanelSelectionPresented = true }) {
                 Image(systemName: "ellipsis.bubble").frame(width: 44, height: 44)
             }
-            // Cerca nel testo delle pagine (OCR, o livello testo se il file è un PDF nativo).
-            // Su iPhone in larghezza compatta l'icona non compare qui: una terza icona a
-            // sinistra lascerebbe al titolo pochi punti: sta nel menu "..." come le altre
-            // azioni che lì non entrano (stessa scelta di `headerTrailingActions`).
+            // Search the pages' text (OCR, or the text layer if the file is a native PDF).
+            // On iPhone in compact width the icon doesn't appear here: a third icon on the
+            // left would leave the title very little room, so it lives in the "..." menu
+            // like the other actions that don't fit there (same choice as
+            // `headerTrailingActions`).
             #if os(iOS)
             if horizontalSizeClass != .compact {
                 findButton
@@ -985,9 +991,9 @@ private struct ReaderContentView: View {
             findButton
             #endif
             Spacer(minLength: 4)
-            // Info fumetto (vai-a-pagina/preferiti/direzione lettura): tap prolungato sul
-            // titolo, per non aggiungere un'altra icona all'header. I Menu a tendina con
-            // contenuti interattivi sono inaffidabili su questo target (vedi ToolsPanelView).
+            // Comic info (go-to-page/favorites/reading direction): long press on the
+            // title, so as not to add another icon to the header. Dropdown Menus with
+            // interactive content are unreliable on this target (see ToolsPanelView).
             Text(comic.title ?? "")
                 .font(.subheadline.bold())
                 .lineLimit(1)
@@ -1000,14 +1006,15 @@ private struct ReaderContentView: View {
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity)
         .background(chromeBackground)
-        // Il materiale di sistema segue lo scheme corrente: forziamo qui quello coerente con
-        // "Sfondo pagina" (nero/bianco/auto), come già fa chromeForeground per il testo/icone.
+        // The system material follows the current scheme: here we force the one consistent
+        // with "Page background" (black/white/auto), as chromeForeground already does for
+        // text/icons.
         .environment(\.colorScheme, isBackgroundDark ? .dark : .light)
         .buttonStyle(PlainButtonStyle())
     }
 
-    /// Le 4 icone finali dell'header quando c'è spazio per mostrarle singolarmente (iPad, Mac,
-    /// iPhone in landscape) — condivisa da entrambi i rami di `headerTrailingActions`.
+    /// The header's 4 trailing icons when there's room to show them individually (iPad,
+    /// Mac, iPhone in landscape) — shared by both branches of `headerTrailingActions`.
     private var expandedTrailingActions: some View {
         Group {
             newComicsButton
@@ -1021,11 +1028,11 @@ private struct ReaderContentView: View {
         }
     }
 
-    /// Su iPhone (larghezza compatta) le 4 icone finali dell'header non ci stanno comode:
-    /// le raccogliamo in un menu "..." unico. Il reader non vive in una NavigationStack (vedi
-    /// header/chromeBackground sopra), quindi qui non c'è una vera toolbar di sistema che
-    /// collassi da sola: il trigger è manuale, su horizontalSizeClass. Su iPad/Mac restano le
-    /// singole icone, invariate.
+    /// On iPhone (compact width) the header's 4 trailing icons don't fit comfortably: we
+    /// gather them into a single "..." menu. The reader doesn't live in a NavigationStack
+    /// (see header/chromeBackground above), so there's no real system toolbar here that
+    /// collapses on its own: the trigger is manual, based on horizontalSizeClass. On
+    /// iPad/Mac the individual icons remain, unchanged.
     @ViewBuilder
     private var headerTrailingActions: some View {
         #if os(iOS)
@@ -1076,8 +1083,8 @@ private struct ReaderContentView: View {
         #endif
     }
 
-    /// Fumetti importati negli ultimi 7 giorni, come in libreria (stessa chiave "Cancella"
-    /// condivisa via @AppStorage). Vuoto se il reader è aperto senza contesto di libreria.
+    /// Comics imported in the last 7 days, as in the library (same "Clear" key shared via
+    /// @AppStorage). Empty if the reader is opened without a library context.
     private var recentComics: [ComicEntity] {
         let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? .distantPast
         let clearedAt = Date(timeIntervalSince1970: newTrayClearedAtTimestamp)
@@ -1102,7 +1109,7 @@ private struct ReaderContentView: View {
         }
     }
 
-    /// Il fumetto aperto più di recente nella libreria, come nel pulsante omonimo lì.
+    /// The most recently opened comic in the library, as in the button of the same name there.
     private var lastReadComic: ComicEntity? {
         libraryComics
             .filter { $0.dateLastOpened != nil }
@@ -1127,32 +1134,32 @@ private struct ReaderContentView: View {
     private var footer: some View {
         Group {
             if let provider = provider, provider.pageCount > 1 {
-                // Fine reale dello spread corrente, cioè l'inizio del successivo: `pageStep`
-                // vale 2 per tutta la doppia pagina, ma con "copertina da sola" il primo spread
-                // ne contiene una, e l'etichetta annunciava "1–2" mentre a schermo c'era solo
-                // la copertina. Stessa cosa per l'ultima pagina di un fumetto dispari.
+                // Real end of the current spread, i.e. the start of the next one: `pageStep`
+                // is 2 for double page throughout, but with "cover alone" the first spread
+                // contains just one, and the label used to announce "1–2" while only the
+                // cover was on screen. Same thing for the last page of a comic with an odd
+                // page count.
                 let upperBound = spreadStarts(pageCount: provider.pageCount)
                     .first(where: { $0 > currentPage }) ?? provider.pageCount
                 let label = upperBound - currentPage > 1
                     ? "\(currentPage + 1)–\(upperBound) / \(provider.pageCount)"
                     : "\(currentPage + 1) / \(provider.pageCount)"
-                // Larghezza della colonna calcolata sul caso peggiore ("100–101 / 164"),
-                // non sull'etichetta corrente: fissa evita che lo slider salti a ogni
-                // pagina, ma deve crescere con le cifre e con la doppia pagina, altrimenti
-                // l'etichetta va a capo.
+                // Column width computed on the worst case ("100–101 / 164"), not on the
+                // current label: fixed avoids the slider jumping on every page, but it must
+                // grow with the digit count and with double page, otherwise the label wraps.
                 let digits = String(provider.pageCount).count
                 let labelChars = effectiveDoublePage ? digits * 3 + 4 : digits * 2 + 3
                 let labelWidth = max(70, CGFloat(labelChars) * 7 + 8)
                 HStack(spacing: 4) {
-                    // Colonna a larghezza fissa: la larghezza del numero di pagina varia
-                    // (es. "1 / 20" vs "10–11 / 20") e senza pre-allocare lo spazio lo
-                    // slider accanto si sposterebbe ogni volta che cambia pagina.
+                    // Fixed-width column: the page number's width varies (e.g. "1 / 20" vs
+                    // "10–11 / 20") and without pre-allocating the space, the slider next to
+                    // it would shift every time the page changes.
                     VStack(spacing: 0) {
                         Text(label)
                             .font(.caption.monospacedDigit())
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
-                        // Scambia quale metà (sopra/sotto) avanza/retrocede in modalità una mano.
+                        // Swaps which half (top/bottom) advances/goes back in one-handed mode.
                         Button(action: { isOneHandedZonesReversed.toggle() }) {
                             Image(systemName: "chevron.right")
                                 .font(.caption2.weight(.bold))
@@ -1163,7 +1170,7 @@ private struct ReaderContentView: View {
                     .frame(width: labelWidth)
                     pageSlider(provider: provider)
                     if isDoublePageAllowed {
-                        // Cicla singola → doppia → automatica pagina.
+                        // Cycles single → double → automatic page.
                         Button(action: cyclePageLayoutMode) {
                             Image(systemName: pageLayoutModeIconName)
                                 .font(.footnote.weight(.semibold))
@@ -1206,11 +1213,11 @@ private struct ReaderContentView: View {
     private func pageSlider(provider: ComicPageProvider) -> some View {
         let maxValue = Double(max(provider.pageCount - 1, 0))
         let isRTL = comic.readingDirection == .rightToLeft
-        // Non usiamo lo Slider di sistema: sovrapposto al TabView(.page), il suo pan gesture
-        // interno perde l'arbitraggio con quello di scroll della pagina (la pagina gira invece
-        // di trascinare il pallino — verificato dal vivo, il pallino resta fermo mentre il
-        // pager mostra gli indicatori di swipe). Un DragGesture con priorità alta vince sempre
-        // sul gesture di swipe sottostante.
+        // We don't use the system Slider: overlaid on TabView(.page), its internal pan
+        // gesture loses the arbitration against the page's scroll gesture (the page turns
+        // instead of dragging the thumb — verified live, the thumb stays still while the
+        // pager shows the swipe indicators). A high-priority DragGesture always wins over
+        // the underlying swipe gesture.
         return GeometryReader { proxy in
             let width = max(proxy.size.width, 1)
             let progress = maxValue > 0 ? CGFloat(currentPage) / CGFloat(maxValue) : 0
@@ -1239,8 +1246,8 @@ private struct ReaderContentView: View {
                             let fraction = min(max(value.location.x / width, 0), 1)
                             let target = Int((Double(isRTL ? 1 - fraction : fraction) * maxValue).rounded())
                             let starts = spreadStarts(pageCount: provider.pageCount)
-                            // Trascinando il pallino si attraversano molte pagine di seguito:
-                            // animarle una per una sarebbe lento e a scatti.
+                            // Dragging the thumb crosses many pages in a row: animating
+                            // them one by one would be slow and jerky.
                             turnStyle = .immediate
                             currentPage = starts.min(by: { abs($0 - target) < abs($1 - target) }) ?? 0
                         }
@@ -1250,8 +1257,8 @@ private struct ReaderContentView: View {
         .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
     }
 
-    /// Mostrato mentre il fumetto viene scaricato da iCloud: percentuale reale e possibilità di
-    /// annullare senza dover passare dalla schermata Downloads.
+    /// Shown while the comic is being downloaded from iCloud: real percentage and the
+    /// ability to cancel without having to go through the Downloads screen.
     @ViewBuilder
     private func downloadOverlay(progress: Double) -> some View {
         VStack(spacing: 12) {
@@ -1283,28 +1290,28 @@ private struct ReaderContentView: View {
     }
 
     private func loadComic() {
-        // `onAppear` può scattare più di una volta sulla stessa vista, e per un segnaposto
-        // iCloud l'apertura ora arriva solo a download finito: senza questa guardia il secondo
-        // giro aggancerebbe una seconda callback allo stesso trasferimento e aprirebbe
-        // l'archivio due volte.
+        // `onAppear` can fire more than once on the same view, and for an iCloud placeholder
+        // the opening now only arrives once the download is finished: without this guard the
+        // second pass would hook a second callback onto the same transfer and open the
+        // archive twice.
         guard provider == nil, !isLoadingComic else { return }
         isLoadingComic = true
         let url = LibraryStorage.fileURL(forRelativePath: comic.relativePath ?? "")
         let format = comic.format
         let startingPage = Int(comic.lastReadPage)
 
-        // La pagina salvata va ripristinata *prima* che il pager esista, non quando arriva il
-        // provider: il pager si costruisce leggendo currentPage, quindi se lo trova ancora a 0 e
-        // lo vede cambiare subito dopo esegue uno scorrimento programmatico verso la pagina
-        // giusta — e il primo swipe dell'utente, che cade dentro quell'assestamento, viene perso
-        // (verificato: aprendo a pagina 1, dove non c'è nulla da ripristinare, il primo swipe
-        // funziona). Qui il numero di pagine non è ancora noto: l'allineamento all'inizio dello
-        // spread avviene dopo, ed è un no-op a pagina singola.
+        // The saved page must be restored *before* the pager exists, not when the provider
+        // arrives: the pager builds itself by reading currentPage, so if it finds it still
+        // at 0 and then sees it change right after, it runs a programmatic scroll toward the
+        // right page — and the user's first swipe, which lands right inside that settling,
+        // gets lost (verified: opening at page 1, where there's nothing to restore, the
+        // first swipe works). Here the page count isn't known yet: alignment to the spread
+        // start happens afterward, and it's a no-op in single page.
         currentPage = max(0, startingPage)
 
-        // Il download da iCloud può richiedere più di qualche secondo (file grandi, connessione
-        // lenta): passa da `ComicDownloadService`, che lo registra nella scheda Downloads con un
-        // progresso reale invece di far fallire il lettore dopo un timeout fisso.
+        // The iCloud download can take more than a few seconds (large files, slow
+        // connection): it goes through `ComicDownloadService`, which registers it in the
+        // Downloads tab with real progress instead of failing the reader after a fixed timeout.
         downloadItem = ComicDownloadService.downloadIfNeeded(comic: comic) { progress in
             downloadProgress = progress
         } completion: { error in
@@ -1319,8 +1326,8 @@ private struct ReaderContentView: View {
         }
     }
 
-    /// Apre l'archivio e costruisce il pager. Separata da `loadComic` perché quando il fumetto è
-    /// un segnaposto iCloud arriva solo dopo il download, non subito.
+    /// Opens the archive and builds the pager. Kept separate from `loadComic` because when
+    /// the comic is an iCloud placeholder it only arrives after the download, not right away.
     private func openProvider(at url: URL, format: ComicFormat, startingPage: Int) {
         DispatchQueue.global(qos: .userInitiated).async {
             do {
@@ -1332,9 +1339,9 @@ private struct ReaderContentView: View {
                     let clampedStart = min(startingPage, max(0, loaded.pageCount - 1))
                     let starts = spreadStarts(pageCount: loaded.pageCount)
                     let aligned = starts.last(where: { $0 <= clampedStart }) ?? 0
-                    // Ripristino della posizione salvata: deve essere un salto secco, non un
-                    // cambio pagina animato (e `setPageWithoutAnimation` non fa nulla se la
-                    // pagina ripristinata era già un inizio di spread valido).
+                    // Restoring the saved position: it must be a hard jump, not an animated
+                    // page change (and `setPageWithoutAnimation` does nothing if the
+                    // restored page was already a valid spread start).
                     setPageWithoutAnimation(aligned)
                     if comic.pageCount == 0 {
                         comic.pageCount = Int32(loaded.pageCount)
@@ -1352,14 +1359,14 @@ private struct ReaderContentView: View {
 }
 
 #if os(iOS)
-/// Altezza misurata della barra superiore dei controlli (vedi `ReaderView.headerHeight`).
+/// Measured height of the top control bar (see `ReaderView.headerHeight`).
 struct ChromeHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
-/// Come `ChromeHeightKey`, per la barra inferiore: due chiavi distinte perché le due misure
-/// viaggiano nello stesso albero e una sola le fonderebbe insieme.
+/// Like `ChromeHeightKey`, for the bottom bar: two distinct keys because the two
+/// measurements travel through the same tree and a single one would merge them together.
 struct ChromeFooterHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }

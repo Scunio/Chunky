@@ -50,9 +50,9 @@ struct ColorThemeView: View {
             }
 
             Section(footer: Text("Personalizza i colori della libreria. Lascia \"Automatico\" per seguire la modalità chiara/scura di sistema.")) {
-                // Ogni riga ha un colore di ripiego diverso quando non è ancora personalizzata
-                // (hex vuoto = "Automatico"): mostrarli tutti come .primary li rendeva identici
-                // e neri, indistinguibili l'uno dall'altro nonostante rappresentino cose diverse.
+                // Each row has a different fallback color when it hasn't been customized yet
+                // (empty hex = "Automatic"): showing them all as .primary made them identical
+                // and black, indistinguishable from one another despite representing different things.
                 colorRow(title: "Sfondo", hex: $theme.backgroundHex, defaultColor: systemBackgroundColor)
                 colorRow(title: "Testo", hex: $theme.textHex, defaultColor: .primary)
                 colorRow(title: "Colore evidenziazione", hex: $theme.accentHex, defaultColor: .accentColor)
@@ -129,9 +129,9 @@ struct ColorThemeView: View {
         }
     }
 
-    /// Colore di sistema per lo sfondo, come ripiego quando "Sfondo" non è ancora personalizzato
-    /// (hex vuoto = "Automatico"). Non è lo stesso `.primary` usato per "Testo": mostrare lo
-    /// stesso valore per righe che rappresentano cose diverse è ciò che le rendeva indistinguibili.
+    /// System color for the background, as a fallback when "Background" hasn't been customized yet
+    /// (empty hex = "Automatic"). It's not the same `.primary` used for "Text": showing the
+    /// same value for rows that represent different things is what made them indistinguishable.
     private var systemBackgroundColor: Color {
         #if os(iOS)
         Color(UIColor.systemBackground)

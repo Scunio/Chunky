@@ -1,19 +1,19 @@
 #if os(macOS)
 import SwiftUI
 
-/// Voci di menu bar aggiunte da Chunky. Legge le azioni pubblicate da `LibraryView` tramite
-/// `.focusedSceneValue`: se nessuna finestra libreria ha il focus (es. una finestra reader,
-/// o le Preferenze), le voci restano presenti ma disabilitate — una menu bar che fa sparire
-/// e ricomparire le proprie voci sarebbe più fastidiosa da leggere che una voce grigia.
+/// Menu bar items added by Chunky. Reads the actions published by `LibraryView` via
+/// `.focusedSceneValue`: if no library window has focus (e.g. a reader window,
+/// or Preferences), the items stay present but disabled — a menu bar whose items keep
+/// appearing and disappearing would be more annoying to read than a grayed-out item.
 struct ChunkyCommands: Commands {
     @FocusedValue(\.libraryActions) private var libraryActions: LibraryCommandActions?
     @FocusedValue(\.readerActions) private var readerActions: ReaderCommandActions?
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
-        // Le Preferenze sono una `Window("Impostazioni", id: "settings")` invece della scena
-        // `Settings` di sistema (vedi ChunkyApp.swift): serve ricreare a mano la voce di menu
-        // e la scorciatoia ⌘, che `Settings` avrebbe aggiunto da sola.
+        // Preferences is a `Window("Impostazioni", id: "settings")` instead of the system
+        // `Settings` scene (see ChunkyApp.swift): the menu item and the ⌘, shortcut,
+        // which `Settings` would have added on its own, need to be recreated by hand.
         CommandGroup(replacing: .appSettings) {
             Button("Impostazioni…") {
                 openWindow(id: "settings")
@@ -34,15 +34,15 @@ struct ChunkyCommands: Commands {
             .keyboardShortcut(.rightArrow, modifiers: [])
             .disabled(readerActions == nil)
 
-            // Stesso effetto della freccia destra: la barra spaziatrice deve avanzare di
-            // pagina come la freccia destra.
+            // Same effect as the right arrow: the space bar must advance a page
+            // just like the right arrow.
             Button("Pagina successiva (Spazio)") {
                 readerActions?.nextPage()
             }
             .keyboardShortcut(.space, modifiers: [])
             .disabled(readerActions == nil)
-            // Non serve nel menu, solo come scorciatoia: la freccia destra sopra basta a
-            // renderla scopribile.
+            // Not needed in the menu, only as a shortcut: the right arrow above is enough
+            // to make it discoverable.
             .accessibilityHidden(true)
         }
 

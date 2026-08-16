@@ -23,21 +23,21 @@ enum ComicReadError: LocalizedError {
     }
 }
 
-/// Fornisce accesso alle pagine di un fumetto, indipendentemente dal formato sorgente.
+/// Provides access to a comic's pages, independent of the source format.
 protocol ComicPageProvider {
     var pageCount: Int { get }
     func image(atPage index: Int) throws -> PlatformImage
 
-    /// Byte originali della pagina (es. il JPEG/PNG dentro l'archivio), quando disponibili.
-    /// Permette di generare miniature senza dover ri-codificare un'immagine già decodificata.
+    /// Raw bytes of the page (e.g. the JPEG/PNG inside the archive), when available.
+    /// Lets thumbnails be generated without having to re-encode an already-decoded image.
     func rawData(atPage index: Int) throws -> Data?
 
-    /// Contenuto di ComicInfo.xml se presente nell'archivio, per popolare serie/titolo/numero.
+    /// Contents of ComicInfo.xml if present in the archive, used to populate series/title/number.
     var comicInfoXML: Data? { get }
 
-    /// Righe di testo già digitali presenti nel file, se il formato ne ha (il livello testo di
-    /// un PDF). `nil` significa "questa pagina non ha testo estraibile, serve l'OCR": è il caso
-    /// di tutti i CBZ/CBR, che sono immagini, e anche dei PDF fatti di sole scansioni.
+    /// Already-digital text lines present in the file, if the format has any (the text layer of
+    /// a PDF). `nil` means "this page has no extractable text, OCR is needed": that's the case
+    /// for all CBZ/CBR files, which are images, and also for PDFs made up of scans only.
     func textLines(atPage index: Int) throws -> [RecognizedTextLine]?
 }
 

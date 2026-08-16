@@ -13,8 +13,8 @@ enum FolderToComicError: LocalizedError {
     }
 }
 
-/// Trasforma una cartella di immagini in un CBZ, così una serie di scan sciolti (jpg/png) può
-/// entrare in libreria come un fumetto vero e proprio.
+/// Turns a folder of images into a CBZ, so a set of loose scans (jpg/png) can
+/// enter the library as a proper comic.
 enum FolderToComicConverter {
     private static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif"]
 
@@ -33,8 +33,8 @@ enum FolderToComicConverter {
 
         guard !images.isEmpty else { throw FolderToComicError.noImagesFound }
 
-        // Su iCloud Drive i file di una cartella non ancora aperta possono essere solo
-        // segnaposto non scaricati: senza aspettarli, finirebbero archiviati vuoti/troncati.
+        // On iCloud Drive, the files of a folder not yet opened may just be
+        // undownloaded placeholders: without waiting for them, they'd end up archived empty/truncated.
         for imageURL in images {
             try? LibraryStorage.ensureDownloaded(imageURL)
         }

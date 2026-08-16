@@ -2,10 +2,10 @@ import SwiftUI
 import CoreData
 import UniformTypeIdentifiers
 
-/// Servizio elencato in "Add account": qui il tocco apre il picker file di sistema, dove
-/// Dropbox/Google Drive/OneDrive compaiono automaticamente se le rispettive app sono installate
-/// — non essendoci integrazione OAuth diretta, e nessun sistema di acquisto in-app che richieda
-/// di distinguere servizi "PRO" da quelli gratuiti.
+/// Service listed under "Add account": tapping it opens the system file picker, where
+/// Dropbox/Google Drive/OneDrive show up automatically if the respective apps are installed
+/// — there's no direct OAuth integration, and no in-app purchase system that would require
+/// distinguishing "PRO" services from free ones.
 private struct OpenRemoteService {
     let name: String
     let systemImage: String
@@ -19,9 +19,9 @@ struct AccountsView: View {
         sortDescriptors: [NSSortDescriptor(keyPath: \RemoteAccountEntity.dateAdded, ascending: true)]
     ) private var accounts: FetchedResults<RemoteAccountEntity>
 
-    /// Due `.fileImporter` distinti sulla stessa view vanno in conflitto in SwiftUI (uno dei due
-    /// resta a metà presentazione, con un artefatto visivo del picker di sistema che non si apre
-    /// mai del tutto) — un solo importer, con il tipo di contenuto scelto in base a questo stato.
+    /// Two distinct `.fileImporter`s on the same view conflict in SwiftUI (one of them
+    /// gets stuck mid-presentation, with a visual artifact of the system picker that never
+    /// fully opens) — so there's a single importer, with the content type chosen based on this state.
     private enum ActiveImporter: Identifiable {
         case comics
         case folder
@@ -32,8 +32,8 @@ struct AccountsView: View {
     @State private var addAccountKind: RemoteAccountKind = .opds
     @State private var activeImporter: ActiveImporter?
     @State private var folderConversionError: String?
-    /// "+" non apre un altro schermo: rivela la sezione "Add account" in coda alla stessa lista
-    /// e diventa "Done" per richiuderla.
+    /// "+" doesn't open another screen: it reveals the "Add account" section at the end of the
+    /// same list and turns into "Done" to close it again.
     @State private var isAddingAccount = false
 
     private static let openServices: [OpenRemoteService] = [
@@ -111,9 +111,9 @@ struct AccountsView: View {
                             .foregroundColor(.red)
                             .font(.footnote)
                     }
-                    // Mostrato anche qui (non solo nell'alert di LibraryView) perché quell'alert,
-                    // legato alla view che presenta questo sheet, può restare invisibile finché
-                    // il pannello Accounts non viene chiuso.
+                    // Also shown here (not just in LibraryView's alert) because that alert,
+                    // tied to the view presenting this sheet, can stay invisible until
+                    // the Accounts panel is closed.
                     if let importError = viewModel.importError {
                         Text(importError)
                             .foregroundColor(.red)
@@ -131,9 +131,9 @@ struct AccountsView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            // Placement diverso per piattaforma: su iOS `.primaryAction` cade sullo stesso
-            // lato (trailing) del "Chiudi" di `toolbarDoneButton()` quando questa vista è
-            // presentata come sheet — i due finiscono ammassati insieme.
+            // Different placement per platform: on iOS `.primaryAction` lands on the same
+            // side (trailing) as the "Close" of `toolbarDoneButton()` when this view is
+            // presented as a sheet — the two end up crammed together.
             #if os(iOS)
             ToolbarItem(placement: .navigationBarLeading) {
                 addAccountToggleButton

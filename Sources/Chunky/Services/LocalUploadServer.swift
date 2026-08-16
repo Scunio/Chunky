@@ -1,14 +1,14 @@
 import Foundation
 import Network
 
-/// Mini server HTTP locale: mostra una pagina con un form di upload, così si possono trascinare
-/// fumetti da un browser su un computer della stessa rete direttamente nella libreria — senza
-/// account cloud, senza cavi.
+/// Small local HTTP server: shows a page with an upload form, so comics can be
+/// dragged from a browser on a computer on the same network directly into the library — without
+/// a cloud account, without cables.
 final class LocalUploadServer: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var lastError: String?
 
-    /// Chiamata (su thread di background) con l'URL locale di ogni file ricevuto.
+    /// Called (on a background thread) with the local URL of each file received.
     var onFileReceived: ((URL) -> Void)?
 
     private var listener: NWListener?
@@ -58,7 +58,7 @@ final class LocalUploadServer: ObservableObject {
         isRunning = false
     }
 
-    /// Indirizzi IP locali su cui il server è raggiungibile dalla rete, da mostrare all'utente.
+    /// Local IP addresses on which the server is reachable from the network, to show to the user.
     static func localIPAddresses() -> [String] {
         var addresses: [String] = []
         var ifaddrPointer: UnsafeMutablePointer<ifaddrs>?
@@ -202,8 +202,8 @@ final class LocalUploadServer: ObservableObject {
     """
 }
 
-/// Parser HTTP/1.1 minimale: quanto basta per leggere una richiesta GET o una POST
-/// multipart/form-data completa (metodo, header, body).
+/// Minimal HTTP/1.1 parser: just enough to read a GET request or a complete
+/// multipart/form-data POST (method, headers, body).
 enum HTTPRequestParser {
     struct ParsedRequest {
         let method: String
@@ -237,7 +237,7 @@ enum HTTPRequestParser {
     }
 }
 
-/// Estrae le singole parti (nome file + contenuto) da un body multipart/form-data.
+/// Extracts the individual parts (filename + content) from a multipart/form-data body.
 enum MultipartParser {
     struct Part {
         let filename: String?
@@ -284,7 +284,7 @@ enum MultipartParser {
 }
 
 private extension Data {
-    /// Divide i dati in base a un separatore binario (non disponibile out-of-the-box su Data).
+    /// Splits the data on a binary separator (not available out-of-the-box on Data).
     func split(separator: Data) -> [Data] {
         var result: [Data] = []
         var searchStart = startIndex

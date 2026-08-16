@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Le view come SettingsView/ColorThemeView/ParentalLockSettingsView sono pensate per essere
-/// spinte in una NavigationView esistente (che offre già un bottone indietro). Quando vengono
-/// presentate da sole in uno sheet (es. dal menu Tools del reader) serve un modo esplicito per
-/// chiuderle.
+/// Views like SettingsView/ColorThemeView/ParentalLockSettingsView are designed to be
+/// pushed into an existing NavigationView (which already offers a back button). When they're
+/// presented on their own in a sheet (e.g. from the reader's Tools menu) an explicit way to
+/// close them is needed.
 extension View {
     func toolbarDoneButton(action: @escaping () -> Void) -> some View {
         toolbar {

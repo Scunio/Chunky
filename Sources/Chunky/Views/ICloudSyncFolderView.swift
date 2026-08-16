@@ -1,17 +1,17 @@
 import SwiftUI
 import CoreData
 
-/// Schermata "Sync Folder" raggiunta dalla riga "iCloud Drive" del pannello Account.
+/// "Sync Folder" screen reached from the "iCloud Drive" row of the Accounts panel.
 ///
-/// A differenza del resto della sincronizzazione (che copia i fumetti importati nel container
-/// iCloud dell'app, vedi `LibraryStorage`), qui l'utente attiva esplicitamente un riscontro
-/// automatico della cartella "Chunky" visibile in Files/Finder: i file che ci trascina dentro
-/// da un altro dispositivo vengono registrati in libreria senza bisogno di reimportarli a mano.
+/// Unlike the rest of the sync (which copies imported comics into the app's iCloud
+/// container, see `LibraryStorage`), here the user explicitly enables automatic
+/// matching of the "Chunky" folder visible in Files/Finder: files dragged into it
+/// from another device get registered in the library without needing to reimport them by hand.
 ///
-/// Il rescan vero e proprio (osservare `ICloudDownloadTracker`, avviato una sola volta da
-/// `ContentView`, e richiamare `rebuildLibrary`) è centralizzato in `ContentView`, radice sempre
-/// viva per tutta la sessione: farlo anche qui duplicherebbe la scansione ogni volta che questa
-/// schermata è visibile. Questa vista si limita a leggere lo stato del tracker per mostrarlo.
+/// The actual rescan (observing `ICloudDownloadTracker`, started once by
+/// `ContentView`, and calling `rebuildLibrary`) is centralized in `ContentView`, the root that's
+/// always alive for the whole session: doing it here too would duplicate the scan every time this
+/// screen is visible. This view just reads the tracker's state to display it.
 struct ICloudSyncFolderView: View {
     @EnvironmentObject private var viewModel: LibraryViewModel
     @FetchRequest(sortDescriptors: []) private var comics: FetchedResults<ComicEntity>
@@ -58,10 +58,10 @@ struct ICloudSyncFolderView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .onChange(of: isEnabled) { _, newValue in
-            // Se iCloud non era ancora pronto all'avvio dell'app, `start()` in
-            // `ContentView.onAppear` è uscito subito senza fare nulla (è idempotente: non
-            // fa danni a richiamarlo qui). Attivare il toggle dà così una seconda occasione di
-            // agganciarsi, invece di restare inerte per il resto della sessione.
+            // If iCloud wasn't ready yet when the app launched, `start()` in
+            // `ContentView.onAppear` returned immediately without doing anything (it's idempotent:
+            // no harm in calling it again here). Enabling the toggle thus gives a second chance to
+            // hook in, instead of staying inert for the rest of the session.
             if newValue { ICloudDownloadTracker.shared.start() }
         }
     }

@@ -1,7 +1,7 @@
 import Foundation
 
-/// Una voce nella navigazione di un account remoto: una cartella da aprire oppure
-/// un fumetto scaricabile.
+/// An entry in a remote account's browsing hierarchy: either a folder to open or
+/// a downloadable comic.
 struct RemoteEntry: Identifiable, Hashable {
     let id = UUID()
     let title: String
@@ -9,11 +9,11 @@ struct RemoteEntry: Identifiable, Hashable {
     let url: URL
 }
 
-/// Incapsula la continuation di `downloadFile`, collegata al completion handler del task solo
-/// dopo la sua creazione (il completion handler va passato alla creazione del task, prima che
-/// la continuation esista). @unchecked Sendable: viene scritta una sola volta prima di
-/// `task.resume()` e letta solo dal completion handler del task, che URLSession garantisce
-/// invocare al più una volta — nessun accesso concorrente reale nonostante il tipo non lo dimostri al compilatore.
+/// Wraps the continuation for `downloadFile`, connected to the task's completion handler only
+/// after the task is created (the completion handler must be passed when the task is created,
+/// before the continuation exists). @unchecked Sendable: it's written exactly once before
+/// `task.resume()` and read only by the task's completion handler, which URLSession guarantees
+/// to invoke at most once — no actual concurrent access even though the type doesn't prove it to the compiler.
 private final class ContinuationHolder: @unchecked Sendable {
     var continuation: CheckedContinuation<URL, Error>?
 }
@@ -33,11 +33,11 @@ enum RemoteBrowsingError: LocalizedError {
 }
 
 protocol RemoteBrowsing {
-    /// Elenca il contenuto di una cartella/collezione remota. `url` è la root dell'account
-    /// alla prima chiamata, o l'URL di una sottocartella restituito da una entry precedente.
+    /// Lists the contents of a remote folder/collection. `url` is the account's root on the
+    /// first call, or the URL of a subfolder returned by a previous entry.
     func listEntries(at url: URL, account: RemoteAccountEntity) async throws -> [RemoteEntry]
 
-    /// Scarica un fumetto in locale, restituendo l'URL temporaneo del file scaricato.
+    /// Downloads a comic locally, returning the temporary URL of the downloaded file.
     func download(_ entry: RemoteEntry, account: RemoteAccountEntity) async throws -> URL
 }
 
@@ -53,9 +53,9 @@ extension RemoteBrowsing {
         return request
     }
 
-    /// Scarica il contenuto di `url` in un file temporaneo, propagando le credenziali dell'account.
-    /// Usa l'API a completion-handler (non quella async di URLSession, disponibile solo da iOS15/macOS12)
-    /// per restare compatibili con il target minimo dell'app (iOS14/macOS11).
+    /// Downloads the contents of `url` into a temporary file, propagating the account's credentials.
+    /// Uses the completion-handler API (not URLSession's async one, available only from iOS15/macOS12)
+    /// to stay compatible with the app's minimum target (iOS14/macOS11).
     func downloadFile(from url: URL, account: RemoteAccountEntity, suggestedName: String) async throws -> URL {
         let request = authenticatedRequest(for: url, account: account)
         let holder = ContinuationHolder()
@@ -74,8 +74,8 @@ extension RemoteBrowsing {
                 holder.continuation?.resume(throwing: RemoteBrowsingError.invalidResponse)
                 return
             }
-            // Il file a `location` viene eliminato subito dopo il ritorno del completion handler:
-            // lo spostiamo sincronamente prima di risolvere la continuation.
+            // The file at `location` is deleted right after the completion handler returns:
+            // we move it synchronously before resolving the continuation.
             let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             do {
                 try FileManager.default.moveItem(at: location, to: destination)

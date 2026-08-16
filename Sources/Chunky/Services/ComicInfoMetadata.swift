@@ -1,8 +1,8 @@
 import Foundation
 
-/// Metadati letti da `ComicInfo.xml` (standard ComicRack/ComicBookLover), quando presente
-/// dentro l'archivio CBZ/CBR. È ciò che permette a una libreria di auto-organizzarsi per
-/// serie invece di mostrare solo il nome del file.
+/// Metadata read from `ComicInfo.xml` (ComicRack/ComicBookLover standard), when present
+/// inside the CBZ/CBR archive. This is what lets a library auto-organize itself by
+/// series instead of just showing the file name.
 struct ComicInfoMetadata {
     var series: String?
     var title: String?

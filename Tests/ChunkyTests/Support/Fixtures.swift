@@ -1,14 +1,14 @@
 import Foundation
 
-/// Ancora per risalire al bundle del test target. Senza SwiftPM non esiste `Bundle.module`,
-/// e `Bundle.main` in un unit test è l'app ospite, non il bundle dei test.
+/// Anchor for tracing back to the test target's bundle. Without SwiftPM there's no
+/// `Bundle.module`, and `Bundle.main` in a unit test is the host app, not the test bundle.
 private final class BundleToken {}
 
 enum Fixtures {
     static let bundle = Bundle(for: BundleToken.self)
 
-    /// Le fixture sono committate sotto `Tests/ChunkyTests/Fixtures` e copiate nel bundle
-    /// del test target. Vedi `Scripts/make-fixtures.swift` per come rigenerarle.
+    /// Fixtures are committed under `Tests/ChunkyTests/Fixtures` and copied into the test
+    /// target's bundle. See `Scripts/make-fixtures.swift` for how to regenerate them.
     static func url(_ name: String) -> URL? {
         let ext = (name as NSString).pathExtension
         let base = (name as NSString).deletingPathExtension

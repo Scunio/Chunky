@@ -3,14 +3,13 @@ import SwiftUI
 import AppKit
 #endif
 
-/// Permette di disegnare un rettangolo sopra la pagina corrente (quella già visibile nel
-/// lettore, dietro a questa vista) per condividere solo quella vignetta invece dell'intera
-/// pagina — sovrapposta direttamente alla stessa schermata di lettura, non un'altra schermata:
-/// nessuno sfondo opaco, nessuna immagine ricaricata a sé. In alto a destra le forbici (verdi)
-/// confermano il ritaglio, la X (rossa) annulla; il riquadro di selezione è tratteggiato, senza
-/// riempimento. La geometria di fitting deve restare identica a quella con cui la pagina è già
-/// disegnata (stesso `.scaledToFit()` a schermo intero), altrimenti la selezione non
-/// corrisponderebbe a quello che si vede.
+/// Lets the user draw a rectangle over the current page (the one already visible in the
+/// reader, behind this view) to share just that panel instead of the whole page — overlaid
+/// directly on the same reading screen, not another screen: no opaque background, no image
+/// reloaded on its own. In the top right the scissors (green) confirm the crop, the X (red)
+/// cancels; the selection box is dashed, with no fill. The fitting geometry must stay
+/// identical to the one the page is already drawn with (the same full-screen
+/// `.scaledToFit()`), otherwise the selection wouldn't correspond to what's on screen.
 struct PanelSelectionView: View {
     let pageIndex: Int
     let provider: ComicPageProvider
@@ -33,9 +32,9 @@ struct PanelSelectionView: View {
                     .gesture(dragGesture(in: proxy.size))
                     .onAppear { displaySize = proxy.size }
                     .onChange(of: proxy.size) { _, newSize in
-                        // Dopo una rotazione la vecchia selezione (in coordinate schermo)
-                        // non corrisponde più a nulla nella nuova geometria: va scartata,
-                        // altrimenti il rettangolo mostrato e il ritaglio calcolato sono sbagliati.
+                        // After a rotation the old selection (in screen coordinates)
+                        // no longer corresponds to anything in the new geometry: it must be
+                        // discarded, otherwise the displayed rectangle and the computed crop are wrong.
                         displaySize = newSize
                         selection = .zero
                         dragStart = nil
@@ -81,8 +80,8 @@ struct PanelSelectionView: View {
     }
 
     private func loadImage() {
-        // Solo per i pixel da cui ritagliare: la pagina è già visibile dietro, non va
-        // ridisegnata qui.
+        // Only for the pixels to crop from: the page is already visible behind this view, it
+        // doesn't need to be redrawn here.
         DispatchQueue.global(qos: .userInitiated).async {
             let image = try? provider.image(atPage: pageIndex)
             DispatchQueue.main.async { fullImage = image }
@@ -116,8 +115,8 @@ struct PanelSelectionView: View {
             .onEnded { _ in dragStart = nil }
     }
 
-    /// Converte il rettangolo selezionato (coordinate schermo, immagine mostrata con
-    /// scaledToFit) in coordinate pixel dell'immagine originale, poi ritaglia e condivide.
+    /// Converts the selected rectangle (screen coordinates, image displayed with
+    /// scaledToFit) into pixel coordinates of the original image, then crops and shares it.
     private func confirmSelection() {
         guard let fullImage = fullImage, displaySize.width > 0, displaySize.height > 0,
               let cgImage = fullImage.cgImageRepresentation else { return }

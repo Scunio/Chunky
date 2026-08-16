@@ -5,12 +5,12 @@ final class CBZPageProvider: ComicPageProvider {
     private let archive: Archive
     private let entries: [Entry]
     let comicInfoXML: Data?
-    /// `Archive.extract` non è sicuro per chiamate concorrenti: legge da un file handle
-    /// condiviso a un offset preciso, e due estrazioni in parallelo (es. le due pagine di uno
-    /// spread in doppia pagina, caricate su thread diversi) possono interfogliare le letture e
-    /// produrre dati corrotti — verificato dal vivo (`CompressionError.corruptedData` su
-    /// entrambe le pagine quando caricate insieme). Serializza le estrazioni sullo stesso
-    /// archivio senza dover cambiare la firma del protocollo né i chiamanti.
+    /// `Archive.extract` is not safe for concurrent calls: it reads from a shared file
+    /// handle at a precise offset, and two extractions in parallel (e.g. the two pages of a
+    /// double-page spread, loaded on different threads) can interleave the reads and
+    /// produce corrupted data — confirmed live (`CompressionError.corruptedData` on
+    /// both pages when loaded together). Serializes extractions on the same
+    /// archive without having to change the protocol's signature or its callers.
     private let extractionLock = NSLock()
 
     private static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp"]

@@ -1,8 +1,8 @@
 import CoreGraphics
 import Foundation
 
-/// Legge un singolo pixel da una CGImage. Serve ai test di rendering: verificare "l'immagine
-/// non è nil" non distingue una pagina disegnata correttamente da una capovolta o vuota.
+/// Reads a single pixel from a CGImage. Used by rendering tests: verifying "the image isn't
+/// nil" doesn't distinguish a correctly drawn page from a flipped or blank one.
 enum PixelProbe {
     struct RGB: Equatable, CustomStringConvertible {
         let red: Int
@@ -11,8 +11,8 @@ enum PixelProbe {
 
         var description: String { "rgb(\(red), \(green), \(blue))" }
 
-        /// Confronto tollerante: il rendering di un PDF passa per antialiasing e conversioni
-        /// di spazio colore, quindi un match esatto sarebbe fragile.
+        /// Tolerant comparison: rendering a PDF goes through antialiasing and color space
+        /// conversions, so an exact match would be fragile.
         func isCloseTo(_ other: RGB, tolerance: Int = 24) -> Bool {
             abs(red - other.red) <= tolerance
                 && abs(green - other.green) <= tolerance
@@ -25,16 +25,16 @@ enum PixelProbe {
         static let blue = RGB(red: 0, green: 0, blue: 255)
     }
 
-    /// `x`/`y` sono frazioni della dimensione (0 = bordo sinistro/alto, 1 = destro/basso),
-    /// così il test è indipendente dal fattore di scala usato nel rendering.
+    /// `x`/`y` are fractions of the dimension (0 = left/top edge, 1 = right/bottom), so the
+    /// test is independent of the scale factor used in rendering.
     static func sample(_ image: CGImage, atRelativeX x: CGFloat, y: CGFloat) -> RGB? {
         let pixelX = min(image.width - 1, max(0, Int(CGFloat(image.width) * x)))
         let pixelY = min(image.height - 1, max(0, Int(CGFloat(image.height) * y)))
 
-        // Il buffer è allocato esplicitamente e non con `&array`: il CGContext sopravvive
-        // alla chiamata `inout`, quindi scriverebbe in memoria che Swift può aver già
-        // spostato — ed è esattamente il motivo per cui questa sonda restituiva colori
-        // sporchi invece dei valori esatti.
+        // The buffer is allocated explicitly rather than with `&array`: the CGContext
+        // outlives the `inout` call, so it would write into memory Swift may have already
+        // moved — which is exactly why this probe used to return garbled colors instead of
+        // the exact values.
         let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4)
         buffer.initialize(repeating: 0, count: 4)
         defer { buffer.deallocate() }
@@ -45,16 +45,16 @@ enum PixelProbe {
             height: 1,
             bitsPerComponent: 8,
             bytesPerRow: 4,
-            // sRGB, non deviceRGB: le immagini sorgente sono in sRGB e una conversione di
-            // gamma introdurrebbe scarti che costringerebbero a tolleranze inutilmente larghe.
+            // sRGB, not deviceRGB: the source images are in sRGB and a gamma conversion
+            // would introduce discrepancies that would force unnecessarily wide tolerances.
             space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return nil }
 
-        // Nessuna interpolazione: vogliamo il pixel, non una media dei vicini.
+        // No interpolation: we want the pixel, not an average of its neighbors.
         context.interpolationQuality = .none
 
-        // Trasla l'immagine così che il pixel voluto cada nell'unico pixel del contesto.
+        // Translate the image so the desired pixel falls onto the context's single pixel.
         context.draw(image, in: CGRect(x: -CGFloat(pixelX), y: -CGFloat(image.height - 1 - pixelY),
                                        width: CGFloat(image.width), height: CGFloat(image.height)))
         return RGB(red: Int(buffer[0]), green: Int(buffer[1]), blue: Int(buffer[2]))

@@ -28,8 +28,8 @@ struct PersistenceController {
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
     }
 
-    /// Carica lo store; se fallisce (es. archivio corrotto o schema incompatibile) lo elimina
-    /// e riprova una volta, così un dato locale danneggiato non impedisce mai l'avvio dell'app.
+    /// Loads the store; if it fails (e.g. corrupted archive or incompatible schema), deletes it
+    /// and retries once, so that damaged local data never prevents the app from launching.
     private static func loadStores(in container: NSPersistentCloudKitContainer) -> Error? {
         var firstError: Error?
         var didRetry = false

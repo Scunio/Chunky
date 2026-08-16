@@ -1,8 +1,8 @@
 import Foundation
 
-/// Log applicativo minimale, persistito su file, consultabile dalle Impostazioni per capire
-/// cosa è successo durante un import o una sincronizzazione fallita — senza dover collegare
-/// un Mac per leggere la console di sistema.
+/// Minimal application log, persisted to a file, viewable from Settings to understand
+/// what happened during a failed import or sync — without having to connect a Mac
+/// to read the system console.
 enum DiagnosticLog {
     private static let fileURL: URL = {
         let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]

@@ -31,8 +31,8 @@ extension RemoteAccountEntity {
         URL(string: serverURLString ?? "")
     }
 
-    /// L'id è impostato da `create(...)` all'inserimento e non è mai nil in pratica;
-    /// questo accessore evita di dover disfare l'Optional generato da Core Data ad ogni uso.
+    /// The id is set by `create(...)` on insertion and is never nil in practice;
+    /// this accessor avoids having to unwrap the Core Data-generated Optional on every use.
     var resolvedID: UUID {
         id ?? UUID()
     }

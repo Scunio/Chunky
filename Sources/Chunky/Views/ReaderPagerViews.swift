@@ -2,31 +2,31 @@ import SwiftUI
 #if os(iOS)
 import UIKit
 
-// Pager del lettore, foglio di condivisione e gesto luminosità a due dita: estratti da
+// Reader pager, share sheet, and two-finger brightness gesture: extracted from
 // `ReaderSupportViews.swift`.
 
-/// Cambia quando cambia qualcosa che obbliga a ricostruire tutte le pagine da zero (il numero
-/// di pagine per spread, il verso di lettura, il fumetto stesso): i controller in cache
-/// mostrerebbero altrimenti spread composti con le regole vecchie.
+/// Changes when something changes that forces all pages to be rebuilt from scratch (the
+/// number of pages per spread, the reading direction, the comic itself): otherwise the
+/// cached controllers would show spreads composed with the old rules.
 struct PagerResetToken: Hashable {
     let doublePage: Bool
     let rightToLeft: Bool
     let pageCount: Int
 }
 
-/// Pager del lettore. Espone `UIPageViewController` perché è l'unico componente che offre sia
-/// lo scorrimento interattivo che segue il dito sia un cambio pagina programmatico di cui si
-/// possa scegliere l'animazione — le due cose che servono per rendere davvero indipendenti le
-/// impostazioni "Tap page-turn" e "Swipe page-turn".
+/// Reader pager. Exposes `UIPageViewController` because it's the only component that offers
+/// both interactive scrolling that follows the finger and a programmatic page change whose
+/// animation can be chosen — the two things needed to make the "Tap page-turn" and "Swipe
+/// page-turn" settings truly independent.
 struct PageTurnPager<Content: View>: UIViewControllerRepresentable {
-    /// Indici di inizio spread, in ordine crescente: sono i "passi" della navigazione.
+    /// Spread start indices, in increasing order: these are the navigation's "steps".
     let starts: [Int]
     @Binding var selection: Int
     let rightToLeft: Bool
-    /// Stile dell'ultimo cambio pagina programmatico (tap, tastiera, salto, scrubber).
+    /// Style of the last programmatic page change (tap, keyboard, jump, scrubber).
     let turnStyle: TapPageTurnStyle
-    /// Con false lo scorrimento a dito è spento: o perché lo stile dello swipe non è
-    /// "Scorrimento", o perché la pagina è ingrandita e il trascinamento serve al pan.
+    /// With false, finger scrolling is off: either because the swipe style isn't
+    /// "Scroll", or because the page is zoomed in and dragging is used for panning.
     let interactiveSwipe: Bool
     let resetToken: PagerResetToken
     let content: (Int) -> Content
@@ -45,11 +45,12 @@ struct PageTurnPager<Content: View>: UIViewControllerRepresentable {
     func updateUIViewController(_ pager: UIPageViewController, context: Context) {
         let coordinator = context.coordinator
         coordinator.parent = self
-        // Togliere il dataSource è il modo pulito di disattivare il paging a gesto lasciando
-        // funzionante il cambio pagina programmatico. Ma solo quando cambia davvero: assegnarlo
-        // riconfigura i gesture recognizer del pager, e rifarlo a ogni update (questo metodo gira
-        // a ogni cambio di stato del padre, zoom compreso) interrompe il trascinamento in corso.
-        // Il coordinator è sempre lo stesso oggetto, quindi confrontare solo la presenza basta.
+        // Removing the dataSource is the clean way to disable gesture-driven paging while
+        // leaving the programmatic page change working. But only when it really changes:
+        // assigning it reconfigures the pager's gesture recognizers, and redoing that on every
+        // update (this method runs on every state change in the parent, zoom included)
+        // interrupts an ongoing drag. The coordinator is always the same object, so comparing
+        // just its presence is enough.
         let wantsInteractiveDataSource = interactiveSwipe
         if (pager.dataSource != nil) != wantsInteractiveDataSource {
             pager.dataSource = wantsInteractiveDataSource ? coordinator : nil
@@ -64,24 +65,26 @@ struct PageTurnPager<Content: View>: UIViewControllerRepresentable {
             return
         }
 
-        // I controller in cache vengono riusati esattamente come sono stati creati: senza questo,
-        // `content` resta valutato al momento della creazione e tutto ciò che dipende dallo stato
-        // del padre si congela — in particolare `isActive`, che abilita pinch/pan/doppio-tap solo
-        // sulla pagina corrente. Un controller nato come vicino del dataSource nascerebbe
-        // inattivo e ci resterebbe anche una volta diventato la pagina visibile.
+        // Cached controllers are reused exactly as they were created: without this, `content`
+        // stays evaluated at creation time and everything that depends on the parent's state
+        // freezes — in particular `isActive`, which enables pinch/pan/double-tap only on the
+        // current page. A controller born as a dataSource neighbour would come to life
+        // inactive and stay that way even once it becomes the visible page.
         //
-        // Solo al cambio pagina, non a ogni update: riassegnare `rootView` rirenderizza le pagine,
-        // comprese quelle che UIKit sta animando. Il confronto usa un indice a parte e non
-        // `currentIndex`, perché dopo uno swipe interattivo `currentIndex` è già allineato (lo
-        // aggiorna `didFinishAnimating`) e un controllo su quello non scatterebbe mai.
+        // Only on page change, not on every update: reassigning `rootView` re-renders the
+        // pages, including the ones UIKit is currently animating. The comparison uses a
+        // separate index rather than `currentIndex`, because after an interactive swipe
+        // `currentIndex` is already aligned (`didFinishAnimating` updates it) and a check
+        // against that would never trigger.
         if coordinator.lastRefreshedSelection != selection {
             coordinator.lastRefreshedSelection = selection
             coordinator.refreshCachedContent()
         }
 
-        // Il confronto è con l'indice tenuto dal coordinator, mai con un valore catturato:
-        // questo metodo viene richiamato a ogni cambio di stato del padre (lo zoom, per dirne
-        // uno, cambia a ogni pizzicata) e un confronto sbagliato girerebbe la pagina da solo.
+        // The comparison is against the index kept by the coordinator, never against a
+        // captured value: this method is called on every state change in the parent (zoom,
+        // for one, changes on every pinch) and a wrong comparison would turn the page on its
+        // own.
         guard selection != coordinator.currentIndex else { return }
         let indexIncreasing = selection > coordinator.currentIndex
         coordinator.currentIndex = selection
@@ -99,9 +102,10 @@ struct PageTurnPager<Content: View>: UIViewControllerRepresentable {
         }
     }
 
-    /// `.forward` fa entrare la pagina nuova da destra. La pagina con indice più alto sta a
-    /// destra in LTR e a sinistra nei manga, quindi nei manga i due versi vanno scambiati.
-    /// Stessa regola per il vicino da restituire al dataSource, così i due non possono divergere.
+    /// `.forward` makes the new page enter from the right. The page with the higher index
+    /// is on the right in LTR and on the left in manga, so in manga the two directions must
+    /// be swapped. Same rule for the neighbour returned to the dataSource, so the two can
+    /// never diverge.
     static func navigationDirection(indexIncreasing: Bool, rightToLeft: Bool) -> UIPageViewController.NavigationDirection {
         (indexIncreasing != rightToLeft) ? .forward : .reverse
     }
@@ -109,7 +113,7 @@ struct PageTurnPager<Content: View>: UIViewControllerRepresentable {
     final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
         var parent: PageTurnPager
         var currentIndex: Int
-        /// Ultimo indice per cui `refreshCachedContent` è già stato eseguito.
+        /// Last index for which `refreshCachedContent` has already run.
         var lastRefreshedSelection: Int
         var resetToken: PagerResetToken
         private var controllers: [Int: UIHostingController<Content>] = [:]
@@ -125,8 +129,9 @@ struct PageTurnPager<Content: View>: UIViewControllerRepresentable {
             controllers.removeAll()
         }
 
-        /// Riallinea il contenuto dei controller già creati allo stato attuale del padre:
-        /// `UIHostingController` non rivaluta da solo il proprio `rootView`, va riassegnato.
+        /// Realigns the content of already-created controllers to the parent's current state:
+        /// `UIHostingController` doesn't re-evaluate its own `rootView` on its own, it must be
+        /// reassigned.
         func refreshCachedContent() {
             for (index, hosting) in controllers {
                 hosting.rootView = parent.content(index)
@@ -142,9 +147,9 @@ struct PageTurnPager<Content: View>: UIViewControllerRepresentable {
             return hosting
         }
 
-        /// Teniamo in cache solo gli spread vicini: su un fumetto lungo, conservarli tutti
-        /// significherebbe tenere in memoria ogni immagine già decodificata. Quello uscente
-        /// resta comunque vivo finché serve, perché il pager lo trattiene come figlio.
+        /// We only keep nearby spreads in the cache: in a long comic, keeping them all would
+        /// mean holding every already-decoded image in memory. The outgoing one stays alive
+        /// anyway for as long as it's needed, because the pager retains it as a child.
         private func pruneCache(around index: Int) {
             guard let position = parent.starts.firstIndex(of: index) else { return }
             let keep = Set((position - 2...position + 2)
@@ -167,7 +172,7 @@ struct PageTurnPager<Content: View>: UIViewControllerRepresentable {
 
         func pageViewController(_ pageViewController: UIPageViewController,
                                 viewControllerBefore viewController: UIViewController) -> UIViewController? {
-            // "Prima" è ciò che sta a sinistra: nei manga è la pagina con indice più alto.
+            // "Before" is what's on the left: in manga that's the page with the higher index.
             neighbour(of: viewController, offset: parent.rightToLeft ? 1 : -1)
         }
 
@@ -183,8 +188,8 @@ struct PageTurnPager<Content: View>: UIViewControllerRepresentable {
             guard completed,
                   let visible = pageViewController.viewControllers?.first,
                   let index = index(of: visible) else { return }
-            // Prima il coordinator, poi il binding: l'aggiornamento che ne segue non vede
-            // differenze e non rianima un cambio pagina che il dito ha già fatto.
+            // First the coordinator, then the binding: the update that follows sees no
+            // difference and doesn't re-animate a page change the finger has already made.
             currentIndex = index
             parent.selection = index
         }
@@ -201,13 +206,13 @@ struct ActivityShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-/// Intercetta un pan a due dita per regolare la luminosità dello schermo, senza rubare tocchi
-/// alle viste sottostanti (swipe pagina, tap zone, pinch-to-zoom).
+/// Intercepts a two-finger pan to adjust screen brightness, without stealing touches from
+/// the underlying views (page swipe, tap zones, pinch-to-zoom).
 struct TwoFingerBrightnessView: UIViewRepresentable {
-    /// Inizio del gesto: chi ascolta ne approfitta per fotografare la luminosità di partenza
-    /// una volta sola, invece di rileggerla a ogni spostamento (vedi `ReaderView`).
+    /// Start of the gesture: the listener takes the opportunity to capture the starting
+    /// brightness just once, instead of reading it again on every move (see `ReaderView`).
     let onBegan: () -> Void
-    /// Delta verticale normalizzato (-1...1) da sommare alla luminosità corrente.
+    /// Normalized vertical delta (-1...1) to add to the current brightness.
     let onChange: (CGFloat) -> Void
 
     func makeUIView(context: Context) -> WindowPanRelayView {
@@ -233,39 +238,42 @@ struct TwoFingerBrightnessView: UIViewRepresentable {
             self.onChange = onChange
         }
 
-        /// Distanza fra le due dita all'inizio del gesto: serve a distinguere un trascinamento
-        /// parallelo (luminosità) da un pinch (zoom), che sulla pagina arrivano allo stesso
-        /// modo — due dita che si muovono — e che senza questa distinzione si contendono lo
-        /// stesso gesto. `nil` finché il gesto non è iniziato con due dita.
+        /// Distance between the two fingers at the start of the gesture: used to
+        /// distinguish a parallel drag (brightness) from a pinch (zoom), which arrive on the
+        /// page the same way — two fingers moving — and which, without this distinction,
+        /// would compete for the same gesture. `nil` until the gesture has started with two
+        /// fingers.
         private var initialTouchSpread: CGFloat?
-        /// Vero quando la distanza fra le dita è cambiata abbastanza da chiamarlo pinch: da lì
-        /// in poi il gesto è dello zoom e la luminosità si tira fuori fino al prossimo tocco.
+        /// True once the distance between the fingers has changed enough to call it a
+        /// pinch: from then on the gesture belongs to zoom, and brightness backs off until
+        /// the next touch.
         private var gestureIsPinch = false
-        /// Oltre questo scostamento relativo fra le dita il gesto è un pinch, non un
-        /// trascinamento parallelo: serve a non far scivolare la luminosità mentre si ingrandisce
-        /// (due dita che si allontanano hanno comunque una componente verticale). Il pinch dal
-        /// canto suo non ha una soglia speculare: zooma da subito, come ci si aspetta.
-        /// Con le dita vere la distanza oscilla sempre un po', quindi una soglia troppo bassa
-        /// classificherebbe come pinch qualunque trascinamento.
+        /// Beyond this relative deviation between the fingers, the gesture is a pinch, not
+        /// a parallel drag: used to keep brightness from sliding while zooming in (two
+        /// fingers moving apart still have some vertical component). The pinch side has no
+        /// mirrored threshold of its own: it zooms right away, as expected.
+        /// With real fingers the distance always wobbles a bit, so too low a threshold
+        /// would classify any drag as a pinch.
         private static let pinchSpreadTolerance: CGFloat = 0.08
-        /// Spostamento verticale (in punti) da accumulare prima di toccare la luminosità.
+        /// Vertical movement (in points) to accumulate before touching the brightness.
         ///
-        /// Serve perché la classificazione è *reattiva*: `pinchSpreadTolerance` scatta solo dopo
-        /// che le dita si sono già allontanate abbastanza, e fino a quel momento il pan ha una
-        /// componente verticale che veniva applicata subito — così ogni pinch faceva comparire
-        /// per un istante l'indicatore della luminosità. Accumulando i primi punti senza
-        /// applicarli si dà al pinch il tempo di dichiararsi: se in quella finestra la distanza
-        /// fra le dita cambia, il gesto è uno zoom e la luminosità non si muove mai.
+        /// Needed because the classification is *reactive*: `pinchSpreadTolerance` only
+        /// triggers after the fingers have already moved apart enough, and until that
+        /// moment the pan has a vertical component that used to get applied immediately —
+        /// so every pinch made the brightness indicator flash for an instant. By
+        /// accumulating the first points without applying them, the pinch gets time to
+        /// declare itself: if the distance between the fingers changes within that window,
+        /// the gesture is a zoom and brightness never moves.
         ///
-        /// Il ritardo non si sente: un trascinamento per la luminosità è di centinaia di punti,
-        /// e appena classificato il delta accumulato viene applicato tutto insieme, quindi non
-        /// si perde nulla del movimento già fatto.
+        /// The delay isn't noticeable: a brightness drag is hundreds of points long, and as
+        /// soon as it's classified the accumulated delta gets applied all at once, so none
+        /// of the movement already made is lost.
         private static let brightnessClassificationTravel: CGFloat = 16
-        /// Spostamento verticale accumulato e non ancora applicato, durante la finestra di
-        /// classificazione.
+        /// Vertical movement accumulated and not yet applied, during the classification
+        /// window.
         private var pendingVerticalTranslation: CGFloat = 0
-        /// Vero quando il gesto è stato riconosciuto come regolazione della luminosità e il
-        /// delta viene applicato in tempo reale.
+        /// True once the gesture has been recognized as a brightness adjustment and the
+        /// delta is being applied in real time.
         private var isBrightnessConfirmed = false
 
         private func touchSpread(of recognizer: UIGestureRecognizer, in view: UIView) -> CGFloat? {
@@ -297,18 +305,19 @@ struct TwoFingerBrightnessView: UIViewRepresentable {
                 recognizer.setTranslation(.zero, in: view)
                 return
             }
-            // La distanza si confronta solo fra DUE dita: con un terzo dito appoggiato, gli
-            // indici 0 e 1 possono riferirsi a una coppia diversa e la distanza salterebbe di
-            // colpo, facendo passare per pinch un normale trascinamento — cioè proprio il caso
-            // che `maximumNumberOfTouches = 3` serve a tollerare. Con un numero di dita diverso
-            // da due si sospende la classificazione e si riparte da capo appena tornano due.
+            // The distance is only compared between TWO fingers: with a third finger resting
+            // down, indices 0 and 1 might refer to a different pair and the distance would
+            // suddenly jump, making a normal drag look like a pinch — exactly the case
+            // `maximumNumberOfTouches = 3` is meant to tolerate. With a finger count other
+            // than two, classification is suspended and starts over as soon as it's back to
+            // two.
             if recognizer.numberOfTouches == 2 {
                 let spread = touchSpread(of: recognizer, in: view)
                 if let initialTouchSpread, initialTouchSpread > 0, let spread,
                    abs(spread / initialTouchSpread - 1) > Self.pinchSpreadTolerance {
-                    // Le dita si sono avvicinate o allontanate: è uno zoom, non una regolazione
-                    // della luminosità. Ci si ferma per tutto il resto del gesto, così le due
-                    // cose non si sovrappongono.
+                    // The fingers have moved closer or further apart: it's a zoom, not a
+                    // brightness adjustment. This sticks for the rest of the gesture, so the
+                    // two don't overlap.
                     gestureIsPinch = true
                     recognizer.setTranslation(.zero, in: view)
                     return
@@ -320,10 +329,11 @@ struct TwoFingerBrightnessView: UIViewRepresentable {
             let translation = recognizer.translation(in: view)
             recognizer.setTranslation(.zero, in: view)
 
-            // Finestra di classificazione: si accumula senza applicare, così un pinch che si
-            // dichiara qui sopra (`gestureIsPinch`) esce di scena senza aver mai spostato la
-            // luminosità. Un pinch simmetrico per giunta muove pochissimo il punto medio fra le
-            // due dita, che è quello che il pan misura: spesso non arriva nemmeno alla soglia.
+            // Classification window: it accumulates without applying, so a pinch that
+            // declares itself above (`gestureIsPinch`) exits the scene without ever having
+            // moved the brightness. A symmetric pinch, moreover, barely moves the midpoint
+            // between the two fingers, which is what the pan measures: it often doesn't even
+            // reach the threshold.
             guard isBrightnessConfirmed else {
                 pendingVerticalTranslation += translation.y
                 guard abs(pendingVerticalTranslation) >= Self.brightnessClassificationTravel else { return }
@@ -334,8 +344,8 @@ struct TwoFingerBrightnessView: UIViewRepresentable {
             onChange(-translation.y / view.bounds.height)
         }
 
-        /// Lascia passare anche i gesture di SwiftUI sotto (tap zone, swipe pagina, pinch):
-        /// questo riconoscitore deve coesistere con quelli, non sostituirli.
+        /// Also lets the SwiftUI gestures underneath through (tap zones, page swipe, pinch):
+        /// this recognizer must coexist with them, not replace them.
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
@@ -343,16 +353,16 @@ struct TwoFingerBrightnessView: UIViewRepresentable {
     }
 }
 
-/// Non intercetta mai l'hit-testing: un `hitTest` che a volte restituisce sé stesso e a volte
-/// nil in base al numero di dita già premute non funziona, perché un tocco
-/// viene assegnato in modo definitivo alla vista risultante dall'hit-test al suo `touchesBegan`
-/// — se il primo dito è già stato instradato al pager sottostante, "rubare" il secondo dito qui
-/// lo isola dal primo e nessun recognizer arriva mai a vedere entrambi i tocchi insieme (né
-/// questo pan, né il pinch-to-zoom della pagina sotto).
+/// Never intercepts hit-testing: a `hitTest` that sometimes returns itself and sometimes nil
+/// depending on how many fingers are already down doesn't work, because a touch is assigned
+/// permanently to the view resulting from the hit-test at its `touchesBegan` — if the first
+/// finger has already been routed to the pager underneath, "stealing" the second finger here
+/// isolates it from the first and no recognizer ever gets to see both touches together
+/// (neither this pan, nor the page's pinch-to-zoom underneath).
 ///
-/// Il pan a due dita viene quindi agganciato alla finestra invece che a questa vista: la
-/// finestra è antenata di qualunque vista venga colpita dall'hit-test (pager, tap zone,
-/// immagine), quindi il suo recognizer riceve comunque entrambi i tocchi.
+/// The two-finger pan is therefore hooked onto the window instead of onto this view: the
+/// window is an ancestor of whatever view gets hit by the hit-test (pager, tap zone, image),
+/// so its recognizer receives both touches regardless.
 final class WindowPanRelayView: UIView {
     weak var coordinator: TwoFingerBrightnessView.Coordinator?
     private weak var recognizer: UIPanGestureRecognizer?
@@ -371,8 +381,9 @@ final class WindowPanRelayView: UIView {
             action: #selector(TwoFingerBrightnessView.Coordinator.handlePan(_:))
         )
         recognizer.minimumNumberOfTouches = 2
-        // Tre e non due: se durante il trascinamento appoggi anche solo di striscio un terzo
-        // dito (o il palmo), con il tetto a due il recognizer fallisce e il gesto muore a metà.
+        // Three, not two: if during the drag even just a glancing third finger touches down
+        // (or the palm does), with the cap at two the recognizer fails and the gesture dies
+        // halfway through.
         recognizer.maximumNumberOfTouches = 3
         recognizer.cancelsTouchesInView = false
         recognizer.delegate = coordinator
