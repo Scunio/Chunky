@@ -47,18 +47,23 @@ enum LibraryGrouping {
     }
 
     /// Toglie dalla coda del titolo quello che i rilasci scansionati ci appendono dopo il numero
-    /// dell'albo — i gruppi fra parentesi ("Topolino 3652 (Panini 2025-11-19) [c2c CPPD]") e le
-    /// aggiunte introdotte da un "+" ("Topolino 3636 + Cover Abbonati") — così il numero torna in
-    /// fondo alla stringa ed è di nuovo riconoscibile.
+    /// dell'albo, così il numero torna in fondo alla stringa ed è di nuovo riconoscibile:
+    /// i gruppi fra parentesi ("Topolino 3652 (Panini 2025-11-19) [c2c CPPT Edition]"), le
+    /// aggiunte introdotte da un "+" ("Topolino 3636 + Cover Abbonati") e il numero di versione
+    /// del rilascio ("… [c2c CPPT Edition] 1.0").
     ///
-    /// Il ciclo serve perché le decorazioni si alternano: tolta la parentesi finale può restare
-    /// scoperta una coda con "+", e viceversa.
+    /// La versione deve avere almeno un punto: è quello che la distingue dal numero dell'albo,
+    /// che non ne ha mai e non va toccato.
+    ///
+    /// Il ciclo serve perché le decorazioni si alternano — "… [c2c CPPT Edition] 1.1 (corrette
+    /// pagine doppie)" ne ha tre, una dentro l'altra.
     static func titleWithoutTrailingDecorations(_ title: String) -> String {
         let patterns = [
             #"\s*\([^()]*\)\s*$"#,
             #"\s*\[[^\[\]]*\]\s*$"#,
             #"\s*\{[^{}]*\}\s*$"#,
-            #"\s+\+\s+.*$"#
+            #"\s+\+\s+.*$"#,
+            #"\s+v?\d+(?:\.\d+)+\s*$"#
         ]
         var result = title.trimmingCharacters(in: .whitespaces)
         var keepGoing = true
