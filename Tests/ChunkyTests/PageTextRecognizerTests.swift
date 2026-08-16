@@ -84,11 +84,11 @@ struct PageTextRecognizerTests {
     }
 
     @Test("Una riga interamente dentro il ritaglio si sposta dell'offset del ritaglio")
-    func lineFullyInsideCropShiftsByOffset() {
-        // Pagina 100×200 con un bordo di 20pt ritagliato su ogni lato: resta un contenuto
-        // 60×160. Una riga che occupa il quarto centrale in verticale, appena sotto al centro,
-        // deve restare interamente visibile e mappata sulla pagina ritagliata, non su quella
-        // originale.
+    func lineFullyInsideCropShiftsByOffset() throws {
+        // 100×200 page with a 20pt border cropped off each side: the remaining content is
+        // 60×160. A line occupying the vertical middle quarter, just below center,
+        // must remain fully visible and mapped onto the cropped page, not the
+        // original one.
         let imageSize = CGSize(width: 100, height: 200)
         let cropRect = CGRect(x: 20, y: 20, width: 60, height: 160) // top-left origin
         let box = CGRect(x: 0.3, y: 0.4, width: 0.4, height: 0.1) // bottom-left origin, normalized
@@ -98,17 +98,17 @@ struct PageTextRecognizerTests {
         )
         #expect(rect != nil)
 
-        // Senza ritaglio, la stessa riga cadrebbe in un punto diverso: la conversione deve
-        // davvero tener conto dell'offset, non limitarsi a passare oltre.
+        // Without cropping, the same line would land at a different spot: the conversion must
+        // really account for the offset, not just pass it through.
         let withoutCrop = PageTextRecognizer.screenRect(forNormalized: box, imageSize: imageSize, displaySize: imageSize)
-        #expect(rect! != withoutCrop)
+        #expect(try #require(rect) != withoutCrop)
     }
 
     @Test("Una riga interamente nel bordo ritagliato via non produce alcun rettangolo")
     func lineOutsideCropProducesNil() {
         let imageSize = CGSize(width: 100, height: 200)
-        // Ritaglio che esclude la fascia superiore della pagina (in coordinate bottom-left,
-        // "sopra" corrisponde a y vicino a `imageSize.height`).
+        // Crop that excludes the top strip of the page (in bottom-left coordinates,
+        // "top" corresponds to y near `imageSize.height`).
         let cropRect = CGRect(x: 0, y: 20, width: 100, height: 160)
         let boxInTheCroppedBorder = CGRect(x: 0, y: 0.95, width: 1, height: 0.05)
 

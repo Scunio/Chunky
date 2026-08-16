@@ -1,7 +1,7 @@
 import SwiftUI
 import CoreData
 
-/// Stato sincronizzazione iCloud, raggiungibile da Impostazioni > Avanzate.
+/// iCloud sync status, reachable from Settings > Advanced.
 struct ICloudStatusView: View {
     var body: some View {
         Form {
@@ -14,8 +14,8 @@ struct ICloudStatusView: View {
     }
 }
 
-/// Contenuto dello stato iCloud senza `Form` propria, per poterlo incorporare nella tab
-/// "Avanzate" delle Preferenze Mac oltre che mostrarlo da solo su iOS (`ICloudStatusView` sopra).
+/// iCloud status content without its own `Form`, so it can be embedded in the "Advanced"
+/// tab of Mac Preferences as well as shown standalone on iOS (`ICloudStatusView` above).
 struct ICloudStatusSections: View {
     @FetchRequest(sortDescriptors: []) private var comics: FetchedResults<ComicEntity>
 

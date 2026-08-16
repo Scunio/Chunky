@@ -4,8 +4,8 @@ import Testing
 
 @Suite("Raggruppamento della libreria")
 struct LibraryGroupingTests {
-    /// I titoli veri di una libreria di Topolino: alcuni puliti, altri con le decorazioni che i
-    /// rilasci scansionati appendono dopo il numero.
+    /// Real titles from a Topolino library: some clean, others with the decorations that
+    /// scanned releases append after the issue number.
     private static let titles = [
         "Topolino 3651",
         "Topolino 3636 + Cover Abbonati",
@@ -67,8 +67,8 @@ struct SeriesBackfillTests {
         #expect(try context.fetch(ComicEntity.fetchRequest()).first?.seriesName == "Topolino")
     }
 
-    /// Il gruppo scelto a mano vince sempre: ricalcolarlo vorrebbe dire disfare quello che
-    /// l'utente ha appena sistemato.
+    /// A manually chosen group always wins: recalculating it would mean undoing what
+    /// the user just fixed.
     @Test("Non tocca una serie già impostata")
     func keepsExistingSeries() throws {
         let context = try TestStore.makeContext()

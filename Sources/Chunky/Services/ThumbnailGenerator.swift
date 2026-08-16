@@ -5,8 +5,8 @@ import ImageIO
 enum ThumbnailGenerator {
     static let maxDimension: CGFloat = 480
 
-    /// Genera una miniatura direttamente dai byte sorgente (es. il JPEG dentro l'archivio),
-    /// evitando un costoso giro di decodifica + ri-codifica PNG.
+    /// Generates a thumbnail directly from the source bytes (e.g. the JPEG inside the archive),
+    /// avoiding an expensive decode + PNG re-encode round trip.
     static func makeThumbnailData(fromSourceData data: Data) -> Data? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let cgThumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions as CFDictionary) else {
