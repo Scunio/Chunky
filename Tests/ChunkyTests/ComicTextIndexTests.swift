@@ -2,14 +2,23 @@ import CoreGraphics
 import Foundation
 import Testing
 
+/// Provider minimale che restituisce testo già digitale (come farebbe un PDF nativo): evita di
+/// dover far girare davvero l'OCR solo per testare persistenza e cancellazione dell'indice.
+private struct FakeTextProvider: ComicPageProvider {
+    let pageCount: Int
+    let lines: [[RecognizedTextLine]]
+    func image(atPage index: Int) throws -> PlatformImage { throw ComicReadError.pageOutOfRange }
+    func textLines(atPage index: Int) throws -> [RecognizedTextLine]? { lines[index] }
+}
+
 @Suite("ComicTextIndex")
 struct ComicTextIndexTests {
     private func line(_ text: String, y: CGFloat = 0.5) -> RecognizedTextLine {
         RecognizedTextLine(text: text, boundingBox: CGRect(x: 0.1, y: y, width: 0.5, height: 0.05))
     }
 
-    /// Indicizzare dalla prima pagina renderebbe la ricerca inutile per minuti su un volume
-    /// lungo: l'ordine deve partire da dove sta l'utente e allargarsi da lì.
+    /// Indexing from the first page would make search useless for minutes on a long
+    /// volume: the order must start where the user is and expand outward from there.
     @Test("La scansione parte dalla pagina corrente e si allarga")
     func scanOrderStartsAtCurrentPage() {
         #expect(ComicTextIndex.scanOrder(from: 5, pageCount: 10) == [5, 6, 4, 7, 3, 8, 2, 9, 1, 0])
@@ -24,12 +33,12 @@ struct ComicTextIndexTests {
             #expect(order.first == start)
         }
         #expect(ComicTextIndex.scanOrder(from: 0, pageCount: 0).isEmpty)
-        // Una pagina richiesta fuori intervallo viene riportata dentro invece di far saltare
-        // pagine: succede quando la ricerca si apre su uno spread a cavallo della fine.
+        // A requested page outside the valid range is clamped back in instead of skipping
+        // pages: this happens when the search opens on a spread straddling the end.
         #expect(ComicTextIndex.scanOrder(from: 99, pageCount: 3) == [2, 1, 0])
     }
 
-    /// L'OCR sbaglia regolarmente gli accenti, e nessuno scrive le maiuscole quando cerca.
+    /// OCR regularly gets accents wrong, and nobody types uppercase when searching.
     @Test("La ricerca ignora maiuscole e accenti")
     func searchIsCaseAndDiacriticInsensitive() {
         let lines = [0: [line("PERCHÉ SEI QUI?")]]
@@ -49,8 +58,8 @@ struct ComicTextIndexTests {
         #expect(ComicTextIndex.matches(for: "bang", in: lines).map(\.pageIndex) == [2, 4, 7])
     }
 
-    /// Più righe sulla stessa pagina devono restare distinte: con l'indice di pagina come
-    /// identità, una `ForEach` ne mostrerebbe una sola.
+    /// Multiple lines on the same page must remain distinct: with the page index as the
+    /// identity, a `ForEach` would show only one of them.
     @Test("Righe diverse sulla stessa pagina hanno identità diverse")
     func matchesOnTheSamePageAreDistinct() {
         let lines = [3: [line("bang", y: 0.2), line("bang!", y: 0.7)]]
@@ -59,9 +68,9 @@ struct ComicTextIndexTests {
         #expect(Set(matches.map(\.id)).count == 2)
     }
 
-    /// L'indice su disco è l'unica cosa che evita di rifare l'OCR di un volume intero: se il
-    /// round-trip perdesse le chiavi di pagina (un dizionario con chiavi Int non è un oggetto
-    /// JSON) il lavoro verrebbe ributtato via a ogni apertura, in silenzio.
+    /// The on-disk index is the only thing that avoids redoing OCR on an entire volume: if the
+    /// round-trip lost the page keys (a dictionary with Int keys is not a JSON object) the
+    /// work would be silently thrown away on every reopen.
     @Test("L'indice sopravvive al round-trip su JSON")
     func indexSurvivesJSONRoundTrip() throws {
         let original: [Int: [RecognizedTextLine]] = [
@@ -75,15 +84,47 @@ struct ComicTextIndexTests {
         #expect(decoded[17]?.first?.boundingBox == original[17]?.first?.boundingBox)
     }
 
-    /// L'URI di un objectID Core Data contiene "/" e ":": usato tale e quale come nome di file
-    /// l'indice non verrebbe mai scritto, e nessuno se ne accorgerebbe (si rifarebbe solo l'OCR).
+    /// A Core Data objectID URI contains "/" and ":": used as-is as a filename, the
+    /// index would never get written, and nobody would notice (OCR would just get redone).
     @Test("L'identificatore del fumetto diventa un nome di file valido")
     func sanitizesIdentifierIntoFilename() {
         let name = ComicTextIndex.sanitized("x-coredata://ABC-123/ComicEntity/p42")
         #expect(!name.contains("/"))
         #expect(!name.contains(":"))
         #expect(name.hasSuffix("p42"))
-        // Identificatori diversi devono restare diversi anche dopo la sostituzione.
+        // Different identifiers must remain different even after sanitization.
         #expect(name != ComicTextIndex.sanitized("x-coredata://ABC-123/ComicEntity/p43"))
+    }
+
+    /// Senza `deleteIndex`, l'indice di un fumetto rimosso dalla libreria resterebbe orfano per
+    /// sempre in Application Support: qui si verifica il round-trip completo attraverso la sola
+    /// API pubblica, non il percorso interno del file (privato apposta).
+    @Test("deleteIndex rimuove l'indice persistito, non solo quello in memoria")
+    func deleteIndexRemovesPersistedFile() async throws {
+        let identifier = "test-\(UUID().uuidString)"
+        let scanned = ComicTextIndex(
+            provider: FakeTextProvider(pageCount: 1, lines: [[line("trovami")]]),
+            comicIdentifier: identifier
+        )
+        scanned.startScanning(from: 0)
+        while scanned.isScanning {
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+
+        // Un nuovo indice per lo stesso identificatore, con un provider che non troverebbe mai
+        // "trovami" da sé: se il risultato compare, viene dal file persistito.
+        let reopened = ComicTextIndex(
+            provider: FakeTextProvider(pageCount: 1, lines: [[]]),
+            comicIdentifier: identifier
+        )
+        #expect(reopened.matches(for: "trovami").count == 1)
+
+        ComicTextIndex.deleteIndex(forComicIdentifier: identifier)
+
+        let afterDelete = ComicTextIndex(
+            provider: FakeTextProvider(pageCount: 1, lines: [[]]),
+            comicIdentifier: identifier
+        )
+        #expect(afterDelete.matches(for: "trovami").isEmpty)
     }
 }

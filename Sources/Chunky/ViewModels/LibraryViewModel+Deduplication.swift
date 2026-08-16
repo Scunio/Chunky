@@ -2,12 +2,12 @@ import Foundation
 import CoreData
 
 extension LibraryViewModel {
-    /// Collassa i record che puntano allo stesso file. Ne servono due sorgenti: le scansioni
-    /// sovrapposte (ora serializzate, ma i duplicati già creati restano) e i due dispositivi —
-    /// iPad e Mac creano ciascuno il proprio `ComicEntity` per lo stesso file nel container
-    /// iCloud, e CloudKit sincronizza entrambi i record.
+    /// Collapses records that point to the same file. There are two sources for these: overlapping
+    /// scans (now serialized, but duplicates already created remain) and the two devices —
+    /// iPad and Mac each create their own `ComicEntity` for the same file in the iCloud
+    /// container, and CloudKit syncs both records.
     ///
-    /// Non tocca MAI i file: il file è uno solo ed è quello che i record duplicati condividono.
+    /// NEVER touches the files: there's only one file, and it's the one the duplicate records share.
     @discardableResult
     func deduplicateComics(in context: NSManagedObjectContext) -> Int {
         var collapsed = 0
@@ -16,9 +16,9 @@ extension LibraryViewModel {
 
             let request = ComicEntity.fetchRequest()
             request.predicate = NSPredicate(format: "relativePath IN %@", duplicatePaths)
-            // Il contesto di scansione vive quanto l'app e può avere in memoria questi oggetti da
-            // una passata precedente: senza forzare il refresh, la fusione leggerebbe i valori
-            // vecchi e butterebbe via il progresso di lettura arrivato nel frattempo da CloudKit.
+            // The scanning context lives as long as the app and may already have these objects in
+            // memory from a previous pass: without forcing a refresh, the merge would read the
+            // old values and throw away reading progress that arrived from CloudKit in the meantime.
             request.shouldRefreshRefetchedObjects = true
             guard let comics = try? context.fetch(request) else { return }
 
@@ -27,8 +27,10 @@ extension LibraryViewModel {
                 guard let survivor = ordered.first else { continue }
                 for loser in ordered.dropFirst() {
                     Self.merge(loser, into: survivor)
+                    let identifier = loser.objectID.uriRepresentation().absoluteString
                     context.delete(loser)
                     collapsed += 1
+                    ComicTextIndex.deleteIndex(forComicIdentifier: identifier)
                 }
                 DiagnosticLog.log("Deduplica: \(group.count) record per \"\(path)\", ne resta 1")
             }
@@ -41,13 +43,13 @@ extension LibraryViewModel {
         return collapsed
     }
 
-    /// Ricalcola la serie dei fumetti che ne sono ancora privi. `seriesName` viene scritto una
-    /// volta sola, all'import: senza questa passata, migliorare la deduzione del nome serie non
-    /// cambierebbe niente per i fumetti già in libreria, che resterebbero in "Altri fumetti".
+    /// Recomputes the series for comics that still lack one. `seriesName` is written only once,
+    /// at import time: without this pass, improving series-name inference wouldn't change
+    /// anything for comics already in the library, which would remain in "Other comics".
     ///
-    /// Tocca soltanto i record con serie vuota: chi ha scelto un gruppo a mano (vedi `applyGroup`
-    /// in `LibraryView`) ha un `seriesName` valorizzato e non deve essere sovrascritto — mentre
-    /// chi ha lasciato "automatico" ha proprio `nil` ed è quello che qui si ricalcola.
+    /// Only touches records with an empty series: anyone who picked a group by hand (see
+    /// `applyGroup` in `LibraryView`) has a populated `seriesName` and must not be overwritten —
+    /// whereas anyone who left it "automatic" has exactly `nil`, and that's what gets recomputed here.
     @discardableResult
     func backfillSeriesNames(in context: NSManagedObjectContext) -> Int {
         var filled = 0
@@ -71,8 +73,8 @@ extension LibraryViewModel {
         return filled
     }
 
-    /// Solo i path con più di un record, letti come dizionari: caricare tutti i `ComicEntity`
-    /// significherebbe tirare in memoria anche le copertine di tutta la libreria a ogni passata.
+    /// Only the paths with more than one record, read as dictionaries: loading all the
+    /// `ComicEntity` objects would mean pulling the covers of the entire library into memory on every pass.
     private func duplicateRelativePaths(in context: NSManagedObjectContext) -> [String]? {
         let request = NSFetchRequest<NSDictionary>(entityName: "ComicEntity")
         request.resultType = .dictionaryResultType
@@ -87,9 +89,9 @@ extension LibraryViewModel {
         return counts.filter { $0.value > 1 }.map(\.key)
     }
 
-    /// Ordinamento deterministico: `dateAdded` e `id` sono attributi sincronizzati, quindi iPad e
-    /// Mac vedono gli stessi valori e scelgono lo stesso superstite. Se scegliessero record
-    /// diversi, ognuno cancellerebbe quello che l'altro tiene e il fumetto sparirebbe da entrambi.
+    /// Deterministic ordering: `dateAdded` and `id` are synced attributes, so iPad and Mac see
+    /// the same values and pick the same survivor. If they picked different records, each would
+    /// delete the one the other keeps, and the comic would disappear from both.
     private static func precedesAsSurvivor(_ lhs: ComicEntity, _ rhs: ComicEntity) -> Bool {
         let leftDate = lhs.dateAdded ?? .distantFuture
         let rightDate = rhs.dateAdded ?? .distantFuture
@@ -97,8 +99,8 @@ extension LibraryViewModel {
         return (lhs.id?.uuidString ?? "") < (rhs.id?.uuidString ?? "")
     }
 
-    /// Fonde nel superstite quello che c'è di buono nel record scartato: senza questo passaggio la
-    /// deduplica si mangerebbe il progresso di lettura fatto sull'altro dispositivo.
+    /// Merges into the survivor whatever is worth keeping from the discarded record: without this
+    /// step, deduplication would eat the reading progress made on the other device.
     private static func merge(_ source: ComicEntity, into target: ComicEntity) {
         target.lastReadPage = max(target.lastReadPage, source.lastReadPage)
         if target.pageCount <= 0 { target.pageCount = source.pageCount }
