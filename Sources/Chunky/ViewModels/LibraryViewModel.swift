@@ -117,6 +117,41 @@ final class LibraryViewModel: ObservableObject {
         try? context.save()
     }
 
+    /// Registra in libreria i fumetti trascinati nella cartella Documents dell'app dal Finder
+    /// (`UIFileSharingEnabled`, device collegato via USB → tab "File") o da Files.
+    ///
+    /// È volutamente separata da `rebuildLibrary`, non un suo caso particolare: quella cancella i
+    /// record il cui file non esiste più, e su una libreria iCloud i file non ancora scaricati
+    /// possono benissimo non esistere su disco. Questo passaggio invece è solo additivo, quindi
+    /// può girare a ogni foreground senza gate su iCloud e senza rischiare di svuotare la libreria.
+    func adoptFilesDroppedInDocuments(context: NSManagedObjectContext) {
+        let backgroundContext = makeBackgroundContext(from: context)
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            let candidates = LibraryStorage.adoptFilesDroppedInLocalDocuments()
+            guard !candidates.isEmpty else { return }
+
+            var knownPaths: Set<String> = []
+            backgroundContext.performAndWait {
+                let request = ComicEntity.fetchRequest()
+                guard let comics = try? backgroundContext.fetch(request) else { return }
+                knownPaths = Set(comics.compactMap { $0.relativePath })
+            }
+
+            let newPaths = candidates.filter { !knownPaths.contains($0) }
+            guard !newPaths.isEmpty else { return }
+
+            DispatchQueue.main.async { self.isImporting = true }
+            for relativePath in newPaths {
+                guard let format = ComicFormat(fileExtension: (relativePath as NSString).pathExtension) else { continue }
+                self.registerComic(relativePath: relativePath, format: format, into: backgroundContext)
+            }
+            DiagnosticLog.log("File Sharing: aggiunti \(newPaths.count) fumetti dalla cartella Documents")
+            DispatchQueue.main.async { self.isImporting = false }
+        }
+    }
+
     /// Strumento di recupero: rimuove dalla libreria i fumetti il cui file non esiste più
     /// (es. cancellato manualmente dal Finder/Files), e registra i file trovati nella cartella
     /// della libreria ma non ancora presenti — utile dopo un ripristino da backup o un problema

@@ -107,6 +107,12 @@ targets:
         # Sul Mac sandboxed servirebbero bookmark security-scoped, che non abbiamo:
         # per questo la chiave resta solo qui.
         LSSupportsOpeningDocumentsInPlace: true
+        # Espone la cartella Documents dell'app in Files e nella tab "File" del Finder
+        # (device collegato via USB): ci si possono trascinare dentro i .cbz/.cbr
+        # direttamente dal Mac. Chiave iOS-only, inerte su macOS: vedi
+        # `LibraryStorage.adoptFilesDroppedInLocalDocuments()` per la parte che poi li
+        # registra in libreria.
+        UIFileSharingEnabled: true
         NSFaceIDUsageDescription: "Usa Face ID per sbloccare Chunky quando il blocco genitori è attivo."
         NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
         NSUbiquitousContainers:

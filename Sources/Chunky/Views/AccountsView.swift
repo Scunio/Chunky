@@ -46,7 +46,7 @@ struct AccountsView: View {
         OpenRemoteService(name: "Dropbox", systemImage: "square.on.square", tintColor: .blue),
         OpenRemoteService(name: "Google Drive", systemImage: "triangle", tintColor: .green),
         OpenRemoteService(name: "OneDrive", systemImage: "icloud", tintColor: .blue),
-        OpenRemoteService(name: "Amazon Cloud Drive", systemImage: "cloud", tintColor: .orange),
+        OpenRemoteService(name: "Amazon Cloud Drive", systemImage: "cloud", tintColor: .orange)
     ]
 
     var body: some View {

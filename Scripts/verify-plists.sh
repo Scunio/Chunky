@@ -33,7 +33,7 @@ require_present() {
 
 if [ -f "$MAC_PLIST" ]; then
     echo "== macOS: $MAC_PLIST"
-    for key in UILaunchScreen UISupportedInterfaceOrientations UIBackgroundModes UIDeviceFamily LSSupportsOpeningDocumentsInPlace; do
+    for key in UILaunchScreen UISupportedInterfaceOrientations UIBackgroundModes UIDeviceFamily LSSupportsOpeningDocumentsInPlace UIFileSharingEnabled; do
         require_absent "$MAC_PLIST" "$key" macOS
     done
     for key in LSMinimumSystemVersion CFBundleDocumentTypes UTExportedTypeDeclarations NSUbiquitousContainers; do
@@ -53,7 +53,7 @@ fi
 
 if [ -f "$IOS_PLIST" ]; then
     echo "== iOS: $IOS_PLIST"
-    for key in UILaunchScreen UISupportedInterfaceOrientations UIBackgroundModes CFBundleDocumentTypes NSFaceIDUsageDescription; do
+    for key in UILaunchScreen UISupportedInterfaceOrientations UIBackgroundModes CFBundleDocumentTypes NSFaceIDUsageDescription UIFileSharingEnabled; do
         require_present "$IOS_PLIST" "$key" iOS
     done
     if [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$IOS_PLIST" 2>/dev/null)" = "com.scunio.Chunky" ]; then

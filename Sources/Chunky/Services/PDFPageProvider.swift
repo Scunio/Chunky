@@ -14,6 +14,35 @@ final class PDFPageProvider: ComicPageProvider {
         self.document = document
     }
 
+    /// I PDF nativi (non scansionati) hanno già il testo: leggerlo da PDFKit è immediato ed
+    /// esatto, mentre passarli per l'OCR costerebbe secondi per pagina e darebbe un risultato
+    /// peggiore. Sui PDF fatti di sole scansioni `page.string` è vuoto e si torna all'OCR.
+    func textLines(atPage index: Int) throws -> [RecognizedTextLine]? {
+        guard let page = document.page(at: index) else { throw ComicReadError.pageOutOfRange }
+        let bounds = page.bounds(for: .mediaBox)
+        guard bounds.width > 0, bounds.height > 0,
+              let selection = page.selection(for: bounds) else { return nil }
+
+        let lines = selection.selectionsByLine().compactMap { line -> RecognizedTextLine? in
+            let text = (line.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+            // Lo spazio PDF ha già l'origine in basso a sinistra come quello di Vision (ed è lo
+            // stesso in cui `image(atPage:)` disegna, senza ribaltamenti): basta normalizzare
+            // sui bounds della pagina perché i due tipi di riga siano intercambiabili.
+            let rect = line.bounds(for: page)
+            return RecognizedTextLine(
+                text: text,
+                boundingBox: CGRect(
+                    x: (rect.minX - bounds.minX) / bounds.width,
+                    y: (rect.minY - bounds.minY) / bounds.height,
+                    width: rect.width / bounds.width,
+                    height: rect.height / bounds.height
+                )
+            )
+        }
+        return lines.isEmpty ? nil : lines
+    }
+
     func image(atPage index: Int) throws -> PlatformImage {
         guard let page = document.page(at: index) else {
             throw ComicReadError.pageOutOfRange
