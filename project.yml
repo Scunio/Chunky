@@ -88,6 +88,13 @@ targets:
       path: Support/Info-iOS.plist
       properties:
         CFBundleDisplayName: Chunky
+        # Interpolate, non scritte a mano: l'Info.plist lo genera XcodeGen, e senza queste due
+        # righe ci metterebbe i suoi valori fissi (CFBundleVersion 1). Con
+        # GENERATE_INFOPLIST_FILE = NO è il plist a vincere sui build settings, quindi il
+        # numero di build passato da `Scripts/release-appstore.sh` non arrivava nel bundle e
+        # App Store Connect avrebbe rifiutato ogni upload dopo il primo.
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
         # Niente crittografia oltre a quella di sistema (Keychain, TLS): evita che App Store
         # Connect chieda le informazioni di conformità all'esportazione a ogni upload.
         ITSAppUsesNonExemptEncryption: false
@@ -158,6 +165,13 @@ targets:
       path: Support/Info-macOS.plist
       properties:
         CFBundleDisplayName: Chunky
+        # Interpolate, non scritte a mano: l'Info.plist lo genera XcodeGen, e senza queste due
+        # righe ci metterebbe i suoi valori fissi (CFBundleVersion 1). Con
+        # GENERATE_INFOPLIST_FILE = NO è il plist a vincere sui build settings, quindi il
+        # numero di build passato da `Scripts/release-appstore.sh` non arrivava nel bundle e
+        # App Store Connect avrebbe rifiutato ogni upload dopo il primo.
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
         # Niente crittografia oltre a quella di sistema (Keychain, TLS): evita che App Store
         # Connect chieda le informazioni di conformità all'esportazione a ogni upload.
         ITSAppUsesNonExemptEncryption: false
