@@ -88,9 +88,12 @@ struct InfoButton: View {
     private var infoText: some View {
         Text(text)
             .font(.footnote)
-            .padding()
-            .frame(maxWidth: 280)
+            .multilineTextAlignment(.leading)
+            // La larghezza fissa va data al Text *prima* del padding: senza una larghezza concreta
+            // il popover propone una dimensione ambigua e l'altezza calcolata tronca le ultime righe.
+            .frame(width: 260, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
+            .padding()
     }
 }
 

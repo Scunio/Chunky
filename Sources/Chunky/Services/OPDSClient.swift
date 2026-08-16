@@ -74,7 +74,7 @@ private final class OPDSFeedDelegate: NSObject, XMLParserDelegate {
             let href = attributeDict["href"]
             if rel.contains("acquisition"), let href = href {
                 acquisitionHref = href
-            } else if (rel == "subsection" || rel.isEmpty || rel == "alternate"),
+            } else if rel == "subsection" || rel.isEmpty || rel == "alternate",
                       type.contains("opds-catalog"), let href = href {
                 navigationHref = href
             }

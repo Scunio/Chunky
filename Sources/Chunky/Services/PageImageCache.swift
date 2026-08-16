@@ -1,5 +1,8 @@
 import CoreGraphics
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Cache di immagini pagina già elaborate (ritaglio, upscaling, tint), con prefetch attorno
 /// a un indice.
@@ -29,16 +32,70 @@ actor PageImageCache {
     private struct Entry {
         let image: PlatformImage
         let options: ProcessingOptions
+        /// Byte occupati dal bitmap decodificato, misurati una volta sola qui: su macOS
+        /// `cgImageRepresentation` rirenderizza a ogni accesso, quindi non va chiamato in
+        /// continuazione.
+        let cost: Int
     }
 
     private let provider: ComicPageProvider
     private var entries: [Int: Entry] = [:]
     private var accessOrder: [Int] = []
-    private let capacity: Int
+    /// Tetto in byte, non in numero di pagine: una pagina decodificata occupa
+    /// larghezza × altezza × 4, quindi 8 pagine sono ~100 MB su iPhone e più del doppio su un
+    /// iPad Pro. Contarle non dice niente sulla memoria davvero impegnata.
+    private let costLimit: Int
+    /// Sotto questa soglia non si sfratta comunque: con pagine enormi il tetto in byte
+    /// ridurrebbe la cache a una voce sola, facendola rileggere in continuazione.
+    private let minimumEntries: Int
+    /// Limite di sicurezza sul numero di voci, per non far crescere il dizionario senza freno
+    /// quando le pagine sono piccolissime.
+    private let maximumEntries: Int
+    private var totalCost = 0
+    private var memoryWarningObserver: (any NSObjectProtocol)?
 
-    init(provider: ComicPageProvider, capacity: Int = 8) {
+    /// Registrato alla prima richiesta e non nell'init: `init` non è isolato sull'attore, quindi
+    /// non può toccare le sue proprietà (in Swift 6 è un errore). Qui siamo già dentro l'attore.
+    private func startObservingMemoryWarningsIfNeeded() {
+        #if canImport(UIKit)
+        guard memoryWarningObserver == nil else { return }
+        // Il tetto in byte è una stima: se il sistema chiede memoria si molla tutto tranne la
+        // pagina in uso, invece di aspettare che sia iOS a chiudere l'app.
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            Task { await self?.dropAllButMostRecent() }
+        }
+        #endif
+    }
+
+    init(
+        provider: ComicPageProvider,
+        costLimit: Int = PageImageCache.defaultCostLimit(),
+        minimumEntries: Int = 3,
+        maximumEntries: Int = 64
+    ) {
         self.provider = provider
-        self.capacity = capacity
+        self.costLimit = costLimit
+        self.minimumEntries = minimumEntries
+        self.maximumEntries = maximumEntries
+    }
+
+    deinit {
+        if let memoryWarningObserver {
+            NotificationCenter.default.removeObserver(memoryWarningObserver)
+        }
+    }
+
+    /// Una frazione prudente della RAM del dispositivo. Non è la memoria *disponibile*: iOS
+    /// termina le app molto prima di esaurirla, quindi la frazione è bassa e con un tetto fisso
+    /// sopra, per non arrivare a impegnare centinaia di MB su un iPad solo perché ne ha tanta.
+    static func defaultCostLimit() -> Int {
+        let physical = ProcessInfo.processInfo.physicalMemory
+        let share = Int(min(physical / 24, UInt64(Int.max)))
+        return min(max(share, 64 * 1024 * 1024), 192 * 1024 * 1024)
     }
 
     /// Le opzioni fanno parte della chiave, non solo l'indice: `prefetchAroundCurrentPage` e
@@ -47,6 +104,7 @@ actor PageImageCache {
     /// Senza questo confronto, un hit di cache poteva restituire un'immagine elaborata per una
     /// dimensione diversa da quella richiesta — sbagliata, non solo non aggiornata.
     func image(at index: Int, options: ProcessingOptions) -> PlatformImage? {
+        startObservingMemoryWarningsIfNeeded()
         if let cached = entries[index], cached.options == options {
             touch(index)
             return cached.image
@@ -59,6 +117,7 @@ actor PageImageCache {
     /// Elabora in anticipo le pagine entro `radius` da `index`, saltando quelle già in cache
     /// con le stesse opzioni.
     func prefetch(around index: Int, radius: Int, pageCount: Int, options: ProcessingOptions) async {
+        startObservingMemoryWarningsIfNeeded()
         guard pageCount > 0 else { return }
         let lower = max(0, index - radius)
         let upper = min(pageCount - 1, index + radius)
@@ -86,6 +145,17 @@ actor PageImageCache {
     func purge() {
         entries.removeAll()
         accessOrder.removeAll()
+        totalCost = 0
+    }
+
+    /// Risposta a un avviso di memoria: si tiene solo la pagina usata più di recente, che è
+    /// quella a schermo, e si lascia che il prefetch ricostruisca il resto.
+    func dropAllButMostRecent(_ keep: Int = 1) {
+        guard accessOrder.count > keep else { return }
+        for index in accessOrder.dropLast(keep) {
+            if let removed = entries.removeValue(forKey: index) { totalCost -= removed.cost }
+        }
+        accessOrder = Array(accessOrder.suffix(keep))
     }
 
     /// Da chiamare prima di ritentare una pagina la cui lettura è fallita: non toglie nulla se
@@ -93,7 +163,7 @@ actor PageImageCache {
     /// dopo un fallimento parziale — es. l'archivio era temporaneamente irraggiungibile da
     /// iCloud — non deve trovare un'eventuale voce stantia e restituirla senza riprovare.
     func invalidate(_ index: Int) {
-        entries.removeValue(forKey: index)
+        if let removed = entries.removeValue(forKey: index) { totalCost -= removed.cost }
         accessOrder.removeAll { $0 == index }
     }
 
@@ -112,12 +182,28 @@ actor PageImageCache {
     }
 
     private func store(index: Int, image: PlatformImage, options: ProcessingOptions) {
-        entries[index] = Entry(image: image, options: options)
+        if let previous = entries[index] { totalCost -= previous.cost }
+        let cost = Self.cost(of: image)
+        entries[index] = Entry(image: image, options: options, cost: cost)
+        totalCost += cost
         touch(index)
-        while entries.count > capacity, let oldest = accessOrder.first {
-            entries.removeValue(forKey: oldest)
+        evictIfNeeded()
+    }
+
+    private func evictIfNeeded() {
+        while totalCost > costLimit || entries.count > maximumEntries {
+            guard entries.count > minimumEntries, let oldest = accessOrder.first else { return }
+            if let removed = entries.removeValue(forKey: oldest) { totalCost -= removed.cost }
             accessOrder.removeFirst()
         }
+    }
+
+    /// `bytesPerRow * height` e non `width * height * 4`: è l'allocazione vera, allineamento
+    /// di riga compreso. Se il bitmap non è raggiungibile si assume una pagina grande, così
+    /// una stima sbagliata pecca per prudenza invece che gonfiare la cache.
+    private static func cost(of image: PlatformImage) -> Int {
+        guard let bitmap = image.cgImageRepresentation else { return 16 * 1024 * 1024 }
+        return max(bitmap.bytesPerRow * bitmap.height, 1)
     }
 
     private func touch(_ index: Int) {

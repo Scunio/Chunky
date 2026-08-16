@@ -46,7 +46,11 @@ final class ICloudDownloadTracker: ObservableObject {
         guard isRunning else { return }
         isRunning = false
         query.stop()
-        NotificationCenter.default.removeObserver(self)
+        // Rimozione mirata invece di `removeObserver(self)`: questa classe osserva solo la
+        // propria query, e la rimozione in blocco cancellerebbe anche eventuali altre
+        // osservazioni registrate altrove sullo stesso oggetto.
+        NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidUpdate, object: query)
+        NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidFinishGathering, object: query)
     }
 
     @objc private func handleUpdate() {

@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 
-
 @Suite("CBZ")
 struct CBZPageProviderTests {
     private func provider(_ fixture: String = "sample.cbz") throws -> CBZPageProvider {

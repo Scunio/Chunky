@@ -32,6 +32,7 @@ struct ContentView: View {
             .onAppear {
                 ICloudDownloadTracker.shared.start()
                 syncSyncFolderIfNeeded()
+                adoptFilesDroppedInDocuments()
                 startPeriodicRescan()
             }
             .onDisappear {
@@ -43,7 +44,13 @@ struct ContentView: View {
             // l'utente, invece di dipendere dall'apertura di una schermata specifica.
             .onChange(of: tracker.allRelativePaths) { _, _ in scheduleDebouncedSync() }
             .onChange(of: isSyncFolderEnabled) { _, newValue in if newValue { syncSyncFolderIfNeeded() } }
-            .onChange(of: scenePhase) { _, phase in if phase == .active { syncSyncFolderIfNeeded() } }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                syncSyncFolderIfNeeded()
+                // Il momento in cui i file trascinati dal Finder possono essere comparsi è
+                // esattamente questo: l'utente li copia con l'app in background e poi la riapre.
+                adoptFilesDroppedInDocuments()
+            }
     }
 
     private func scheduleDebouncedSync() {
@@ -53,6 +60,14 @@ struct ContentView: View {
             guard !Task.isCancelled else { return }
             syncSyncFolderIfNeeded()
         }
+    }
+
+    /// Solo iOS: su macOS non esiste il File Sharing e la cartella Documents dell'app non è
+    /// una destinazione in cui l'utente possa trascinare qualcosa.
+    private func adoptFilesDroppedInDocuments() {
+        #if os(iOS)
+        viewModel.adoptFilesDroppedInDocuments(context: context)
+        #endif
     }
 
     private func syncSyncFolderIfNeeded() {
@@ -67,6 +82,10 @@ struct ContentView: View {
                 try? await Task.sleep(nanoseconds: 180_000_000_000) // 3 minuti
                 guard !Task.isCancelled else { return }
                 syncSyncFolderIfNeeded()
+                // Ripesca i file che l'adozione aveva saltato perché il Finder li stava ancora
+                // copiando: senza questo, restare in foreground durante un trasferimento lungo
+                // li lascerebbe fuori dalla libreria fino al riavvio dell'app.
+                adoptFilesDroppedInDocuments()
             }
         }
     }

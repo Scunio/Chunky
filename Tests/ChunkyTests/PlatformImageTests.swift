@@ -2,7 +2,6 @@ import CoreGraphics
 import Foundation
 import Testing
 
-
 @Suite("PlatformImage")
 struct PlatformImageTests {
     private func makeCGImage(width: Int, height: Int) throws -> CGImage {

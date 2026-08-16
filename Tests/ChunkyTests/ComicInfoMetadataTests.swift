@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 
-
 @Suite("ComicInfo.xml")
 struct ComicInfoMetadataTests {
     @Test("Legge serie, titolo e numero da un file completo")

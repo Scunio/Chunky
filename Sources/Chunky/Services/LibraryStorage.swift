@@ -48,21 +48,77 @@ enum LibraryStorage {
 
         let items = (try? FileManager.default.contentsOfDirectory(at: legacyRoot, includingPropertiesForKeys: nil)) ?? []
         for item in items {
-            var destinationName = item.lastPathComponent
-            var destinationURL = newRoot.appendingPathComponent(destinationName)
-
-            var suffix = 1
-            let baseName = (destinationName as NSString).deletingPathExtension
-            let ext = (destinationName as NSString).pathExtension
-            while FileManager.default.fileExists(atPath: destinationURL.path) {
-                destinationName = "\(baseName) \(suffix).\(ext)"
-                destinationURL = newRoot.appendingPathComponent(destinationName)
-                suffix += 1
-            }
-
+            let destinationURL = availableDestination(forFileNamed: item.lastPathComponent, in: newRoot)
             try? FileManager.default.moveItem(at: item, to: destinationURL)
         }
         try? FileManager.default.removeItem(at: legacyRoot)
+    }
+
+    /// Percorso libero dentro `folder` per un file di nome `fileName`: se il nome è già occupato
+    /// aggiunge un progressivo ("Topolino 1.cbz"). Unica implementazione per tutti i punti in cui
+    /// un file entra nella libreria, così i duplicati si comportano allo stesso modo ovunque.
+    private static func availableDestination(forFileNamed fileName: String, in folder: URL) -> URL {
+        var destinationURL = folder.appendingPathComponent(fileName)
+        guard FileManager.default.fileExists(atPath: destinationURL.path) else { return destinationURL }
+
+        let baseName = (fileName as NSString).deletingPathExtension
+        let ext = (fileName as NSString).pathExtension
+        var suffix = 1
+        repeat {
+            destinationURL = folder.appendingPathComponent("\(baseName) \(suffix).\(ext)")
+            suffix += 1
+        } while FileManager.default.fileExists(atPath: destinationURL.path)
+        return destinationURL
+    }
+
+    /// Il Finder copia nella cartella Documents mentre l'app è viva, quindi un file può essere
+    /// ancora a metà trasferimento nel momento in cui lo troviamo: spostarlo o aprirlo adesso
+    /// significherebbe troncare la copia o registrare in libreria un archivio illeggibile.
+    /// Chi è stato scritto negli ultimi secondi viene lasciato dov'è: lo riprende il passaggio
+    /// successivo (foreground o rescan periodico), quindi saltarlo non lo perde.
+    private static func isBeingWritten(_ url: URL) -> Bool {
+        guard let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else {
+            return false
+        }
+        return Date().timeIntervalSince(modified) < 5
+    }
+
+    /// Cartella Documents locale della sandbox. È quella che iOS espone in Files e nella tab
+    /// "File" del Finder grazie a `UIFileSharingEnabled`, quindi è dove atterrano i fumetti
+    /// trascinati dal Mac con il device collegato via USB. Coincide con `rootFolderURL()` solo
+    /// quando iCloud Drive non è disponibile: con iCloud attivo la libreria vive nel container
+    /// ubiquity, e senza `adoptFilesDroppedInLocalDocuments()` i file trascinati resterebbero
+    /// qui senza mai comparire in libreria.
+    static var localDocumentsURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
+    /// Porta nella libreria i fumetti lasciati nella Documents locale e restituisce i loro
+    /// percorsi relativi alla root, pronti per la registrazione in Core Data. Se la libreria è
+    /// già quella cartella (niente iCloud) non sposta niente e li elenca dov'erano.
+    /// Non cancella e non registra nulla: la deduplica contro la libreria esistente spetta al
+    /// chiamante, che sa cosa c'è già in Core Data.
+    static func adoptFilesDroppedInLocalDocuments() -> [String] {
+        let inbox = localDocumentsURL
+        let root = rootFolderURL()
+        let files = (try? FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        let comicFiles = files.filter { ComicFormat(fileExtension: $0.pathExtension) != nil && !isBeingWritten($0) }
+
+        guard inbox.standardizedFileURL != root.standardizedFileURL else {
+            return comicFiles.map { $0.lastPathComponent }
+        }
+
+        var adopted: [String] = []
+        for file in comicFiles {
+            let destinationURL = availableDestination(forFileNamed: file.lastPathComponent, in: root)
+            do {
+                try FileManager.default.moveItem(at: file, to: destinationURL)
+                adopted.append(destinationURL.lastPathComponent)
+            } catch {
+                DiagnosticLog.log("Impossibile spostare in libreria \"\(file.lastPathComponent)\": \(error.localizedDescription)")
+            }
+        }
+        return adopted
     }
 
     static func fileURL(forRelativePath relativePath: String) -> URL {
@@ -78,20 +134,9 @@ enum LibraryStorage {
         }
 
         let root = rootFolderURL()
-        var destinationName = sourceURL.lastPathComponent
-        var destinationURL = root.appendingPathComponent(destinationName)
-
-        var suffix = 1
-        let baseName = (destinationName as NSString).deletingPathExtension
-        let ext = (destinationName as NSString).pathExtension
-        while FileManager.default.fileExists(atPath: destinationURL.path) {
-            destinationName = "\(baseName) \(suffix).\(ext)"
-            destinationURL = root.appendingPathComponent(destinationName)
-            suffix += 1
-        }
-
+        let destinationURL = availableDestination(forFileNamed: sourceURL.lastPathComponent, in: root)
         try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
-        return destinationName
+        return destinationURL.lastPathComponent
     }
 
     static func removeFile(relativePath: String) {
@@ -199,7 +244,11 @@ private final class UbiquitousDownloadObserver: NSObject {
 
     func stop() {
         query.stop()
-        NotificationCenter.default.removeObserver(self)
+        // Rimozione mirata invece di `removeObserver(self)`: questa classe osserva solo la
+        // propria query, e la rimozione in blocco cancellerebbe anche eventuali altre
+        // osservazioni registrate altrove sullo stesso oggetto.
+        NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidUpdate, object: query)
+        NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidFinishGathering, object: query)
     }
 
     @objc private func handleUpdate() {

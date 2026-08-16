@@ -20,7 +20,6 @@ struct LibrarySidebarView: View {
         LibraryGrouping.sections(for: Array(comics))
     }
 
-
     var body: some View {
         List(selection: $selection) {
             Label("Tutti i fumetti", systemImage: "books.vertical")

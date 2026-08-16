@@ -99,11 +99,39 @@ private struct ReaderContentView: View {
     @State private var shareImage: PlatformImage?
     @State private var pendingNextComic: ComicEntity?
     @State private var isPanelSelectionPresented = false
+    /// Ricerca testuale nel fumetto. L'indice è creato solo alla prima apertura della card: su
+    /// un fumetto mai cercato costruirlo all'apertura del lettore vorrebbe dire pagare l'OCR
+    /// senza che nessuno l'abbia chiesto.
+    @State private var isFindPresented = false
+    @State private var findQuery = ""
+    @State private var textIndex: ComicTextIndex?
     @State private var isPageJumpPresented = false
     @State private var jumpPageNumber = 1
     @State private var isInfoPresented = false
     @State private var isToolsPresented = false
     @State private var isAccountsPresented = false
+    #if os(iOS)
+    /// Altezze misurate delle barre dei controlli: servono alle zone di tap per non reagire ai
+    /// tocchi che cadono sulle barre (vedi `PageTapZones.topInset`). Misurate invece che
+    /// stimate perché dipendono da safe area, dimensione del testo e contenuto delle barre.
+    @State private var headerHeight: CGFloat = 0
+    @State private var footerHeight: CGFloat = 0
+    /// Livello di luminosità mostrato dall'indicatore durante il gesto a due dita, `nil` quando
+    /// l'indicatore è nascosto. Senza un riscontro visibile non c'è modo, sul dispositivo, di
+    /// distinguere "il gesto non arriva" da "la luminosità non si muove" — vedi
+    /// `TwoFingerBrightnessView`.
+    @State private var brightnessLevel: Double?
+    /// Livello inseguito durante il gesto. Si accumula qui invece di rileggere ogni volta
+    /// `UIScreen.brightness`: la rilettura fa dipendere il gesto dal fatto che il sistema
+    /// accetti davvero la scrittura (nel simulatore non la accetta, e il valore torna sempre
+    /// quello di partenza), e sommare su un valore che non avanza significa non muoversi mai.
+    /// Azzerato a fine gesto, così il gesto successivo riparte dalla luminosità reale — che
+    /// nel frattempo l'utente può aver cambiato dal Centro di Controllo.
+    @State private var brightnessTarget: CGFloat?
+    /// Cambia a ogni aggiornamento: solo l'ultimo nasconde l'indicatore, così un gesto lungo
+    /// non lo fa sparire a metà.
+    @State private var brightnessHideToken = 0
+    #endif
     @State private var isNewComicsPresented = false
     @State private var isNowReadingPresented = false
     @AppStorage("newTrayClearedAt") private var newTrayClearedAtTimestamp: Double = 0
@@ -150,7 +178,21 @@ private struct ReaderContentView: View {
     // il tag del TabView non trova corrispondenza e mostra la pagina sbagliata.
     private func realignCurrentPageToSpreadStart() {
         guard let provider = provider else { return }
-        currentPage = pagination(pageCount: provider.pageCount).realigned(currentPage)
+        setPageWithoutAnimation(pagination(pageCount: provider.pageCount).realigned(currentPage))
+    }
+
+    /// Sposta l'indice corrente senza animarlo e senza lasciare che il pager erediti lo stile
+    /// dell'ultimo gesto. Serve ai riallineamenti interni (ripristino della posizione salvata,
+    /// cambio del passo singola/doppia pagina): non sono cambi pagina voluti dall'utente, quindi
+    /// non devono girare la pagina con scorrimento o dissolvenza a seconda di come si era
+    /// arrivati qui.
+    private func setPageWithoutAnimation(_ index: Int) {
+        guard index != currentPage else { return }
+        turnStyle = .immediate
+        turnDirection = index > currentPage ? 1 : -1
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { currentPage = index }
     }
 
     private var readerBackground: Color {
@@ -221,19 +263,22 @@ private struct ReaderContentView: View {
 
             #if os(iOS)
             if isTwoFingerBrightnessEnabled {
-                TwoFingerBrightnessView { delta in
-                    guard let screen = UIScreen.current else { return }
-                    screen.brightness = min(max(screen.brightness + delta, 0), 1)
+                TwoFingerBrightnessView(onBegan: { brightnessTarget = UIScreen.current?.brightness }) { delta in
+                    applyBrightnessDelta(delta)
                 }
             }
             #endif
 
-            if isControlsVisible && !isPanelSelectionPresented {
-                VStack {
-                    header
-                    Spacer()
-                    footer
-                }
+            #if os(iOS)
+            if let brightnessLevel {
+                brightnessIndicator(level: brightnessLevel)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+            #endif
+
+            if isControlsVisible && !isPanelSelectionPresented && !isFindPresented {
+                controlsChrome
                 .allowsHitTesting(true)
 
                 // Suggeriscono dove sono le zone di tap per cambiare pagina (altrimenti
@@ -275,6 +320,29 @@ private struct ReaderContentView: View {
                 pageJumpCard(provider: provider)
             }
 
+            // Le evidenziazioni restano anche dopo aver chiuso la card, finché la ricerca non
+            // viene svuotata: dopo il salto la cosa utile è vedere *dove* sta la parola, e la
+            // card coprirebbe metà pagina. Sono legate alla geometria della pagina originale
+            // (vedi `ReaderFindHighlightOverlay`), quindi restano fuori nei due casi in cui a
+            // schermo c'è qualcos'altro: doppia pagina e ritaglio automatico.
+            if let textIndex, let provider = provider, !findQuery.isEmpty,
+               !effectiveDoublePage, !isAutoCropEnabled {
+                ReaderFindHighlightOverlay(
+                    index: textIndex,
+                    query: findQuery,
+                    pageIndex: currentPage,
+                    provider: provider
+                )
+            }
+
+            if isFindPresented, let textIndex {
+                ReaderFindView(index: textIndex, query: $findQuery) { match in
+                    jumpToMatch(match)
+                } onClose: {
+                    isFindPresented = false
+                }
+            }
+
             // Sovrapposta direttamente alla pagina già visibile (non un'altra schermata/sheet):
             // si vede ancora la pagina sotto, non un fumetto ricaricato a sé stante.
             if isPanelSelectionPresented, let provider = provider {
@@ -300,7 +368,13 @@ private struct ReaderContentView: View {
             loadComic()
             resetIdleTimerIfNeeded()
         }
-        .onDisappear { idleResetWorkItem?.cancel() }
+        .onDisappear {
+            idleResetWorkItem?.cancel()
+            // La scansione OCR è la cosa più costosa che il lettore possa avere in corso:
+            // lasciarla girare dopo l'uscita scalderebbe il telefono per un risultato che
+            // nessuno sta più guardando.
+            textIndex?.cancelScanning()
+        }
         .onChange(of: currentPage) { _, newValue in
             guard let provider = provider else { return }
             comic.lastReadPage = Int32(min(max(newValue, 0), provider.pageCount - 1))
@@ -407,6 +481,36 @@ private struct ReaderContentView: View {
         .cornerRadius(16)
     }
 
+    /// Apre la card di ricerca, creando l'indice al primo utilizzo e facendo ripartire la
+    /// scansione dalla pagina corrente: se l'indice esisteva già da una sessione precedente,
+    /// riprende solo le pagine che gli mancano.
+    private func presentFind() {
+        guard let provider = provider else { return }
+        // Chi arriva in fondo al fumetto ha già a schermo la conferma "continua con…": le due
+        // card si sovrapporrebbero. Aprire la ricerca è una risposta a quella domanda ("no,
+        // voglio cercare qualcosa"), quindi la conferma esce di scena.
+        pendingNextComic = nil
+        if textIndex == nil {
+            textIndex = ComicTextIndex(
+                provider: provider,
+                comicIdentifier: comic.objectID.uriRepresentation().absoluteString
+            )
+        }
+        textIndex?.startScanning(from: currentPage)
+        isFindPresented = true
+    }
+
+    private func jumpToMatch(_ match: ComicTextMatch) {
+        guard let provider = provider else { return }
+        let target = pagination(pageCount: provider.pageCount).realigned(match.pageIndex)
+        turnStyle = tapPageTurnStyle
+        turnDirection = target > currentPage ? 1 : -1
+        withAnimation(.easeInOut(duration: 0.2)) {
+            currentPage = target
+        }
+        isFindPresented = false
+    }
+
     private func confirmPageJump() {
         guard let provider = provider else { return }
         let target = pagination(pageCount: provider.pageCount).realigned(jumpPageNumber - 1)
@@ -439,7 +543,7 @@ private struct ReaderContentView: View {
             autoTintContrast: isAutoTintContrastEnabled,
             upscaleTargetSize: isUpscalingEnabled ? pageTargetSize : nil
         )
-        await pageCache.prefetch(around: currentPage, radius: 2, pageCount: provider.pageCount, options: options)
+        await pageCache.prefetch(around: currentPage, radius: 3, pageCount: provider.pageCount, options: options)
     }
 
     #if os(macOS)
@@ -500,12 +604,13 @@ private struct ReaderContentView: View {
     /// l'animazione giusta — cosa che `PageTurnPager` sa fare e il TabView no.
     @ViewBuilder
     private func iOSPager(provider: ComicPageProvider) -> some View {
+        // Sempre `programmaticPager`, anche quando swipe e tap sono entrambi "Scorrimento":
+        // il `TabView(.page)` che serviva quel caso non ha modo di sospendere il proprio
+        // scorrimento a pagina ingrandita, quindi il trascinamento per spostare la pagina
+        // zoomata cambiava pagina. `PageTurnPager` lo sospende togliendo il `dataSource`
+        // (`interactiveSwipe`), che è la stessa cosa che fanno già tutti gli altri percorsi.
         Group {
-            if swipePageTurnStyle == .slide && tapPageTurnStyle == .slide {
-                nativeSwipePager(provider: provider)
-            } else {
-                programmaticPager(provider: provider)
-            }
+            programmaticPager(provider: provider)
         }
         // A livello del pager intero, non dentro `PageView.onAppear`: parte subito al cambio
         // pagina, in parallelo con l'eventuale animazione, invece di aspettare che la pagina
@@ -545,17 +650,6 @@ private struct ReaderContentView: View {
 
             tapZonesOrControlsToggle(provider: provider)
         }
-    }
-
-    private func nativeSwipePager(provider: ComicPageProvider) -> some View {
-        TabView(selection: $currentPage) {
-            ForEach(spreadStarts(pageCount: provider.pageCount), id: \.self) { start in
-                pageContent(provider: provider, start: start)
-                    .tag(start)
-            }
-        }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
     }
 
     private func programmaticPager(provider: ComicPageProvider) -> some View {
@@ -604,7 +698,9 @@ private struct ReaderContentView: View {
             oneHandedReversed: isOneHandedZonesReversed,
             hotCorners: isHotCornersEnabled,
             zonesEnabled: tapPageTurnStyle != .disabled,
-            rightToLeft: comic.readingDirection == .rightToLeft
+            rightToLeft: comic.readingDirection == .rightToLeft,
+            topInset: isControlsVisible ? headerHeight : 0,
+            bottomInset: isControlsVisible ? footerHeight : 0
         ) {
             // Con "Tap-to-pan" anche la zona "indietro" avanza: comodo se non riesci a
             // raggiungere comodamente entrambi i lati dello schermo.
@@ -770,6 +866,82 @@ private struct ReaderContentView: View {
         onSwitchComic(next)
     }
 
+    #if os(iOS)
+    /// Indicatore della luminosità durante il gesto a due dita: stesso ruolo dell'HUD di
+    /// sistema (che non compare quando la luminosità la cambia l'app), cioè far vedere che il
+    /// gesto sta funzionando e a che livello si è arrivati.
+    private func brightnessIndicator(level: Double) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: level < 0.35 ? "sun.min.fill" : "sun.max.fill")
+                .font(.system(size: 30))
+            Capsule()
+                .fill(Color.white.opacity(0.25))
+                .frame(width: 8, height: 120)
+                .overlay(alignment: .bottom) {
+                    Capsule()
+                        .fill(Color.white)
+                        .frame(width: 8, height: max(4, 120 * level))
+                }
+        }
+        .foregroundColor(.white)
+        .padding(.vertical, 22)
+        .padding(.horizontal, 26)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .environment(\.colorScheme, .dark)
+    }
+
+    private func applyBrightnessDelta(_ delta: CGFloat) {
+        let base = brightnessTarget ?? UIScreen.current?.brightness ?? 1
+        let level = min(max(base + delta, 0), 1)
+        brightnessTarget = level
+        UIScreen.current?.brightness = level
+        showBrightnessIndicator(level)
+    }
+
+    private func showBrightnessIndicator(_ level: CGFloat) {
+        withAnimation(.easeOut(duration: 0.12)) { brightnessLevel = Double(level) }
+        brightnessHideToken &+= 1
+        let token = brightnessHideToken
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            guard brightnessHideToken == token else { return }
+            withAnimation(.easeOut(duration: 0.25)) { brightnessLevel = nil }
+            brightnessTarget = nil
+        }
+    }
+    #endif
+
+    private var findButton: some View {
+        Button(action: presentFind) {
+            Image(systemName: "text.magnifyingglass").frame(width: 44, height: 44)
+        }
+    }
+
+    /// Barre dei controlli, con la misura della loro altezza su iOS: serve alle zone di tap
+    /// per non reagire ai tocchi che cadono sulle barre (vedi `PageTapZones.topInset`).
+    /// Proprietà a sé e non in linea nel `body` perché il body del lettore è già al limite di
+    /// quello che il compilatore riesce a inferire in tempi ragionevoli.
+    private var controlsChrome: some View {
+        VStack {
+            #if os(iOS)
+            header
+                .background(GeometryReader { proxy in
+                    Color.clear.preference(key: ChromeHeightKey.self, value: proxy.size.height)
+                })
+                .onPreferenceChange(ChromeHeightKey.self) { headerHeight = $0 }
+            Spacer()
+            footer
+                .background(GeometryReader { proxy in
+                    Color.clear.preference(key: ChromeFooterHeightKey.self, value: proxy.size.height)
+                })
+                .onPreferenceChange(ChromeFooterHeightKey.self) { footerHeight = $0 }
+            #else
+            header
+            Spacer()
+            footer
+            #endif
+        }
+    }
+
     private var header: some View {
         HStack(spacing: 2) {
             Button(action: exitReader) {
@@ -786,6 +958,17 @@ private struct ReaderContentView: View {
             Button(action: { isPanelSelectionPresented = true }) {
                 Image(systemName: "ellipsis.bubble").frame(width: 44, height: 44)
             }
+            // Cerca nel testo delle pagine (OCR, o livello testo se il file è un PDF nativo).
+            // Su iPhone in larghezza compatta l'icona non compare qui: una terza icona a
+            // sinistra lascerebbe al titolo pochi punti: sta nel menu "..." come le altre
+            // azioni che lì non entrano (stessa scelta di `headerTrailingActions`).
+            #if os(iOS)
+            if horizontalSizeClass != .compact {
+                findButton
+            }
+            #else
+            findButton
+            #endif
             Spacer(minLength: 4)
             // Info fumetto (vai-a-pagina/preferiti/direzione lettura): tap prolungato sul
             // titolo, per non aggiungere un'altra icona all'header. I Menu a tendina con
@@ -833,6 +1016,9 @@ private struct ReaderContentView: View {
         #if os(iOS)
         if horizontalSizeClass == .compact {
             Menu {
+                Button(action: presentFind) {
+                    Label("Cerca nel testo", systemImage: "text.magnifyingglass")
+                }
                 Button(action: { isNewComicsPresented = true }) {
                     Label("Nuovi fumetti", systemImage: "envelope")
                 }
@@ -1141,10 +1327,10 @@ private struct ReaderContentView: View {
                     let clampedStart = min(startingPage, max(0, loaded.pageCount - 1))
                     let starts = spreadStarts(pageCount: loaded.pageCount)
                     let aligned = starts.last(where: { $0 <= clampedStart }) ?? 0
-                    // Solo se serve davvero: riassegnare lo stesso valore è innocuo, ma un valore
-                    // diverso qui fa scorrere il pager, ed è esattamente ciò che si vuole evitare
-                    // quando la pagina ripristinata era già un inizio di spread valido.
-                    if aligned != currentPage { currentPage = aligned }
+                    // Ripristino della posizione salvata: deve essere un salto secco, non un
+                    // cambio pagina animato (e `setPageWithoutAnimation` non fa nulla se la
+                    // pagina ripristinata era già un inizio di spread valido).
+                    setPageWithoutAnimation(aligned)
                     if comic.pageCount == 0 {
                         comic.pageCount = Int32(loaded.pageCount)
                         try? context.save()
@@ -1158,3 +1344,18 @@ private struct ReaderContentView: View {
         }
     }
 }
+
+#if os(iOS)
+/// Altezza misurata della barra superiore dei controlli (vedi `ReaderView.headerHeight`).
+struct ChromeHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// Come `ChromeHeightKey`, per la barra inferiore: due chiavi distinte perché le due misure
+/// viaggiano nello stesso albero e una sola le fonderebbe insieme.
+struct ChromeFooterHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+#endif
