@@ -604,11 +604,15 @@ private struct ReaderContentView: View {
     /// l'animazione giusta — cosa che `PageTurnPager` sa fare e il TabView no.
     @ViewBuilder
     private func iOSPager(provider: ComicPageProvider) -> some View {
-        // Sempre `programmaticPager`, anche quando swipe e tap sono entrambi "Scorrimento":
-        // il `TabView(.page)` che serviva quel caso non ha modo di sospendere il proprio
-        // scorrimento a pagina ingrandita, quindi il trascinamento per spostare la pagina
-        // zoomata cambiava pagina. `PageTurnPager` lo sospende togliendo il `dataSource`
-        // (`interactiveSwipe`), che è la stessa cosa che fanno già tutti gli altri percorsi.
+        // Un solo pager per tutti gli stili. Prima erano due: `TabView(.page)` quando swipe e
+        // tap erano entrambi "Scorrimento", pager programmatico altrimenti. Il TabView è caduto
+        // perché non sa sospendere il proprio scorrimento a pagina ingrandita, quindi il
+        // trascinamento per spostare la pagina zoomata cambiava pagina.
+        //
+        // `PageCollectionPager` sospende lo scorrimento con `isScrollEnabled`, che è una
+        // proprietà e non un rimontaggio: `UIPageViewController` per la stessa cosa obbligava a
+        // staccare il `dataSource`, e quindi a riconfigurare i propri gesture recognizer mentre
+        // il dito era ancora sullo schermo.
         Group {
             programmaticPager(provider: provider)
         }
@@ -655,7 +659,7 @@ private struct ReaderContentView: View {
     private func programmaticPager(provider: ComicPageProvider) -> some View {
         let isInteractiveSwipe = swipePageTurnStyle == .slide && !isZoomed
         return ZStack {
-            PageTurnPager(
+            PageCollectionPager(
                 starts: spreadStarts(pageCount: provider.pageCount),
                 selection: $currentPage,
                 rightToLeft: comic.readingDirection == .rightToLeft,
@@ -1112,7 +1116,12 @@ private struct ReaderContentView: View {
     private var footer: some View {
         Group {
             if let provider = provider, provider.pageCount > 1 {
-                let upperBound = min(currentPage + pageStep, provider.pageCount)
+                // Fine reale dello spread corrente, cioè l'inizio del successivo: `pageStep`
+                // vale 2 per tutta la doppia pagina, ma con "copertina da sola" il primo spread
+                // ne contiene una, e l'etichetta annunciava "1–2" mentre a schermo c'era solo
+                // la copertina. Stessa cosa per l'ultima pagina di un fumetto dispari.
+                let upperBound = spreadStarts(pageCount: provider.pageCount)
+                    .first(where: { $0 > currentPage }) ?? provider.pageCount
                 let label = upperBound - currentPage > 1
                     ? "\(currentPage + 1)–\(upperBound) / \(provider.pageCount)"
                     : "\(currentPage + 1) / \(provider.pageCount)"
