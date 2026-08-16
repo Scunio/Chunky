@@ -248,6 +248,25 @@ struct TwoFingerBrightnessView: UIViewRepresentable {
         /// Con le dita vere la distanza oscilla sempre un po', quindi una soglia troppo bassa
         /// classificherebbe come pinch qualunque trascinamento.
         private static let pinchSpreadTolerance: CGFloat = 0.08
+        /// Spostamento verticale (in punti) da accumulare prima di toccare la luminosità.
+        ///
+        /// Serve perché la classificazione è *reattiva*: `pinchSpreadTolerance` scatta solo dopo
+        /// che le dita si sono già allontanate abbastanza, e fino a quel momento il pan ha una
+        /// componente verticale che veniva applicata subito — così ogni pinch faceva comparire
+        /// per un istante l'indicatore della luminosità. Accumulando i primi punti senza
+        /// applicarli si dà al pinch il tempo di dichiararsi: se in quella finestra la distanza
+        /// fra le dita cambia, il gesto è uno zoom e la luminosità non si muove mai.
+        ///
+        /// Il ritardo non si sente: un trascinamento per la luminosità è di centinaia di punti,
+        /// e appena classificato il delta accumulato viene applicato tutto insieme, quindi non
+        /// si perde nulla del movimento già fatto.
+        private static let brightnessClassificationTravel: CGFloat = 16
+        /// Spostamento verticale accumulato e non ancora applicato, durante la finestra di
+        /// classificazione.
+        private var pendingVerticalTranslation: CGFloat = 0
+        /// Vero quando il gesto è stato riconosciuto come regolazione della luminosità e il
+        /// delta viene applicato in tempo reale.
+        private var isBrightnessConfirmed = false
 
         private func touchSpread(of recognizer: UIGestureRecognizer, in view: UIView) -> CGFloat? {
             guard recognizer.numberOfTouches >= 2 else { return nil }
@@ -263,9 +282,13 @@ struct TwoFingerBrightnessView: UIViewRepresentable {
                 onBegan()
                 initialTouchSpread = touchSpread(of: recognizer, in: view)
                 gestureIsPinch = false
+                isBrightnessConfirmed = false
+                pendingVerticalTranslation = 0
             case .ended, .cancelled, .failed:
                 initialTouchSpread = nil
                 gestureIsPinch = false
+                isBrightnessConfirmed = false
+                pendingVerticalTranslation = 0
                 return
             default:
                 break
@@ -295,8 +318,20 @@ struct TwoFingerBrightnessView: UIViewRepresentable {
                 initialTouchSpread = nil
             }
             let translation = recognizer.translation(in: view)
-            onChange(-translation.y / view.bounds.height)
             recognizer.setTranslation(.zero, in: view)
+
+            // Finestra di classificazione: si accumula senza applicare, così un pinch che si
+            // dichiara qui sopra (`gestureIsPinch`) esce di scena senza aver mai spostato la
+            // luminosità. Un pinch simmetrico per giunta muove pochissimo il punto medio fra le
+            // due dita, che è quello che il pan misura: spesso non arriva nemmeno alla soglia.
+            guard isBrightnessConfirmed else {
+                pendingVerticalTranslation += translation.y
+                guard abs(pendingVerticalTranslation) >= Self.brightnessClassificationTravel else { return }
+                isBrightnessConfirmed = true
+                onChange(-pendingVerticalTranslation / view.bounds.height)
+                return
+            }
+            onChange(-translation.y / view.bounds.height)
         }
 
         /// Lascia passare anche i gesture di SwiftUI sotto (tap zone, swipe pagina, pinch):
