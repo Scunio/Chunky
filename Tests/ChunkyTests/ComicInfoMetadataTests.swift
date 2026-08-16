@@ -52,7 +52,13 @@ struct SeriesNameDerivationTests {
         ("Topolino #3595", "Topolino"),
         ("Topolino   3595   ", "Topolino"),
         ("Dylan Dog 442", "Dylan Dog"),
-        ("Corto Maltese #7", "Corto Maltese")
+        ("Corto Maltese #7", "Corto Maltese"),
+        // Decorazioni di coda dei rilasci scansionati: senza toglierle il titolo non finisce
+        // con un numero e il fumetto resterebbe in "Altri fumetti".
+        ("Topolino 3652 (Panini 2025-11-19) [c2c CPPD]", "Topolino"),
+        ("Topolino 3636 + Cover Abbonati", "Topolino"),
+        ("Topolino 3654 (Panini) + Cover Abbonati", "Topolino"),
+        ("Topolino 3655 {HD}", "Topolino")
     ])
     func derivesSeries(title: String, expected: String) {
         #expect(LibraryViewModel.deriveSeriesName(fromFallbackTitle: title) == expected)
@@ -63,7 +69,9 @@ struct SeriesNameDerivationTests {
         "3595",            // solo un numero: non resta nulla come serie
         "#12",
         "",
-        "Watchmen Vol"     // numero assente
+        "Watchmen Vol",    // numero assente
+        "Batman + Robin",  // tolta la coda con "+" non resta nessun numero
+        "(2025)"           // tolta la parentesi non resta niente
     ])
     func returnsNil(title: String) {
         #expect(LibraryViewModel.deriveSeriesName(fromFallbackTitle: title) == nil)

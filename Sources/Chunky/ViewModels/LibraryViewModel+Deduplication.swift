@@ -41,6 +41,36 @@ extension LibraryViewModel {
         return collapsed
     }
 
+    /// Ricalcola la serie dei fumetti che ne sono ancora privi. `seriesName` viene scritto una
+    /// volta sola, all'import: senza questa passata, migliorare la deduzione del nome serie non
+    /// cambierebbe niente per i fumetti già in libreria, che resterebbero in "Altri fumetti".
+    ///
+    /// Tocca soltanto i record con serie vuota: chi ha scelto un gruppo a mano (vedi `applyGroup`
+    /// in `LibraryView`) ha un `seriesName` valorizzato e non deve essere sovrascritto — mentre
+    /// chi ha lasciato "automatico" ha proprio `nil` ed è quello che qui si ricalcola.
+    @discardableResult
+    func backfillSeriesNames(in context: NSManagedObjectContext) -> Int {
+        var filled = 0
+        context.performAndWait {
+            let request = ComicEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "seriesName == nil OR seriesName == %@", "")
+            guard let comics = try? context.fetch(request), !comics.isEmpty else { return }
+
+            for comic in comics {
+                let fallback = comic.title ?? ((comic.relativePath ?? "") as NSString).deletingPathExtension
+                guard let series = Self.deriveSeriesName(fromFallbackTitle: fallback) else { continue }
+                comic.seriesName = series
+                filled += 1
+            }
+
+            if filled > 0 { try? context.save() }
+        }
+        if filled > 0 {
+            DiagnosticLog.log("Serie dedotta per \(filled) fumetti che ne erano privi")
+        }
+        return filled
+    }
+
     /// Solo i path con più di un record, letti come dizionari: caricare tutti i `ComicEntity`
     /// significherebbe tirare in memoria anche le copertine di tutta la libreria a ogni passata.
     private func duplicateRelativePaths(in context: NSManagedObjectContext) -> [String]? {

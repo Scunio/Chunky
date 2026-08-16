@@ -48,6 +48,7 @@ final class LibraryViewModel: ObservableObject {
                 self.importSingleFile(url, into: backgroundContext)
             }
             self.deduplicateComics(in: backgroundContext)
+            self.backfillSeriesNames(in: backgroundContext)
         }
     }
 
@@ -166,8 +167,12 @@ final class LibraryViewModel: ObservableObject {
     /// Molti CBZ/CBR scansionati non hanno un ComicInfo.xml con la serie: senza un fallback,
     /// finirebbero tutti ammassati in "Altri fumetti" invece che raggruppati per testata. Se il
     /// titolo finisce con un numero (es. "Topolino 3595"), lo togliamo e usiamo il resto come
-    /// nome serie ("Topolino").
+    /// nome serie ("Topolino"). Prima però si tolgono le decorazioni di coda dei rilasci
+    /// scansionati (vedi `LibraryGrouping.titleWithoutTrailingDecorations`), altrimenti un
+    /// "Topolino 3652 (Panini 2025-11-19) [c2c CPPD]" non finirebbe con un numero e resterebbe
+    /// senza serie.
     static func deriveSeriesName(fromFallbackTitle title: String) -> String? {
+        let title = LibraryGrouping.titleWithoutTrailingDecorations(title)
         guard let range = title.range(of: #"\s+#?\d+\s*$"#, options: .regularExpression) else { return nil }
         let series = String(title[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
         return series.isEmpty ? nil : series
@@ -237,6 +242,7 @@ final class LibraryViewModel: ObservableObject {
         let backgroundContext = sharedScanContext(for: context)
         enqueue(.deduplicate) { [weak self] in
             self?.deduplicateComics(in: backgroundContext)
+            self?.backfillSeriesNames(in: backgroundContext)
         }
     }
 
@@ -294,6 +300,7 @@ final class LibraryViewModel: ObservableObject {
         }
         DiagnosticLog.log("File Sharing: aggiunti \(newPaths.count) fumetti dalla cartella Documents")
         deduplicateComics(in: context)
+        backfillSeriesNames(in: context)
     }
 
     /// Strumento di recupero: rimuove dalla libreria i fumetti il cui file non esiste più
@@ -351,5 +358,6 @@ final class LibraryViewModel: ObservableObject {
         }
 
         deduplicateComics(in: context)
+        backfillSeriesNames(in: context)
     }
 }
