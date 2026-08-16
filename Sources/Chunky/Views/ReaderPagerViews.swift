@@ -260,11 +260,6 @@ struct TwoFingerBrightnessView: UIViewRepresentable {
             guard let view = recognizer.view, view.bounds.height > 0 else { return }
             switch recognizer.state {
             case .began:
-                // Una riga sola per gesto (non per ogni spostamento): serve a poter dire,
-                // leggendo la diagnostica dal dispositivo, se il gesto arriva davvero al
-                // lettore — è la sola cosa che distingue "il recognizer non scatta" da "la
-                // luminosità non si muove".
-                DiagnosticLog.log("Luminosità due dita: gesto iniziato (\(recognizer.numberOfTouches) tocchi)")
                 onBegan()
                 initialTouchSpread = touchSpread(of: recognizer, in: view)
                 gestureIsPinch = false
