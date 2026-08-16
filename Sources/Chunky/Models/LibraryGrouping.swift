@@ -41,7 +41,36 @@ enum LibraryGrouping {
     }
 
     static func issueNumber(fromTitle title: String) -> Int? {
-        guard let range = title.range(of: #"\d+\s*$"#, options: .regularExpression) else { return nil }
-        return Int(title[range].trimmingCharacters(in: .whitespaces))
+        let cleaned = titleWithoutTrailingDecorations(title)
+        guard let range = cleaned.range(of: #"\d+\s*$"#, options: .regularExpression) else { return nil }
+        return Int(cleaned[range].trimmingCharacters(in: .whitespaces))
+    }
+
+    /// Toglie dalla coda del titolo quello che i rilasci scansionati ci appendono dopo il numero
+    /// dell'albo — i gruppi fra parentesi ("Topolino 3652 (Panini 2025-11-19) [c2c CPPD]") e le
+    /// aggiunte introdotte da un "+" ("Topolino 3636 + Cover Abbonati") — così il numero torna in
+    /// fondo alla stringa ed è di nuovo riconoscibile.
+    ///
+    /// Il ciclo serve perché le decorazioni si alternano: tolta la parentesi finale può restare
+    /// scoperta una coda con "+", e viceversa.
+    static func titleWithoutTrailingDecorations(_ title: String) -> String {
+        let patterns = [
+            #"\s*\([^()]*\)\s*$"#,
+            #"\s*\[[^\[\]]*\]\s*$"#,
+            #"\s*\{[^{}]*\}\s*$"#,
+            #"\s+\+\s+.*$"#
+        ]
+        var result = title.trimmingCharacters(in: .whitespaces)
+        var keepGoing = true
+        while keepGoing {
+            keepGoing = false
+            for pattern in patterns {
+                guard let range = result.range(of: pattern, options: .regularExpression) else { continue }
+                result.removeSubrange(range)
+                result = result.trimmingCharacters(in: .whitespaces)
+                keepGoing = true
+            }
+        }
+        return result
     }
 }
