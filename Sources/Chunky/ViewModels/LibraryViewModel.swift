@@ -4,30 +4,30 @@ import Combine
 
 final class LibraryViewModel: ObservableObject {
     @Published var isImporting = false
-    /// Cosa sta facendo la libreria in questo momento, mostrato nell'overlay di caricamento.
-    /// `nil` quando non c'è lavoro in corso: le scansioni automatiche che non trovano niente da
-    /// registrare non devono far comparire nessun indicatore.
+    /// What the library is doing right now, shown in the loading overlay.
+    /// `nil` when there's no work in progress: automatic scans that don't find anything to
+    /// register must not make any indicator appear.
     @Published var importStatus: String?
     @Published var importError: String?
 
-    /// Tutte le scritture in libreria passano da qui, una alla volta. Prima ogni funzione si
-    /// dispatchava per conto proprio su `DispatchQueue.global`, e con quattro trigger di scansione
-    /// (vedi `ContentView`) due passate potevano sovrapporsi: entrambe leggevano i path già noti
-    /// prima che l'altra salvasse, e registravano gli stessi file due volte.
+    /// All writes to the library go through here, one at a time. Previously each function
+    /// dispatched on its own onto `DispatchQueue.global`, and with four scan triggers
+    /// (see `ContentView`) two passes could overlap: both would read the already-known paths
+    /// before the other saved, and would register the same files twice.
     private let workQueue = DispatchQueue(label: "com.scunio.Chunky.library-scan", qos: .userInitiated)
 
-    /// Contesto di background unico e di lunga vita, non uno nuovo per chiamata: due passate
-    /// consecutive devono vedere ciascuna quello che l'altra ha appena salvato.
+    /// A single, long-lived background context, not a new one per call: two consecutive
+    /// passes each need to see what the other has just saved.
     private var scanContext: NSManagedObjectContext?
 
-    /// Scansioni già in coda ma non ancora partite: un secondo trigger dello stesso tipo non
-    /// aggiunge una passata identica, aspetta quella che sta per girare. La chiave viene tolta
-    /// all'inizio dell'esecuzione, così un trigger arrivato *durante* la passata ne accoda
-    /// comunque un'altra alla fine (ed è proprio quello che serve: lo stato su disco è cambiato).
+    /// Scans already queued but not yet started: a second trigger of the same kind doesn't
+    /// add an identical pass, it waits for the one that's about to run. The key is removed
+    /// at the start of execution, so a trigger arriving *during* the pass still queues
+    /// another one at the end (and that's exactly what's needed: the on-disk state has changed).
     private let pendingLock = NSLock()
     private var pendingScans: Set<ScanKind> = []
-    /// Operazioni che stanno mostrando l'indicatore di caricamento, dalla più vecchia alla più
-    /// recente, ciascuna col proprio testo corrente (vedi `beginStatus`).
+    /// Operations currently showing the loading indicator, from oldest to most recent,
+    /// each with its own current text (see `beginStatus`).
     private var statusStack: [(token: Int, text: String)] = []
     private var nextStatusToken = 0
 
@@ -38,14 +38,14 @@ final class LibraryViewModel: ObservableObject {
         case placeholderMetadata
     }
 
-    /// Percorsi il cui archivio si è rifiutato di aprirsi durante il completamento dei
-    /// segnaposto. Un file corrotto resta indistinguibile da uno appena scaricato (zero pagine,
-    /// nessuna copertina) e verrebbe riaperto a ogni passata: qui li ricordiamo per la durata
-    /// della sessione. Non è persistito apposta — un riavvio dell'app è l'occasione giusta per
-    /// riprovare, il file nel frattempo può essere stato risincronizzato.
+    /// Paths whose archive refused to open while completing placeholders. A corrupted file
+    /// stays indistinguishable from one that just finished downloading (zero pages,
+    /// no cover) and would get reopened on every pass: here we remember them for the
+    /// duration of the session. Deliberately not persisted — an app restart is the right
+    /// occasion to retry, and the file may have been re-synced in the meantime.
     private var pathsWithUnreadableArchive: Set<String> = []
 
-    // MARK: - Import esplicito
+    // MARK: - Explicit import
 
     func importFiles(_ urls: [URL], into context: NSManagedObjectContext) {
         let backgroundContext = sharedScanContext(for: context)
@@ -65,9 +65,9 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    /// Il contesto va creato sul thread del chiamante (sempre il main: le entry point pubbliche
-    /// sono invocate da SwiftUI), non dentro `workQueue`, così l'accesso a `scanContext` resta
-    /// confinato a un solo thread.
+    /// The context must be created on the caller's thread (always the main one: the public
+    /// entry points are invoked by SwiftUI), not inside `workQueue`, so that access to
+    /// `scanContext` stays confined to a single thread.
     private func sharedScanContext(for context: NSManagedObjectContext) -> NSManagedObjectContext {
         if let existing = scanContext, existing.persistentStoreCoordinator === context.persistentStoreCoordinator {
             return existing
@@ -77,17 +77,17 @@ final class LibraryViewModel: ObservableObject {
         let bg = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
         bg.persistentStoreCoordinator = coordinator
         bg.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
-        // Vive quanto l'app: senza queste due, continuerebbe a servire i valori con cui ha
-        // caricato gli oggetti la prima volta, ignorando sia le modifiche fatte dall'interfaccia
-        // sia i record arrivati da CloudKit.
+        // Lives as long as the app: without these two, it would keep serving the values it
+        // loaded the objects with the first time, ignoring both changes made from the UI
+        // and records that arrived from CloudKit.
         bg.automaticallyMergesChangesFromParent = true
         bg.stalenessInterval = 0
         scanContext = bg
         return bg
     }
 
-    /// Copia `url` nella cartella della libreria, poi la registra. Usato per file esterni
-    /// (picker di sistema, download da account remoto, "apri con").
+    /// Copies `url` into the library folder, then registers it. Used for external files
+    /// (system picker, download from a remote account, "open with").
     private func importSingleFile(_ url: URL, into context: NSManagedObjectContext) {
         let ext = url.pathExtension
         guard let format = ComicFormat(fileExtension: ext) else {
@@ -103,19 +103,20 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    /// Quanto si ricava aprendo l'archivio di un fumetto. Nessun oggetto Core Data dentro:
-    /// l'analisi è la parte lenta e vive fuori dal contesto, l'inserimento è a parte.
+    /// What can be extracted by opening a comic's archive. No Core Data object inside:
+    /// the analysis is the slow part and lives outside the context, insertion is separate.
     struct ComicAnalysis {
         let pageCount: Int
         let coverData: Data?
         let metadata: ComicInfoMetadata?
     }
 
-    /// Apre l'archivio e ne ricava pagine, copertina e metadati ComicInfo. `nil` se il file non
-    /// è apribile (archivio corrotto o protetto): il chiamante decide se registrarlo comunque.
+    /// Opens the archive and extracts its pages, cover and ComicInfo metadata. `nil` if the
+    /// file can't be opened (corrupted or protected archive): the caller decides whether to
+    /// register it anyway.
     ///
-    /// Costosa: decomprime la pagina 0 per intero. Non va mai chiamata su un file che è ancora
-    /// un segnaposto iCloud — vedi `registerComic`.
+    /// Expensive: fully decompresses page 0. Must never be called on a file that's still
+    /// an iCloud placeholder — see `registerComic`.
     static func analyzeComic(at url: URL, format: ComicFormat) -> ComicAnalysis? {
         guard let provider = try? ComicPageProviderFactory.makeProvider(for: url, format: format) else {
             return nil
@@ -135,9 +136,9 @@ final class LibraryViewModel: ObservableObject {
         return ComicAnalysis(pageCount: provider.pageCount, coverData: coverData, metadata: metadata)
     }
 
-    /// Titolo da mostrare: quello del ComicInfo se c'è, altrimenti serie + numero, altrimenti
-    /// il nome del file. Condiviso fra la registrazione e il completamento posticipato dei
-    /// segnaposto iCloud, così un fumetto non cambia titolo a seconda di quando è stato letto.
+    /// Title to display: the one from ComicInfo if present, otherwise series + number,
+    /// otherwise the file name. Shared between registration and the deferred completion of
+    /// iCloud placeholders, so a comic's title doesn't change depending on when it was read.
     static func displayTitle(from metadata: ComicInfoMetadata?, fallbackTitle: String) -> String {
         if let title = metadata?.title { return title }
         if let series = metadata?.series {
@@ -146,12 +147,12 @@ final class LibraryViewModel: ObservableObject {
         return fallbackTitle
     }
 
-    /// Analizza ed inserisce in Core Data un file GIÀ presente nella cartella della libreria
-    /// (nessuna copia). Usato da `rebuildLibrary`, dove il file esiste ma manca il record.
+    /// Analyzes and inserts into Core Data a file that's ALREADY present in the library folder
+    /// (no copy). Used by `rebuildLibrary`, where the file exists but the record is missing.
     ///
-    /// Non fa nulla se quel `relativePath` è già in libreria: un file è un fumetto solo, e il
-    /// controllo sta prima di aprire l'archivio perché è anche quello che evita di rigenerare
-    /// le miniature di mezza libreria a ogni passata.
+    /// Does nothing if that `relativePath` is already in the library: a file is a single comic,
+    /// and the check comes before opening the archive because that's also what prevents
+    /// regenerating the thumbnails of half the library on every pass.
     func registerComic(relativePath: String, format: ComicFormat, into context: NSManagedObjectContext) {
         guard !isRegistered(relativePath: relativePath, in: context) else { return }
 
@@ -159,11 +160,11 @@ final class LibraryViewModel: ObservableObject {
         let defaultDirectionRawValue = UserDefaults.standard.string(forKey: "defaultReadingDirection")
         let defaultDirection = ReadingDirection(rawValue: defaultDirectionRawValue ?? "") ?? .leftToRight
 
-        // Un fumetto iCloud non ancora scaricato si registra "vuoto", senza aprire l'archivio:
-        // leggerlo ne forzerebbe la materializzazione, cioè il download completo del file — e
-        // con una libreria appena sincronizzata significa scaricare decine di fumetti in serie,
-        // senza che l'utente l'abbia chiesto e senza che i download compaiano da nessuna parte.
-        // Copertina e numero pagine li mette `backfillPlaceholderMetadata` quando il file arriva.
+        // An iCloud comic not yet downloaded is registered "empty", without opening the archive:
+        // reading it would force its materialization, i.e. the full download of the file — and
+        // with a freshly synced library that means downloading dozens of comics in a row,
+        // without the user asking for it and without the downloads showing up anywhere.
+        // The cover and page count are filled in by `backfillPlaceholderMetadata` once the file arrives.
         let isPlaceholder = LibraryStorage.isPendingDownload(destinationURL)
         let analysis = isPlaceholder ? nil : Self.analyzeComic(at: destinationURL, format: format)
 
@@ -176,9 +177,9 @@ final class LibraryViewModel: ObservableObject {
         let seriesName = metadata?.series ?? Self.deriveSeriesName(fromFallbackTitle: fallbackTitle)
 
         context.performAndWait {
-            // Ricontrollo dopo la lettura dell'archivio: aprirlo e generare la miniatura può
-            // durare secondi, abbastanza perché nel frattempo lo stesso path sia arrivato da
-            // CloudKit e sia stato unito in questo contesto.
+            // Re-check after reading the archive: opening it and generating the thumbnail can
+            // take seconds, long enough that in the meantime the same path may have arrived
+            // from CloudKit and been merged into this context.
             guard !isRegisteredWithinContext(relativePath: relativePath, in: context) else { return }
             let comic = ComicEntity.create(
                 title: title,
@@ -207,7 +208,7 @@ final class LibraryViewModel: ObservableObject {
         return found
     }
 
-    /// Da chiamare già dentro un `perform` del contesto.
+    /// To be called from inside a context `perform` block already.
     private func isRegisteredWithinContext(relativePath: String, in context: NSManagedObjectContext) -> Bool {
         let request = ComicEntity.fetchRequest()
         request.predicate = NSPredicate(format: "relativePath == %@", relativePath)
@@ -215,13 +216,13 @@ final class LibraryViewModel: ObservableObject {
         return ((try? context.count(for: request)) ?? 0) > 0
     }
 
-    /// Molti CBZ/CBR scansionati non hanno un ComicInfo.xml con la serie: senza un fallback,
-    /// finirebbero tutti ammassati in "Altri fumetti" invece che raggruppati per testata. Se il
-    /// titolo finisce con un numero (es. "Topolino 3595"), lo togliamo e usiamo il resto come
-    /// nome serie ("Topolino"). Prima però si tolgono le decorazioni di coda dei rilasci
-    /// scansionati (vedi `LibraryGrouping.titleWithoutTrailingDecorations`), altrimenti un
-    /// "Topolino 3652 (Panini 2025-11-19) [c2c CPPD]" non finirebbe con un numero e resterebbe
-    /// senza serie.
+    /// Many scanned CBZ/CBR files don't have a ComicInfo.xml with a series: without a fallback,
+    /// they'd all end up dumped into "Other comics" instead of being grouped by title. If the
+    /// title ends with a number (e.g. "Topolino 3595"), we strip it and use the rest as the
+    /// series name ("Topolino"). First, though, the trailing decorations of scanned releases
+    /// are removed (see `LibraryGrouping.titleWithoutTrailingDecorations`), otherwise a
+    /// "Topolino 3652 (Panini 2025-11-19) [c2c CPPD]" wouldn't end with a number and would be
+    /// left without a series.
     static func deriveSeriesName(fromFallbackTitle title: String) -> String? {
         let title = LibraryGrouping.titleWithoutTrailingDecorations(title)
         guard let range = title.range(of: #"\s+#?\d+\s*$"#, options: .regularExpression) else { return nil }
@@ -236,13 +237,13 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    /// Una pila, non un contatore: un import esplicito può partire mentre una scansione
-    /// automatica è ancora in corso sulla stessa `workQueue`, e la prima che finisce non deve
-    /// spegnere l'indicatore mentre l'altra sta ancora lavorando. Tenere anche il testo di
-    /// ciascuna operazione (e non solo quante sono) serve alle passate lunghe: possono
-    /// aggiornare il proprio conteggio anche mentre un'altra ha temporaneamente l'etichetta, e
-    /// quando questa finisce l'indicatore torna alla frase giusta invece di restare congelato
-    /// su quella di un'operazione ormai conclusa.
+    /// A stack, not a counter: an explicit import can start while an automatic scan is still
+    /// running on the same `workQueue`, and whichever finishes first must not turn off the
+    /// indicator while the other is still working. Keeping each operation's text too (not just
+    /// how many there are) serves long passes: they can update their own count even while
+    /// another one is temporarily holding the label, and when that one finishes the indicator
+    /// goes back to the right phrase instead of staying frozen on one from an operation that's
+    /// already done.
     @discardableResult
     private func beginStatus(_ text: String) -> Int {
         pendingLock.lock()
@@ -254,8 +255,8 @@ final class LibraryViewModel: ObservableObject {
         return token
     }
 
-    /// Cambia il testo dell'operazione `token` senza toccare la pila. Pubblica solo se quella
-    /// operazione è in cima, cioè se è la sua etichetta a essere visibile in questo momento.
+    /// Changes operation `token`'s text without touching the stack. Publishes only if that
+    /// operation is at the top, i.e. if its label is the one currently visible.
     private func updateStatus(_ text: String, token: Int) {
         pendingLock.lock()
         guard let index = statusStack.firstIndex(where: { $0.token == token }) else {
@@ -289,28 +290,30 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    /// Il file viene rimosso solo se nessun altro record punta allo stesso `relativePath`:
-    /// finché esistono record duplicati (vedi `deduplicateComics`), cancellarne uno cancellerebbe
-    /// il file condiviso e lascerebbe il gemello a puntare nel vuoto — fumetto sparito.
+    /// The file is only removed if no other record points to the same `relativePath`:
+    /// as long as duplicate records exist (see `deduplicateComics`), deleting one would delete
+    /// the shared file and leave its twin pointing at nothing — the comic would disappear.
     func delete(_ comic: ComicEntity, from context: NSManagedObjectContext) {
         let relativePath = comic.relativePath ?? ""
+        let identifier = comic.objectID.uriRepresentation().absoluteString
         context.delete(comic)
         try? context.save()
+        ComicTextIndex.deleteIndex(forComicIdentifier: identifier)
 
         guard shouldRemoveFile(forRelativePath: relativePath, in: context) else { return }
         LibraryStorage.removeFile(relativePath: relativePath)
     }
 
-    /// Il file su disco è uno solo e i record duplicati se lo dividono: si può cancellare
-    /// soltanto quando in libreria non ne resta più nessuno che lo referenzia.
+    /// There's only one file on disk and duplicate records share it: it can only be deleted
+    /// once no record in the library references it anymore.
     func shouldRemoveFile(forRelativePath relativePath: String, in context: NSManagedObjectContext) -> Bool {
         guard !relativePath.isEmpty else { return false }
         return !isRegistered(relativePath: relativePath, in: context)
     }
 
-    /// Passata di sola deduplica, senza scansione del disco: serve perché i duplicati possono
-    /// arrivare da CloudKit anche quando la cartella di sincronizzazione è disattivata e quindi
-    /// `rebuildLibrary` non gira mai.
+    /// Deduplication-only pass, without scanning the disk: needed because duplicates can
+    /// arrive from CloudKit even when the sync folder is disabled and so `rebuildLibrary`
+    /// never runs.
     func deduplicateLibrary(context: NSManagedObjectContext) {
         let backgroundContext = sharedScanContext(for: context)
         enqueue(.deduplicate) { [weak self] in
@@ -319,9 +322,9 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Scansioni automatiche
+    // MARK: - Automatic scans
 
-    /// Accoda `work` sulla coda seriale saltando le richieste già in attesa dello stesso tipo.
+    /// Queues `work` on the serial queue, skipping requests already waiting of the same kind.
     private func enqueue(_ kind: ScanKind, _ work: @escaping () -> Void) {
         pendingLock.lock()
         let alreadyQueued = pendingScans.contains(kind)
@@ -337,13 +340,14 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    /// Registra in libreria i fumetti trascinati nella cartella Documents dell'app dal Finder
-    /// (`UIFileSharingEnabled`, device collegato via USB → tab "File") o da Files.
+    /// Registers in the library the comics dropped into the app's Documents folder from the
+    /// Finder (`UIFileSharingEnabled`, device connected via USB → "Files" tab) or from Files.
     ///
-    /// È volutamente separata da `rebuildLibrary`, non un suo caso particolare: quella cancella i
-    /// record il cui file non esiste più, e su una libreria iCloud i file non ancora scaricati
-    /// possono benissimo non esistere su disco. Questo passaggio invece è solo additivo, quindi
-    /// può girare a ogni foreground senza gate su iCloud e senza rischiare di svuotare la libreria.
+    /// Deliberately kept separate from `rebuildLibrary`, not a special case of it: that one
+    /// deletes records whose file no longer exists, and on an iCloud library files not yet
+    /// downloaded may very well not exist on disk. This pass, instead, is purely additive, so
+    /// it can run on every foreground event without gating on iCloud and without risking
+    /// emptying the library.
     func adoptFilesDroppedInDocuments(context: NSManagedObjectContext) {
         let backgroundContext = sharedScanContext(for: context)
         enqueue(.adopt) { [weak self] in
@@ -380,10 +384,9 @@ final class LibraryViewModel: ObservableObject {
         backfillSeriesNames(in: context)
     }
 
-    /// Strumento di recupero: rimuove dalla libreria i fumetti il cui file non esiste più
-    /// (es. cancellato manualmente dal Finder/Files), e registra i file trovati nella cartella
-    /// della libreria ma non ancora presenti — utile dopo un ripristino da backup o un problema
-    /// di sincronizzazione.
+    /// Recovery tool: removes from the library comics whose file no longer exists
+    /// (e.g. deleted manually from Finder/Files), and registers files found in the library
+    /// folder that aren't present yet — useful after restoring from a backup or a sync issue.
     func rebuildLibrary(context: NSManagedObjectContext) {
         let backgroundContext = sharedScanContext(for: context)
         enqueue(.rebuild) { [weak self] in
@@ -401,8 +404,10 @@ final class LibraryViewModel: ObservableObject {
                 let path = comic.relativePath ?? ""
                 let url = LibraryStorage.fileURL(forRelativePath: path)
                 if path.isEmpty || !FileManager.default.fileExists(atPath: url.path) {
+                    let identifier = comic.objectID.uriRepresentation().absoluteString
                     context.delete(comic)
                     removedCount += 1
+                    ComicTextIndex.deleteIndex(forComicIdentifier: identifier)
                 } else {
                     knownPaths.insert(path)
                 }
@@ -416,9 +421,9 @@ final class LibraryViewModel: ObservableObject {
             ComicFormat(fileExtension: url.pathExtension) != nil && !knownPaths.contains(url.lastPathComponent)
         }
 
-        // L'indicatore si accende solo ora, non all'inizio della passata: la scansione gira a ogni
-        // foreground e ogni 3 minuti, e quasi sempre non trova niente da fare — mostrare
-        // "Importazione…" in quei casi lasciava l'utente davanti a un banner senza spiegazione.
+        // The indicator only lights up now, not at the start of the pass: the scan runs on
+        // every foreground event and every 3 minutes, and almost always finds nothing to do —
+        // showing "Importing…" in those cases left the user staring at an unexplained banner.
         let statusToken = unknownComicFiles.isEmpty
             ? nil
             : beginStatus(unknownComicFiles.count == 1 ? "Aggiungo 1 fumetto…" : "Aggiungo \(unknownComicFiles.count) fumetti…")
@@ -442,10 +447,10 @@ final class LibraryViewModel: ObservableObject {
         backfillSeriesNames(in: context)
     }
 
-    // MARK: - Completamento dei segnaposto iCloud
+    // MARK: - Completing iCloud placeholders
 
-    /// Riempie copertina, numero pagine e metadati dei fumetti registrati come segnaposto
-    /// iCloud (vedi `registerComic`), ora che i loro byte sono arrivati in locale.
+    /// Fills in the cover, page count, and metadata of comics registered as iCloud placeholders
+    /// (see `registerComic`), now that their bytes have arrived locally.
     func backfillPlaceholderMetadata(context: NSManagedObjectContext) {
         let backgroundContext = sharedScanContext(for: context)
         enqueue(.placeholderMetadata) { [weak self] in
@@ -457,15 +462,15 @@ final class LibraryViewModel: ObservableObject {
         var candidates: [(objectID: NSManagedObjectID, relativePath: String, format: ComicFormat)] = []
         context.performAndWait {
             let request = ComicEntity.fetchRequest()
-            // Solo la copertina, non anche "pageCount == 0": aprendo il fumetto appena scaricato
-            // il lettore scrive già il numero di pagine (vedi `ReaderView.openProvider`), e con
-            // quella seconda condizione il record smetteva di essere un candidato restando senza
-            // copertina fino a un reinstallo. Un fumetto in libreria senza copertina è per
-            // definizione uno da completare, qualunque strada l'abbia portato lì.
+            // Only the cover, not also "pageCount == 0": opening a just-downloaded comic
+            // already has the reader write the page count (see `ReaderView.openProvider`), and
+            // with that second condition the record would stop being a candidate while staying
+            // without a cover until a reinstall. A comic in the library with no cover is by
+            // definition one that needs completing, whatever path brought it there.
             //
-            // Non serve un attributo dedicato nel modello: sarebbe uno stato locale del
-            // dispositivo che CloudKit sincronizzerebbe sugli altri, dove il file magari è già
-            // scaricato.
+            // No need for a dedicated attribute in the model: that would be local device state
+            // that CloudKit would sync to other devices, where the file might already be
+            // downloaded.
             request.predicate = NSPredicate(format: "coverImageData == nil")
             guard let comics = try? context.fetch(request) else { return }
             for comic in comics {
@@ -491,9 +496,9 @@ final class LibraryViewModel: ObservableObject {
                 updateStatus("Preparo \(index + 1) di \(candidates.count)…", token: statusToken)
             }
             let url = LibraryStorage.fileURL(forRelativePath: candidate.relativePath)
-            // Un archivio che si apre ma da cui non esce una copertina lascerebbe il record
-            // candidato anche alla prossima passata: per questa lista vale come illeggibile,
-            // altrimenti ogni scansione lo riaprirebbe per niente.
+            // An archive that opens but doesn't yield a cover would leave the record a
+            // candidate again on the next pass too: for this list it counts as unreadable,
+            // otherwise every scan would reopen it for nothing.
             let analysis = Self.analyzeComic(at: url, format: candidate.format)
             guard let analysis = analysis, analysis.coverData != nil else {
                 pathsWithUnreadableArchive.insert(candidate.relativePath)
@@ -510,8 +515,8 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    /// Il titolo viene riscritto solo se il ComicInfo ne propone uno diverso dal nome del file:
-    /// altrimenti un fumetto che l'utente ha già visto in griglia cambierebbe nome da solo.
+    /// The title is only rewritten if the ComicInfo proposes one different from the file name:
+    /// otherwise a comic the user has already seen in the grid would change its name on its own.
     private func apply(
         _ analysis: ComicAnalysis,
         toComicWith objectID: NSManagedObjectID,
@@ -535,8 +540,8 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
-    /// Durata leggibile per il log di Diagnostica: distinguere "12s" da "4m 30s" dice subito se
-    /// una passata lenta è analisi degli archivi o attesa della rete.
+    /// Human-readable duration for the Diagnostics log: distinguishing "12s" from "4m 30s"
+    /// immediately tells whether a slow pass is archive analysis or waiting on the network.
     static func formatted(duration: TimeInterval) -> String {
         let seconds = Int(duration.rounded())
         guard seconds >= 60 else { return "\(seconds)s" }

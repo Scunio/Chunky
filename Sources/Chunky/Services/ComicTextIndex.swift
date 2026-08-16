@@ -1,33 +1,33 @@
 import Foundation
 import CoreGraphics
 
-/// Una riga di testo che corrisponde alla ricerca, con la pagina in cui si trova.
+/// A line of text that matches the search, along with the page it's found on.
 struct ComicTextMatch: Identifiable, Equatable {
     let pageIndex: Int
     let line: RecognizedTextLine
 
-    /// L'indice di pagina non basta come identità: la stessa pagina può contenere più righe che
-    /// corrispondono, e in una List finirebbero collassate in una sola.
+    /// The page index alone isn't enough as identity: the same page can contain several matching
+    /// lines, and in a List they'd end up collapsed into one.
     var id: String { "\(pageIndex)-\(line.boundingBox.minY)-\(line.text)" }
     var text: String { line.text }
 }
 
-/// Testo di tutte le pagine di un fumetto, per la ricerca nel lettore.
+/// Text from every page of a comic, for search in the reader.
 ///
-/// Tre vincoli hanno deciso la forma di questa classe:
+/// Three constraints shaped this class:
 ///
-/// - **La scansione parte dalla pagina corrente e si allarga verso l'esterno.** Indicizzare
-///   dall'inizio significherebbe, su un volume da 200 pagine, minuti prima che la ricerca dia
-///   un risultato utile; quasi sempre l'utente cerca qualcosa che ha appena visto.
-/// - **I risultati compaiono man mano.** La stessa progressione già usata per il download da
-///   iCloud: si può cercare mentre la scansione continua.
-/// - **L'indice è persistito, e non nella cache.** L'OCR di un volume intero costa troppo per
-///   poter essere buttato via dal sistema quando serve spazio, quindi il file sta in Application
-///   Support (dov'è già lo store Core Data) ed è indicizzato sull'`objectID` del fumetto, che
-///   sopravvive alle rinomine del file — cosa che `relativePath` non fa (vedi
+/// - **The scan starts at the current page and expands outward.** Indexing from the
+///   beginning would mean, on a 200-page volume, minutes before search gives a useful
+///   result; the user is almost always searching for something they just saw.
+/// - **Results appear incrementally.** The same progressive pattern already used for
+///   downloading from iCloud: you can search while the scan is still running.
+/// - **The index is persisted, not cached.** OCR-ing an entire volume is too expensive to
+///   let the system discard it when it needs space, so the file lives in Application
+///   Support (where the Core Data store already is) and is indexed on the comic's
+///   `objectID`, which survives file renames — something `relativePath` doesn't (see
 ///   `LibraryStorage.availableDestination`).
 final class ComicTextIndex: ObservableObject {
-    /// Righe già note, per pagina. Aggiornata sul main thread man mano che la scansione procede.
+    /// Already-known lines, by page. Updated on the main thread as the scan progresses.
     @Published private(set) var lines: [Int: [RecognizedTextLine]] = [:]
     @Published private(set) var isScanning = false
 
@@ -35,9 +35,9 @@ final class ComicTextIndex: ObservableObject {
     var scannedPageCount: Int { lines.count }
     var isComplete: Bool { scannedPageCount >= pageCount }
 
-    /// Vero quando ogni pagina è stata letta e nessuna conteneva testo riconoscibile: senza
-    /// distinguerlo, una tavola muta e una parola davvero assente darebbero lo stesso
-    /// "Nessun riscontro", e l'utente continuerebbe a provare parole diverse a vuoto.
+    /// True when every page has been read and none contained recognizable text: without
+    /// distinguishing this case, a wordless page and a genuinely absent word would give the same
+    /// "No matches", and the user would keep trying different words for nothing.
     var hasNoRecognizableText: Bool {
         isComplete && lines.values.allSatisfy(\.isEmpty)
     }
@@ -47,10 +47,10 @@ final class ComicTextIndex: ObservableObject {
     private let queue = DispatchQueue(label: "com.scunio.Chunky.ComicTextIndex", qos: .utility)
     private let cancelLock = NSLock()
     private var cancelledFlag = false
-    /// Copia autorevole dell'indice, letta e scritta **solo** su `queue`. `lines` esiste per la
-    /// UI e viaggia sul main thread: prendere da lì lo snapshot da salvare significherebbe
-    /// fotografarlo mentre le ultime pagine sono ancora in coda verso il main, e scrivere su
-    /// disco meno di quello che era stato riconosciuto davvero.
+    /// The authoritative copy of the index, read and written **only** on `queue`. `lines` exists
+    /// for the UI and travels on the main thread: taking the snapshot to save from there would
+    /// mean capturing it while the latest pages are still queued toward the main thread, and
+    /// writing to disk less than what had actually been recognized.
     private var storedLines: [Int: [RecognizedTextLine]]
 
     private var isCancelled: Bool {
@@ -69,11 +69,11 @@ final class ComicTextIndex: ObservableObject {
 
     deinit { isCancelled = true }
 
-    // MARK: - Scansione
+    // MARK: - Scanning
 
-    /// Avvia (o riprende) la scansione delle pagine non ancora indicizzate, partendo da
-    /// `page` e allargandosi verso l'esterno. Chiamarla più volte è innocuo: se una scansione
-    /// è già in corso non ne parte una seconda.
+    /// Starts (or resumes) scanning the pages not yet indexed, starting from
+    /// `page` and expanding outward. Calling it more than once is harmless: if a scan
+    /// is already running, a second one doesn't start.
     func startScanning(from page: Int) {
         guard !isScanning, !isComplete else { return }
         isCancelled = false
@@ -88,9 +88,9 @@ final class ComicTextIndex: ObservableObject {
 
             for index in order {
                 if self.isCancelled { break }
-                // Un `autoreleasepool` per pagina: la pagina decodificata di un fumetto può
-                // pesare decine di MB, e senza il rilascio esplicito la scansione di un volume
-                // intero le accumulerebbe tutte fino alla fine del ciclo.
+                // An `autoreleasepool` per page: a comic's decoded page can weigh tens of
+                // MB, and without the explicit release, scanning an entire volume would
+                // accumulate all of them until the end of the loop.
                 autoreleasepool {
                     let pageLines = self.recognizeLines(atPage: index)
                     self.storedLines[index] = pageLines
@@ -99,8 +99,8 @@ final class ComicTextIndex: ObservableObject {
                     }
                 }
 
-                // Salvataggi intermedi: se l'app viene chiusa (o uccisa) a metà scansione di un
-                // volume lungo, salvare solo alla fine butterebbe via minuti di OCR già fatto.
+                // Intermediate saves: if the app is closed (or killed) halfway through scanning a
+                // long volume, saving only at the end would throw away minutes of OCR already done.
                 sincePersist += 1
                 if sincePersist >= Self.pagesPerPersist {
                     sincePersist = 0
@@ -120,7 +120,7 @@ final class ComicTextIndex: ObservableObject {
     }
 
     private func recognizeLines(atPage index: Int) -> [RecognizedTextLine] {
-        // Prima il testo già digitale (PDF nativi): è esatto e istantaneo, l'OCR è il ripiego.
+        // Already-digital text first (native PDFs): it's exact and instant, OCR is the fallback.
         if let embedded = try? provider.textLines(atPage: index) {
             return embedded
         }
@@ -129,8 +129,8 @@ final class ComicTextIndex: ObservableObject {
         return (try? PageTextRecognizer.recognizeLines(in: cgImage)) ?? []
     }
 
-    /// Pagine in ordine di utilità: prima quella che si sta guardando, poi via via quelle
-    /// attorno, alternando avanti e indietro.
+    /// Pages in order of usefulness: first the one being viewed, then progressively the ones
+    /// around it, alternating forward and backward.
     static func scanOrder(from page: Int, pageCount: Int) -> [Int] {
         guard pageCount > 0 else { return [] }
         let start = min(max(page, 0), pageCount - 1)
@@ -144,21 +144,21 @@ final class ComicTextIndex: ObservableObject {
         return order
     }
 
-    // MARK: - Ricerca
+    // MARK: - Search
 
-    /// Righe che contengono `query`, in ordine di pagina. Il confronto ignora maiuscole e
-    /// diacritici: l'OCR sbaglia spesso gli accenti, e cercare "perche" deve trovare "perché".
+    /// Lines that contain `query`, in page order. The comparison ignores case and
+    /// diacritics: OCR often gets accents wrong, and searching "perche" should find "perché".
     func matches(for query: String) -> [ComicTextMatch] {
         Self.matches(for: query, in: lines)
     }
 
-    /// Rettangoli (normalizzati) da evidenziare su una singola pagina.
+    /// (Normalized) rectangles to highlight on a single page.
     func highlights(for query: String, onPage pageIndex: Int) -> [CGRect] {
         Self.matches(for: query, in: [pageIndex: lines[pageIndex] ?? []]).map(\.line.boundingBox)
     }
 
-    /// Il confronto vero e proprio, separato dallo stato dell'oggetto perché è l'unica parte
-    /// verificabile senza far girare davvero l'OCR.
+    /// The actual comparison, kept separate from the object's state because it's the only part
+    /// that can be tested without actually running OCR.
     static func matches(for query: String, in lines: [Int: [RecognizedTextLine]]) -> [ComicTextMatch] {
         let needle = normalized(query)
         guard needle.count >= 2 else { return [] }
@@ -175,17 +175,25 @@ final class ComicTextIndex: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    // MARK: - Persistenza
+    // MARK: - Persistence
 
     private struct IndexFile: Codable {
-        /// Cambiarla invalida gli indici vecchi: serve se un domani cambiano il formato delle
-        /// righe o i parametri dell'OCR, altrimenti si continuerebbe a leggere risultati
-        /// prodotti da regole diverse da quelle correnti.
+        /// Changing this invalidates old indexes: needed if the line format or OCR parameters
+        /// change someday, otherwise the app would keep reading results produced by rules
+        /// different from the current ones.
         let version: Int
         let lines: [Int: [RecognizedTextLine]]
     }
 
     private static let currentVersion = 1
+
+    /// Deletes the persisted index of a comic removed from the library: without this call
+    /// the file in `TextIndex/` would remain orphaned forever, since it isn't in the system
+    /// cache and no other code cleans it up.
+    static func deleteIndex(forComicIdentifier identifier: String) {
+        guard let url = storageURL(forComicIdentifier: identifier) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
 
     private static func storageURL(forComicIdentifier identifier: String) -> URL? {
         guard let support = try? FileManager.default.url(
@@ -196,12 +204,12 @@ final class ComicTextIndex: ObservableObject {
         return folder.appendingPathComponent("\(sanitized(identifier)).json")
     }
 
-    /// L'URI di un objectID contiene "/" e ":", che in un nome di file non possono starci.
+    /// An objectID's URI contains "/" and ":", which can't appear in a file name.
     static func sanitized(_ identifier: String) -> String {
         let allowed = CharacterSet.alphanumerics
         let name = String(identifier.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" })
-        // Un identificatore lungo produrrebbe un nome oltre il limite del filesystem: teniamo
-        // la coda, che è la parte che distingue un fumetto dall'altro (il prefisso è comune).
+        // A long identifier would produce a name beyond the filesystem limit: keep
+        // the tail, which is the part that distinguishes one comic from another (the prefix is shared).
         return String(name.suffix(120))
     }
 
@@ -213,7 +221,7 @@ final class ComicTextIndex: ObservableObject {
         return file.lines
     }
 
-    /// Da chiamare solo su `queue`: legge `storedLines` senza attraversare il main thread.
+    /// Only to be called on `queue`: reads `storedLines` without crossing over to the main thread.
     private func persist() {
         guard let storageURL = storageURL, !storedLines.isEmpty,
               let data = try? JSONEncoder().encode(IndexFile(version: Self.currentVersion, lines: storedLines))
