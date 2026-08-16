@@ -96,7 +96,11 @@ struct ComicGridItemView: View {
 
     @ViewBuilder
     private var coverImage: some View {
-        if let data = comic.coverImageData, let platformImage = PlatformImage.from(data: data) {
+        // Decodificata una sola volta e riusata: senza `CoverThumbnailCache` questo veniva
+        // rieseguito a ogni valutazione di `body`, e con un gruppo intero che appare in una
+        // volta sola (es. espandendo una sezione) le decodifiche sincrone si accumulavano
+        // abbastanza da far scattare l'animazione.
+        if let platformImage = CoverThumbnailCache.image(for: comic) {
             platformImage.asSwiftUIImage
                 .resizable()
         } else {
