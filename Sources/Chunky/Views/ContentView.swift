@@ -26,6 +26,9 @@ struct ContentView: View {
     /// Le modifiche remote di CloudKit arrivano in raffiche di notifiche: come per il tracker,
     /// una sola passata di deduplica dopo che si sono calmate.
     @State private var deduplicationTask: Task<Void, Never>?
+    /// Stessa logica per i fumetti che finiscono di scaricarsi da iCloud: vedi
+    /// `scheduleDebouncedPlaceholderBackfill`.
+    @State private var placeholderBackfillTask: Task<Void, Never>?
 
     var body: some View {
         rootNavigation
@@ -37,12 +40,18 @@ struct ContentView: View {
                 syncSyncFolderIfNeeded()
                 adoptFilesDroppedInDocuments()
                 viewModel.deduplicateLibrary(context: context)
+                // All'avvio la query dei metadati parte da zero, quindi il suo primo
+                // aggiornamento è sempre una crescita e non innesca nulla: un fumetto scaricato
+                // dall'app File mentre Chunky era chiuso resterebbe senza copertina fino al
+                // download successivo. La passata è un no-op quando non ci sono segnaposto.
+                viewModel.backfillPlaceholderMetadata(context: context)
                 startPeriodicRescan()
             }
             .onDisappear {
                 debounceTask?.cancel()
                 periodicRescanTask?.cancel()
                 deduplicationTask?.cancel()
+                placeholderBackfillTask?.cancel()
             }
             // I duplicati non nascono solo qui: l'altro dispositivo con lo stesso account crea il
             // proprio record per lo stesso file, e arriva da CloudKit. Questa è la notifica che
@@ -55,6 +64,15 @@ struct ContentView: View {
             // `allRelativePaths` innesca qui il rescan indipendentemente da cosa sta guardando
             // l'utente, invece di dipendere dall'apertura di una schermata specifica.
             .onChange(of: tracker.allRelativePaths) { _, _ in scheduleDebouncedSync() }
+            // Un fumetto che smette di essere "da scaricare" è un file appena arrivato in
+            // locale: è il momento di aprirlo e ricavarne copertina e numero di pagine, che al
+            // momento della registrazione non c'erano (vedi `registerComic`). Si guarda solo il
+            // restringersi dell'insieme: quando cresce sono comparsi nuovi segnaposto, e lì non
+            // c'è niente da leggere.
+            .onChange(of: tracker.pendingRelativePaths) { previous, current in
+                guard !previous.subtracting(current).isEmpty else { return }
+                scheduleDebouncedPlaceholderBackfill()
+            }
             .onChange(of: isSyncFolderEnabled) { _, newValue in if newValue { syncSyncFolderIfNeeded() } }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
@@ -63,6 +81,7 @@ struct ContentView: View {
                 // esattamente questo: l'utente li copia con l'app in background e poi la riapre.
                 adoptFilesDroppedInDocuments()
                 viewModel.deduplicateLibrary(context: context)
+                viewModel.backfillPlaceholderMetadata(context: context)
             }
     }
 
@@ -72,6 +91,18 @@ struct ContentView: View {
             try? await Task.sleep(nanoseconds: 800_000_000)
             guard !Task.isCancelled else { return }
             syncSyncFolderIfNeeded()
+        }
+    }
+
+    /// Come per gli altri innesti su `NSMetadataQuery`: scaricando più fumetti insieme i file
+    /// diventano locali uno dopo l'altro, e senza attendere che la raffica si calmi ogni singolo
+    /// arrivo rilancerebbe una passata sull'intera libreria.
+    private func scheduleDebouncedPlaceholderBackfill() {
+        placeholderBackfillTask?.cancel()
+        placeholderBackfillTask = Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            viewModel.backfillPlaceholderMetadata(context: context)
         }
     }
 

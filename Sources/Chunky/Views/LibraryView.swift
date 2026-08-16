@@ -660,6 +660,14 @@ private struct ComicCell: View {
     let allowsDeletion: Bool
     let onSelect: () -> Void
     let onDelete: () -> Void
+    /// Stessa fonte del badge sulla copertina: il comando di download deve comparire e sparire
+    /// insieme al badge, non a seconda di quando la cella è stata ridisegnata.
+    @ObservedObject private var downloadTracker = ICloudDownloadTracker.shared
+
+    private var isPendingDownload: Bool {
+        guard let relativePath = comic.relativePath else { return false }
+        return downloadTracker.pendingRelativePaths.contains(relativePath)
+    }
 
     var body: some View {
         Button(action: onSelect) {
@@ -677,6 +685,11 @@ private struct ComicCell: View {
                 Button(action: toggleFavorite) {
                     Label(comic.isFavorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti",
                           systemImage: comic.isFavorite ? "star.slash" : "star")
+                }
+                if isPendingDownload {
+                    Button(action: downloadFromICloud) {
+                        Label("Scarica da iCloud", systemImage: "icloud.and.arrow.down")
+                    }
                 }
                 #if os(macOS)
                 Button(action: revealInFinder) {
@@ -698,6 +711,13 @@ private struct ComicCell: View {
     private func toggleFavorite() {
         comic.isFavorite.toggle()
         try? comic.managedObjectContext?.save()
+    }
+
+    /// Scarica senza aprire il lettore: il progresso si segue dalla schermata Downloads. La
+    /// copertina e il numero di pagine arrivano subito dopo, quando `ICloudDownloadTracker` si
+    /// accorge che il file è locale e fa partire il completamento dei segnaposto.
+    private func downloadFromICloud() {
+        ComicDownloadService.downloadIfNeeded(comic: comic)
     }
 
     #if os(macOS)

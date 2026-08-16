@@ -94,6 +94,9 @@ private struct ReaderContentView: View {
     @State private var downloadProgress: Double?
     /// Il download in corso, per poterlo annullare direttamente dal lettore.
     @State private var downloadItem: DownloadItem?
+    /// Un caricamento è in corso (download da iCloud e/o apertura dell'archivio): vedi
+    /// `loadComic`.
+    @State private var isLoadingComic = false
     @State private var isControlsVisible = true
     @State private var isSharePresented = false
     @State private var shareImage: PlatformImage?
@@ -1272,7 +1275,12 @@ private struct ReaderContentView: View {
     }
 
     private func loadComic() {
-        guard provider == nil else { return }
+        // `onAppear` può scattare più di una volta sulla stessa vista, e per un segnaposto
+        // iCloud l'apertura ora arriva solo a download finito: senza questa guardia il secondo
+        // giro aggancerebbe una seconda callback allo stesso trasferimento e aprirebbe
+        // l'archivio due volte.
+        guard provider == nil, !isLoadingComic else { return }
+        isLoadingComic = true
         let url = LibraryStorage.fileURL(forRelativePath: comic.relativePath ?? "")
         let format = comic.format
         let startingPage = Int(comic.lastReadPage)
@@ -1287,50 +1295,30 @@ private struct ReaderContentView: View {
         currentPage = max(0, startingPage)
 
         // Il download da iCloud può richiedere più di qualche secondo (file grandi, connessione
-        // lenta): lo registriamo nella scheda Downloads con un progresso reale, invece di far
-        // fallire il lettore dopo un timeout fisso.
+        // lenta): passa da `ComicDownloadService`, che lo registra nella scheda Downloads con un
+        // progresso reale invece di far fallire il lettore dopo un timeout fisso.
+        downloadItem = ComicDownloadService.downloadIfNeeded(comic: comic) { progress in
+            downloadProgress = progress
+        } completion: { error in
+            downloadItem = nil
+            downloadProgress = nil
+            if let error = error {
+                isLoadingComic = false
+                loadError = error.localizedDescription
+                return
+            }
+            openProvider(at: url, format: format, startingPage: startingPage)
+        }
+    }
+
+    /// Apre l'archivio e costruisce il pager. Separata da `loadComic` perché quando il fumetto è
+    /// un segnaposto iCloud arriva solo dopo il download, non subito.
+    private func openProvider(at url: URL, format: ComicFormat, startingPage: Int) {
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                if LibraryStorage.isPendingDownload(url) {
-                    let title = comic.title ?? "Fumetto"
-                    // La chiave è il percorso del file: riaprire lo stesso fumetto mentre scarica
-                    // si aggancia al download già in corso invece di aprirne un secondo.
-                    let item = DispatchQueue.main.sync {
-                        DownloadManager.shared.register(title: title, key: url.path)
-                    }
-                    DispatchQueue.main.async {
-                        downloadItem = item
-                        downloadProgress = item.fractionCompleted
-                    }
-                    do {
-                        try LibraryStorage.downloadIfNeeded(
-                            url,
-                            isCancelled: { item.isCancelled }
-                        ) { progress in
-                            // `onProgress` arriva dalla coda principale durante il download, ma
-                            // dal thread di background nel caso "già scaricato": non si può
-                            // scrivere lo stato senza rimbalzare esplicitamente sul main.
-                            DispatchQueue.main.async {
-                                item.updateProgress(progress)
-                                downloadProgress = progress
-                            }
-                        }
-                    } catch {
-                        DispatchQueue.main.async {
-                            DownloadManager.shared.remove(item)
-                            downloadItem = nil
-                            downloadProgress = nil
-                        }
-                        throw error
-                    }
-                    DispatchQueue.main.async {
-                        DownloadManager.shared.remove(item)
-                        downloadItem = nil
-                        downloadProgress = nil
-                    }
-                }
                 let loaded = try ComicPageProviderFactory.makeProvider(for: url, format: format)
                 DispatchQueue.main.async {
+                    isLoadingComic = false
                     provider = loaded
                     pageCache = PageImageCache(provider: loaded)
                     let clampedStart = min(startingPage, max(0, loaded.pageCount - 1))
@@ -1347,6 +1335,7 @@ private struct ReaderContentView: View {
                 }
             } catch {
                 DispatchQueue.main.async {
+                    isLoadingComic = false
                     loadError = error.localizedDescription
                 }
             }
