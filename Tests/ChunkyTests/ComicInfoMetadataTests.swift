@@ -55,7 +55,8 @@ struct SeriesNameDerivationTests {
         ("Corto Maltese #7", "Corto Maltese"),
         // Decorazioni di coda dei rilasci scansionati: senza toglierle il titolo non finisce
         // con un numero e il fumetto resterebbe in "Altri fumetti".
-        ("Topolino 3652 (Panini 2025-11-19) [c2c CPPD]", "Topolino"),
+        ("Topolino 3652 (Panini 2025-11-19) [c2c CPPT Edition] 1.0", "Topolino"),
+        ("Topolino 3653 (Panini 2025-11-26) [c2c CPPT Edition] 1.1 (corrette pagine doppie)", "Topolino"),
         ("Topolino 3636 + Cover Abbonati", "Topolino"),
         ("Topolino 3654 (Panini) + Cover Abbonati", "Topolino"),
         ("Topolino 3655 {HD}", "Topolino")

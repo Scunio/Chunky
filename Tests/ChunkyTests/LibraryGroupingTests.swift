@@ -9,8 +9,8 @@ struct LibraryGroupingTests {
     private static let titles = [
         "Topolino 3651",
         "Topolino 3636 + Cover Abbonati",
-        "Topolino 3652 (Panini 2025-11-19) [c2c CPPD]",
-        "Topolino 3657 (Panini 2025-12-24) [c2c CPPD]"
+        "Topolino 3652 (Panini 2025-11-19) [c2c CPPT Edition] 1.0",
+        "Topolino 3657 (Panini 2025-12-24) [c2c CPPT Edition] 1.0"
     ]
 
     private func makeLibrary(in context: NSManagedObjectContext) {
@@ -41,7 +41,7 @@ struct LibraryGroupingTests {
     }
 
     @Test("Il numero dell'albo si legge anche sotto le decorazioni", arguments: [
-        ("Topolino 3652 (Panini 2025-11-19) [c2c CPPD]", 3652),
+        ("Topolino 3652 (Panini 2025-11-19) [c2c CPPT Edition] 1.0", 3652),
         ("Topolino 3636 + Cover Abbonati", 3636),
         ("Topolino 3651", 3651)
     ])
@@ -56,7 +56,7 @@ struct SeriesBackfillTests {
     func fillsMissingSeries() throws {
         let context = try TestStore.makeContext()
         ComicEntity.create(
-            title: "Topolino 3652 (Panini 2025-11-19) [c2c CPPD]",
+            title: "Topolino 3652 (Panini 2025-11-19) [c2c CPPT Edition] 1.0",
             relativePath: "topolino-3652.cbz",
             format: .cbz,
             in: context
@@ -73,7 +73,7 @@ struct SeriesBackfillTests {
     func keepsExistingSeries() throws {
         let context = try TestStore.makeContext()
         ComicEntity.create(
-            title: "Topolino 3652 (Panini 2025-11-19) [c2c CPPD]",
+            title: "Topolino 3652 (Panini 2025-11-19) [c2c CPPT Edition] 1.0",
             seriesName: "Le mie preferite",
             relativePath: "topolino-3652.cbz",
             format: .cbz,
