@@ -36,7 +36,7 @@ struct NowReadingView: View {
 
     @ViewBuilder
     private var coverImage: some View {
-        if let data = comic.coverImageData, let platformImage = PlatformImage.from(data: data) {
+        if let platformImage = CoverThumbnailCache.image(for: comic) {
             platformImage.asSwiftUIImage
                 .resizable()
         } else {
