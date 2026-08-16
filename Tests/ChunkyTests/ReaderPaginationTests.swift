@@ -97,13 +97,13 @@ struct ReaderPaginationStepLTRTests {
 
 @Suite("Passo di lettura: RTL (manga)")
 struct ReaderPaginationStepRTLTests {
-    /// La direzione dell'input è sempre "destra = avanti nella lettura": in RTL questo
-    /// significa muoversi verso indici PIÙ BASSI, non più alti — l'inversione è interamente
-    /// interna a `step`, il chiamante non deve saperlo.
+    /// The input direction is always "right = forward in reading order": in RTL this means
+    /// moving toward LOWER indices, not higher ones — the inversion is entirely internal to
+    /// `step`, the caller doesn't need to know about it.
     @Test("In RTL, avanti nella lettura corrisponde a un input positivo che diminuisce l'indice")
     func rtlForwardDecreasesIndex() {
         let sut = ReaderPagination(pageCount: 5, pageStep: 1, isRightToLeft: true)
-        // Si parte dall'ultima pagina (la "prima" in ordine di lettura RTL) e si va avanti.
+        // Start from the last page (the "first" one in RTL reading order) and go forward.
         #expect(sut.step(from: 4, direction: 1) == .page(3))
         #expect(sut.step(from: 3, direction: 1) == .page(2))
     }
@@ -114,24 +114,25 @@ struct ReaderPaginationStepRTLTests {
         #expect(sut.step(from: 2, direction: -1) == .page(3))
     }
 
-    /// Sorpresa verificata a mano sul codice originale, non un comportamento che ho scelto:
-    /// il controllo "fine fumetto" in `step()` guarda solo `next >= pageCount`, mai
-    /// `next < 0`. In RTL, avanzare (`direction: 1`) porta l'indice a DIMINUIRE, quindi
-    /// arrivare a fondo lettura in RTL cade nel ramo `next < 0` — che restituisce
-    /// `.beginningReached`, non `.endReached` — e **non propone mai il fumetto successivo**.
-    /// Questo test blinda il comportamento attuale così com'è, non lo dichiara corretto:
-    /// è un candidato per una correzione futura, ma cambiarlo ora sarebbe un cambio di
-    /// comportamento silenzioso dentro una fase che deve lasciare tutto identico.
+    /// A surprise verified by hand against the original code, not a behavior I chose: the
+    /// "end of comic" check in `step()` only looks at `next >= pageCount`, never
+    /// `next < 0`. In RTL, moving forward (`direction: 1`) makes the index DECREASE, so
+    /// reaching the end of the reading order in RTL falls into the `next < 0` branch — which
+    /// returns `.beginningReached`, not `.endReached` — and **never proposes the next comic**.
+    /// This test locks in the current behavior as it is, without declaring it correct: it's a
+    /// candidate for a future fix, but changing it now would be a silent behavior change
+    /// inside a phase that must leave everything identical.
     @Test("In RTL, avanti fino in fondo (indice 0) NON propone il fumetto successivo")
     func rtlForwardToEndDoesNotTriggerNext() {
         let sut = ReaderPagination(pageCount: 5, pageStep: 1, isRightToLeft: true)
         #expect(sut.step(from: 0, direction: 1) == .beginningReached)
     }
 
-    /// Speculare al caso sopra: "indietro" (`direction: -1`) dall'ultima pagina fa aumentare
-    /// l'indice oltre `pageCount`, cadendo nel ramo `next >= pageCount` — che restituisce
-    /// `.endReached`. Con `direction: -1`, `effectiveDirection` resta comunque positivo in
-    /// RTL, quindi `triggersNextComic` risulta `true` anche se l'utente ha premuto "indietro".
+    /// Mirror image of the case above: "backward" (`direction: -1`) from the last page makes
+    /// the index increase past `pageCount`, falling into the `next >= pageCount` branch —
+    /// which returns `.endReached`. With `direction: -1`, `effectiveDirection` still ends up
+    /// positive in RTL, so `triggersNextComic` comes out `true` even though the user pressed
+    /// "backward".
     @Test("In RTL, indietro dall'ultima pagina cade nel ramo 'fine fumetto'")
     func rtlBackwardFromLastPageHitsEndBranch() {
         let sut = ReaderPagination(pageCount: 5, pageStep: 1, isRightToLeft: true)
@@ -148,9 +149,9 @@ struct ReaderPaginationStepRTLTests {
 
 @Suite("Transizione tra passo singolo e doppio")
 struct ReaderPaginationStepTransitionTests {
-    /// È lo scenario che il commento originale in ReaderView descriveva: passare da singola a
-    /// doppia pagina mentre si è su una pagina dispari lascia un indice che non è più un
-    /// inizio-spread valido.
+    /// This is the scenario the original comment in ReaderView described: switching from
+    /// single to double page while on an odd page leaves an index that is no longer a valid
+    /// spread start.
     @Test("Passare da passo 1 a passo 2 su pagina dispari richiede un riallineamento")
     func oddPageNeedsRealignAfterStepChange() {
         let doubled = ReaderPagination(pageCount: 10, pageStep: 2, isRightToLeft: false)
@@ -167,6 +168,39 @@ struct ReaderPaginationStepTransitionTests {
     }
 }
 
+@Suite("Seconda pagina di uno spread")
+struct ReaderPaginationShowsSecondPageTests {
+    @Test("Con passo 1 non c'è mai una seconda pagina")
+    func stepOneNeverPairs() {
+        let sut = ReaderPagination(pageCount: 10, pageStep: 1, isRightToLeft: false)
+        #expect(!sut.showsSecondPage(from: 0))
+        #expect(!sut.showsSecondPage(from: 5))
+    }
+
+    @Test("Con passo 2 ogni inizio-spread mostra la seconda pagina, tranne l'ultimo se dispari")
+    func stepTwoPairsExceptOddTail() {
+        let sut = ReaderPagination(pageCount: 9, pageStep: 2, isRightToLeft: false)
+        #expect(sut.showsSecondPage(from: 0))
+        #expect(sut.showsSecondPage(from: 6))
+        #expect(!sut.showsSecondPage(from: 8))
+    }
+
+    @Test("Con la copertina da sola, il suo spread non ha una seconda pagina")
+    func coverAloneHasNoSecondPage() {
+        let sut = ReaderPagination(pageCount: 9, pageStep: 2, isRightToLeft: false, coverIsAlone: true)
+        #expect(!sut.showsSecondPage(from: 0))
+        #expect(sut.showsSecondPage(from: 1))
+    }
+
+    @Test("Un indice che non è inizio-spread non altera il conteggio")
+    func nonSpreadStartStillReports() {
+        let sut = ReaderPagination(pageCount: 10, pageStep: 2, isRightToLeft: false)
+        // 3 non è un inizio-spread valido, ma la funzione non deve andare in crash: risponde
+        // in base al passo, coerente col fallback già presente nell'implementazione originale.
+        #expect(sut.showsSecondPage(from: 3))
+    }
+}
+
 @Suite("Copertina da sola")
 struct ReaderPaginationCoverAloneTests {
     @Test("Con passo 1 non cambia nulla: ogni pagina è già a sé")
@@ -179,8 +213,8 @@ struct ReaderPaginationCoverAloneTests {
     @Test("La copertina è il suo spread, l'accoppiamento riprende dalla seconda pagina")
     func coverIsOwnSpread() {
         let sut = ReaderPagination(pageCount: 9, pageStep: 2, isRightToLeft: false, coverIsAlone: true)
-        // Senza copertina da sola sarebbe [0, 2, 4, 6, 8]: con la copertina da sola, l'accoppiamento
-        // si sposta di una posizione dopo il primo spread.
+        // Without a lone cover this would be [0, 2, 4, 6, 8]: with the lone cover, the pairing
+        // shifts by one position after the first spread.
         #expect(sut.spreadStarts == [0, 1, 3, 5, 7])
     }
 
@@ -220,9 +254,9 @@ struct ReaderPaginationCoverAloneTests {
 
     @Test("RTL con copertina da sola: la copertina resta l'ultimo indice, da sola")
     func rtlCoverAloneAtLastIndex() {
-        // In lettura RTL la "prima" pagina in ordine di lettura è comunque indice 0 (vedi gli
-        // altri test RTL): la copertina-da-sola riguarda sempre l'indice 0, indipendentemente
-        // dal verso di lettura — è la stessa pagina fisica del file, non una nozione derivata.
+        // In RTL reading the "first" page in reading order is still index 0 (see the other
+        // RTL tests): the lone-cover behavior always applies to index 0, regardless of
+        // reading direction — it's the same physical page of the file, not a derived notion.
         let sut = ReaderPagination(pageCount: 9, pageStep: 2, isRightToLeft: true, coverIsAlone: true)
         #expect(sut.spreadStarts == [0, 1, 3, 5, 7])
     }

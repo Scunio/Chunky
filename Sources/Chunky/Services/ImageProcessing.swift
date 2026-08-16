@@ -1,27 +1,48 @@
 import CoreImage
 import CoreImage.CIFilterBuiltins
 
-/// Filtri opzionali applicati alle pagine prima di mostrarle: ritaglio automatico dei bordi
-/// bianchi (comune negli scan) e upscaling di qualità per le pagine a bassa risoluzione.
+/// Optional filters applied to pages before showing them: automatic cropping of white
+/// borders (common in scans) and quality upscaling for low-resolution pages.
 enum ImageProcessing {
     private static let context = CIContext()
 
-    /// Rileva e rimuove bordi uniformemente chiari (bianco/quasi bianco) attorno alla pagina.
+    /// Detects and removes uniformly light (white/near-white) borders around the page.
     static func autoCropWhiteBorders(_ image: PlatformImage) -> PlatformImage {
-        guard let cgImage = image.cgImageRepresentation else { return image }
+        guard let cgImage = image.cgImageRepresentation, let cropRect = contentCropRect(image) else { return image }
         let ciImage = CIImage(cgImage: cgImage)
         let extent = ciImage.extent
-        guard extent.width > 4, extent.height > 4,
-              let cropRect = detectContentRect(in: ciImage, extent: extent),
-              cropRect != extent, cropRect.width > 4, cropRect.height > 4 else {
-            return image
-        }
-        guard let cropped = context.createCGImage(ciImage, from: cropRect) else { return image }
+        // `contentCropRect` returns top-left-origin coordinates (see below); CoreImage wants
+        // its own bottom-left-origin space back.
+        let ciCropRect = CGRect(
+            x: cropRect.minX, y: extent.height - cropRect.maxY,
+            width: cropRect.width, height: cropRect.height
+        )
+        guard let cropped = context.createCGImage(ciImage, from: ciCropRect) else { return image }
         return PlatformImage.from(cgImage: cropped)
     }
 
-    /// Applica un upscaling Lanczos (qualità migliore del semplice ridimensionamento a schermo)
-    /// quando la pagina è più piccola della dimensione target.
+    /// The content rectangle `autoCropWhiteBorders` would crop to, in pixel coordinates with
+    /// the origin at the top left (the same convention as `crop(_:to:)`) — `nil` when nothing
+    /// would be cropped. Exposed so callers whose own coordinates refer to the *original*,
+    /// uncropped page (e.g. OCR search highlights) can translate into the cropped page's space
+    /// without redoing the border detection themselves.
+    static func contentCropRect(_ image: PlatformImage) -> CGRect? {
+        guard let cgImage = image.cgImageRepresentation else { return nil }
+        let ciImage = CIImage(cgImage: cgImage)
+        let extent = ciImage.extent
+        guard extent.width > 4, extent.height > 4,
+              let ciCropRect = detectContentRect(in: ciImage, extent: extent),
+              ciCropRect != extent, ciCropRect.width > 4, ciCropRect.height > 4 else {
+            return nil
+        }
+        return CGRect(
+            x: ciCropRect.minX, y: extent.height - ciCropRect.maxY,
+            width: ciCropRect.width, height: ciCropRect.height
+        )
+    }
+
+    /// Applies a Lanczos upscale (better quality than plain on-screen resizing)
+    /// when the page is smaller than the target size.
     static func upscaleIfNeeded(_ image: PlatformImage, targetSize: CGSize) -> PlatformImage {
         guard let cgImage = image.cgImageRepresentation else { return image }
         let width = CGFloat(cgImage.width)
@@ -44,9 +65,9 @@ enum ImageProcessing {
         return PlatformImage.from(cgImage: result)
     }
 
-    /// Corregge automaticamente contrasto e saturazione di una pagina scansionata (spesso
-    /// piatta/sbiadita), senza richiedere una tinta manuale come il "tint pagina" impostabile
-    /// dall'utente.
+    /// Automatically corrects contrast and saturation of a scanned page (often
+    /// flat/faded), without requiring a manual tint like the user-configurable
+    /// "page tint".
     static func autoTintAndContrast(_ image: PlatformImage) -> PlatformImage {
         guard let cgImage = image.cgImageRepresentation else { return image }
         let filter = CIFilter.colorControls()
@@ -61,12 +82,12 @@ enum ImageProcessing {
         return PlatformImage.from(cgImage: result)
     }
 
-    /// Ritaglia l'immagine al rettangolo indicato, espresso in coordinate pixel (origine in alto
-    /// a sinistra, come nello spazio di visualizzazione). Usato per condividere solo una vignetta.
+    /// Crops the image to the given rectangle, expressed in pixel coordinates (origin at the
+    /// top left, as in display space). Used to share only a single panel.
     static func crop(_ image: PlatformImage, to rectTopLeftOrigin: CGRect) -> PlatformImage? {
         guard let cgImage = image.cgImageRepresentation else { return nil }
         let height = CGFloat(cgImage.height)
-        // CGImage.cropping usa coordinate con origine in basso a sinistra: convertiamo la Y.
+        // CGImage.cropping uses coordinates with origin at the bottom left: we convert the Y.
         let flippedRect = CGRect(
             x: rectTopLeftOrigin.minX,
             y: height - rectTopLeftOrigin.maxY,
@@ -79,8 +100,8 @@ enum ImageProcessing {
         return PlatformImage.from(cgImage: cropped)
     }
 
-    /// Individua il rettangolo di contenuto scandendo dai quattro bordi verso il centro,
-    /// fermandosi alla prima riga/colonna che non è quasi-bianca in modo uniforme.
+    /// Finds the content rectangle by scanning from the four edges toward the center,
+    /// stopping at the first row/column that isn't uniformly near-white.
     private static func detectContentRect(in image: CIImage, extent: CGRect) -> CGRect? {
         guard let cgImage = context.createCGImage(image, from: extent) else { return nil }
         let width = cgImage.width
@@ -137,7 +158,7 @@ enum ImageProcessing {
         guard top > 0 || bottom < height - 1 || left > 0 || right < width - 1 else { return nil }
         guard right > left, bottom > top else { return nil }
 
-        // Le coordinate CoreImage hanno l'origine in basso a sinistra: convertiamo la Y.
+        // CoreImage coordinates have their origin at the bottom left: we convert the Y.
         let ciTop = height - 1 - bottom
         let rect = CGRect(x: left, y: ciTop, width: right - left, height: bottom - top)
         return rect.intersection(extent)

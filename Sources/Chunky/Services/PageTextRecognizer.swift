@@ -2,32 +2,32 @@ import Foundation
 import CoreGraphics
 import Vision
 
-/// Una riga di testo trovata su una pagina, con il rettangolo che la racchiude.
+/// A line of text found on a page, with the rectangle that bounds it.
 ///
-/// `boundingBox` è **normalizzato (0...1) con origine in basso a sinistra**: è lo spazio di
-/// `VNRecognizedTextObservation.boundingBox`, ed è anche quello che si ottiene dividendo i
-/// bounds di una riga PDF per i bounds della sua pagina. Tenere un solo spazio per entrambe le
-/// sorgenti evita che, più a valle, il disegno delle evidenziazioni debba sapere se il testo
-/// arrivi dall'OCR o dal livello testo del PDF.
+/// `boundingBox` is **normalized (0...1) with the origin at the bottom left**: it's the space of
+/// `VNRecognizedTextObservation.boundingBox`, and it's also what you get by dividing a PDF
+/// line's bounds by its page's bounds. Keeping a single space for both sources means that,
+/// further downstream, the code that draws highlights doesn't need to know whether the text
+/// came from OCR or from the PDF's text layer.
 struct RecognizedTextLine: Codable, Equatable {
     let text: String
     let boundingBox: CGRect
 }
 
-/// OCR di una pagina con Vision. L'idea (e la soglia di confidenza) arrivano da Simple-Comic
-/// <https://github.com/MaddTheSane/Simple-Comic>, MIT, che ha la stessa funzione su macOS: qui
-/// il wrapper è riscritto in Swift e restituisce già le coordinate normalizzate che servono al
-/// lettore, invece del layer di selezione AppKit che su SwiftUI non avrebbe senso.
+/// OCR of a page using Vision. The idea (and the confidence threshold) come from Simple-Comic
+/// <https://github.com/MaddTheSane/Simple-Comic>, MIT, which has the same feature on macOS: here
+/// the wrapper is rewritten in Swift and already returns the normalized coordinates the reader
+/// needs, instead of the AppKit selection layer, which wouldn't make sense on SwiftUI.
 enum PageTextRecognizer {
-    /// Sotto questa confidenza l'osservazione viene scartata: sui fumetti i retini, i bordi
-    /// delle vignette e gli effetti sonori producono facilmente "parole" che non esistono, e
-    /// che nella ricerca sarebbero solo rumore.
+    /// Below this confidence the observation is discarded: on comics, screentones, panel
+    /// borders and sound effects easily produce "words" that don't actually exist, and that
+    /// would just be noise in search.
     static let minimumConfidence: Float = 0.5
 
-    /// Lingue passate a Vision: quelle preferite dal sistema che Vision sa davvero riconoscere,
-    /// più l'inglese come rete di sicurezza. Senza il fallback, su un sistema impostato in una
-    /// lingua non supportata la richiesta fallirebbe del tutto invece di leggere comunque i
-    /// fumetti in inglese, che sono la maggioranza di quelli con testo latino.
+    /// Languages passed to Vision: the system's preferred ones that Vision actually knows how
+    /// to recognize, plus English as a safety net. Without the fallback, on a system set to an
+    /// unsupported language the request would fail entirely instead of still reading comics in
+    /// English, which are the majority of those with Latin text.
     static let recognitionLanguages: [String] = {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
@@ -36,8 +36,8 @@ enum PageTextRecognizer {
 
         var languages: [String] = []
         for preferred in Locale.preferredLanguages {
-            // Locale.preferredLanguages restituisce tag completi ("it-IT"); Vision espone a
-            // volte solo la lingua base ("it"). Proviamo entrambe le forme prima di scartarla.
+            // Locale.preferredLanguages returns full tags ("it-IT"); Vision sometimes only
+            // exposes the base language ("it"). Try both forms before giving up on it.
             let base = String(preferred.prefix(while: { $0 != "-" }))
             if let match = supported.first(where: { $0 == preferred || $0 == base || $0.hasPrefix("\(base)-") }),
                !languages.contains(match) {
@@ -68,15 +68,15 @@ enum PageTextRecognizer {
         }
     }
 
-    /// Converte un `boundingBox` normalizzato nelle coordinate schermo con cui la pagina è
-    /// effettivamente disegnata.
+    /// Converts a normalized `boundingBox` into the screen coordinates the page is actually
+    /// drawn with.
     ///
-    /// Due trasformazioni, entrambe necessarie: la stessa geometria `scaledToFit` con cui il
-    /// lettore centra la pagina (identica a quella di `PanelSelectionView.confirmSelection()`),
-    /// **più** il ribaltamento verticale, perché SwiftUI ha l'origine in alto a sinistra e
-    /// Vision in basso a sinistra. Dimenticare il ribaltamento non fa fallire nulla: mette
-    /// semplicemente ogni evidenziazione nella metà sbagliata della pagina, per questo la
-    /// conversione sta qui in un solo punto ed è coperta da test.
+    /// Two transformations, both necessary: the same `scaledToFit` geometry the reader uses to
+    /// center the page (identical to the one in `PanelSelectionView.confirmSelection()`),
+    /// **plus** the vertical flip, because SwiftUI has its origin at the top left and Vision at
+    /// the bottom left. Forgetting the flip doesn't make anything fail outright: it simply puts
+    /// every highlight in the wrong half of the page, which is why the conversion lives here in
+    /// a single spot and is covered by tests.
     static func screenRect(forNormalized box: CGRect, imageSize: CGSize, displaySize: CGSize) -> CGRect {
         guard imageSize.width > 0, imageSize.height > 0,
               displaySize.width > 0, displaySize.height > 0 else { return .zero }
@@ -92,5 +92,38 @@ enum PageTextRecognizer {
             width: box.width * fittedSize.width,
             height: box.height * fittedSize.height
         )
+    }
+
+    /// Same conversion, but for a page shown auto-cropped: `box` is still normalized against the
+    /// *original* page (that's what OCR ran on), while `cropRect` — pixel coordinates, origin at
+    /// the top left, from `ImageProcessing.contentCropRect` — is what's actually on screen.
+    /// `cropRect == nil` falls back to the plain uncropped conversion. The function returns `nil`
+    /// when the line falls entirely in the border that got cropped away — nothing to draw.
+    static func screenRect(
+        forNormalized box: CGRect, imageSize: CGSize, cropRect: CGRect?, displaySize: CGSize
+    ) -> CGRect? {
+        guard let cropRect else { return screenRect(forNormalized: box, imageSize: imageSize, displaySize: displaySize) }
+        guard imageSize.width > 0, imageSize.height > 0, cropRect.width > 0, cropRect.height > 0 else { return nil }
+
+        // Everything gets expressed in the bottom-left-origin pixel space `box` already uses,
+        // so the crop rectangle can be intersected with it directly.
+        let boxPixels = CGRect(
+            x: box.minX * imageSize.width, y: box.minY * imageSize.height,
+            width: box.width * imageSize.width, height: box.height * imageSize.height
+        )
+        let cropPixels = CGRect(
+            x: cropRect.minX, y: imageSize.height - cropRect.maxY,
+            width: cropRect.width, height: cropRect.height
+        )
+        let visible = boxPixels.intersection(cropPixels)
+        guard !visible.isNull, visible.width > 0, visible.height > 0 else { return nil }
+
+        let renormalized = CGRect(
+            x: (visible.minX - cropPixels.minX) / cropPixels.width,
+            y: (visible.minY - cropPixels.minY) / cropPixels.height,
+            width: visible.width / cropPixels.width,
+            height: visible.height / cropPixels.height
+        )
+        return screenRect(forNormalized: renormalized, imageSize: cropRect.size, displaySize: displaySize)
     }
 }
