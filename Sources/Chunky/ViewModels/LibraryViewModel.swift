@@ -457,10 +457,16 @@ final class LibraryViewModel: ObservableObject {
         var candidates: [(objectID: NSManagedObjectID, relativePath: String, format: ComicFormat)] = []
         context.performAndWait {
             let request = ComicEntity.fetchRequest()
-            // Le stesse due condizioni che `registerComic` lascia su un segnaposto. Non serve un
-            // attributo dedicato nel modello: sarebbe uno stato locale del dispositivo che
-            // CloudKit sincronizzerebbe sugli altri, dove il file magari è già scaricato.
-            request.predicate = NSPredicate(format: "pageCount == 0 AND coverImageData == nil")
+            // Solo la copertina, non anche "pageCount == 0": aprendo il fumetto appena scaricato
+            // il lettore scrive già il numero di pagine (vedi `ReaderView.openProvider`), e con
+            // quella seconda condizione il record smetteva di essere un candidato restando senza
+            // copertina fino a un reinstallo. Un fumetto in libreria senza copertina è per
+            // definizione uno da completare, qualunque strada l'abbia portato lì.
+            //
+            // Non serve un attributo dedicato nel modello: sarebbe uno stato locale del
+            // dispositivo che CloudKit sincronizzerebbe sugli altri, dove il file magari è già
+            // scaricato.
+            request.predicate = NSPredicate(format: "coverImageData == nil")
             guard let comics = try? context.fetch(request) else { return }
             for comic in comics {
                 guard let relativePath = comic.relativePath, !relativePath.isEmpty else { continue }
@@ -485,13 +491,13 @@ final class LibraryViewModel: ObservableObject {
                 updateStatus("Preparo \(index + 1) di \(candidates.count)…", token: statusToken)
             }
             let url = LibraryStorage.fileURL(forRelativePath: candidate.relativePath)
-            // Un archivio che si apre ma non contiene pagine lascerebbe il record identico a
-            // com'era, quindi candidato anche alla prossima passata: per questa lista vale come
-            // illeggibile, altrimenti ogni scansione lo riaprirebbe per niente.
+            // Un archivio che si apre ma da cui non esce una copertina lascerebbe il record
+            // candidato anche alla prossima passata: per questa lista vale come illeggibile,
+            // altrimenti ogni scansione lo riaprirebbe per niente.
             let analysis = Self.analyzeComic(at: url, format: candidate.format)
-            guard let analysis = analysis, analysis.pageCount > 0 || analysis.coverData != nil else {
+            guard let analysis = analysis, analysis.coverData != nil else {
                 pathsWithUnreadableArchive.insert(candidate.relativePath)
-                DiagnosticLog.log("Nessuna pagina leggibile in \"\(candidate.relativePath)\" dopo il download")
+                DiagnosticLog.log("Nessuna copertina ricavabile da \"\(candidate.relativePath)\"")
                 continue
             }
             apply(analysis, toComicWith: candidate.objectID, relativePath: candidate.relativePath, in: context)
