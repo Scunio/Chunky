@@ -64,6 +64,12 @@ struct LibraryDeduplicationTests {
         try context.fetch(ComicEntity.fetchRequest())
     }
 
+    /// UUID fissi, non casuali: il superstite si sceglie anche in base all'`id`, quindi i test
+    /// devono poter dire quale dei due record si aspettano.
+    private func uuid(_ string: String) throws -> UUID {
+        try #require(UUID(uuidString: string))
+    }
+
     @Test("Due record per lo stesso file diventano uno")
     func collapsesDuplicates() throws {
         let context = try TestStore.makeContext()
@@ -97,14 +103,14 @@ struct LibraryDeduplicationTests {
         makeComic(
             in: context,
             path: "Topolino 3620.cbz",
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            id: try uuid("00000000-0000-0000-0000-000000000001"),
             lastReadPage: 3,
             cover: nil
         )
         makeComic(
             in: context,
             path: "Topolino 3620.cbz",
-            id: UUID(uuidString: "FFFFFFFF-0000-0000-0000-000000000002")!,
+            id: try uuid("FFFFFFFF-0000-0000-0000-000000000002"),
             lastReadPage: 42,
             cover: Data([0x01]),
             favorite: true,
@@ -126,8 +132,8 @@ struct LibraryDeduplicationTests {
     /// fumetto sparirebbe da entrambi.
     @Test("Il superstite è lo stesso a prescindere dall'ordine di inserimento")
     func picksDeterministicSurvivor() throws {
-        let older = UUID(uuidString: "00000000-0000-0000-0000-0000000000AA")!
-        let newer = UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!
+        let older = try uuid("00000000-0000-0000-0000-0000000000AA")
+        let newer = try uuid("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")
 
         func survivorID(insertingNewerFirst: Bool) throws -> UUID? {
             let context = try TestStore.makeContext()
