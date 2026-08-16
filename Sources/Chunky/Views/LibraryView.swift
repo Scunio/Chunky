@@ -24,8 +24,8 @@ private enum ReadStatus: CaseIterable, Identifiable {
 }
 
 struct LibraryView: View {
-    /// Su macOS la sidebar decide quale serie mostrare; su iOS non esiste sidebar e la
-    /// selezione resta sempre `.all`, quindi il comportamento non cambia.
+    /// On macOS the sidebar decides which series to show; on iOS there's no sidebar and the
+    /// selection always stays `.all`, so the behavior doesn't change.
     var selection: LibrarySelection = .all
 
     @Environment(\.managedObjectContext) private var context
@@ -42,8 +42,8 @@ struct LibraryView: View {
     @AppStorage("kioskModeEnabled") private var isKioskModeEnabled = false
     @State private var isShowingFileImporter = false
     #if os(iOS)
-    // Su Mac il reader vive in una finestra propria (vedi `openComic`); questo stato
-    // esiste solo per il `.fullScreenCover` di iOS.
+    // On Mac the reader lives in its own window (see `openComic`); this state
+    // exists only for iOS's `.fullScreenCover`.
     @State private var selectedComic: ComicEntity?
     #endif
     @State private var displayMode: LibraryDisplayMode = .grouped
@@ -55,16 +55,16 @@ struct LibraryView: View {
     @State private var isNewComicsPresented = false
     @AppStorage("newTrayClearedAt") private var newTrayClearedAtTimestamp: Double = 0
     #if os(macOS)
-    /// Per finestra, non globale: aprire una seconda finestra libreria (in futuro) non deve
-    /// costringerla alla stessa modalità di visualizzazione dell'altra.
+    /// Per window, not global: opening a second library window (in the future) shouldn't
+    /// force it into the same display mode as the other one.
     @SceneStorage("libraryUsesTableLayout") private var usesTableLayout = false
     #endif
     @State private var isToolsPresented = false
     @State private var isAccountsPresented = false
     @State private var isNewGroupPromptPresented = false
     @State private var newGroupName = ""
-    /// Solo per l'indicazione visiva del drag & drop: non c'è altro stato da tracciare, il
-    /// drop stesso è gestito interamente dentro `.dropDestination`.
+    /// Only for the drag & drop visual indication: there's no other state to track, the
+    /// drop itself is handled entirely inside `.dropDestination`.
     @State private var isDropTargeted = false
 
     var body: some View {
@@ -75,10 +75,10 @@ struct LibraryView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     leadingToolbarContent
                 }
-                // Ogni pulsante deve comparire come statement separato dentro il ViewBuilder,
-                // non raggruppato in una singola "some View": solo così iOS li riconosce come
-                // item nativi distinti e può metterli nel menu di overflow "•••" quando manca
-                // spazio. Una view opaca finisce nell'overflow ma senza reagire al tap.
+                // Each button must appear as a separate statement inside the ViewBuilder,
+                // not grouped into a single "some View": only this way does iOS recognize them as
+                // distinct native items and can put them in the "•••" overflow menu when there's
+                // no room. An opaque view ends up in the overflow but doesn't respond to taps.
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     if isEditing {
                         statusMenu
@@ -118,9 +118,9 @@ struct LibraryView: View {
             } message: {
                 Text(viewModel.importError ?? "")
             }
-            // .sheet lascerebbe una card con angoli arrotondati che non copre tutto lo schermo.
-            // Su Mac il reader vive in una finestra propria (vedi openComic), quindi qui non
-            // c'è nulla da presentare.
+            // .sheet would leave a card with rounded corners that doesn't cover the whole screen.
+            // On Mac the reader lives in its own window (see openComic), so there's
+            // nothing to present here.
             #if os(iOS)
             .fullScreenCover(item: $selectedComic) { comic in
                 ReaderView(comic: comic, libraryComics: filteredComics)
@@ -138,9 +138,9 @@ struct LibraryView: View {
             #else
             .searchable(text: $searchText, prompt: "Cerca per titolo o serie")
             #endif
-            // Vale su entrambe le piattaforme: su iPad si può trascinare da Files, su Mac dal
-            // Finder. `URL` è già `Transferable` di sistema (si rappresenta come URL di file),
-            // quindi non serve altro che filtrare le estensioni supportate.
+            // Holds on both platforms: on iPad you can drag from Files, on Mac from the
+            // Finder. `URL` is already a system `Transferable` (it represents itself as a file URL),
+            // so nothing more is needed than filtering the supported extensions.
             .dropDestination(for: URL.self) { urls, _ in
                 let supported = urls.filter { ComicFormat(fileExtension: $0.pathExtension) != nil }
                 guard !supported.isEmpty else { return false }
@@ -157,8 +157,8 @@ struct LibraryView: View {
             }
             .modifier(NewGroupPromptModifier(isPresented: $isNewGroupPromptPresented, name: $newGroupName, onCreate: applyGroup))
             #if os(macOS)
-            // `nil` mentre il blocco genitori è attivo: altrimenti un comando da tastiera
-            // (⌘O, ⇧⌘N) agirebbe comunque sulla libreria da sotto la schermata di blocco.
+            // `nil` while the parental lock is active: otherwise a keyboard command
+            // (⌘O, ⇧⌘N) would still act on the library from underneath the lock screen.
             .focusedSceneValue(\.libraryActions, lock.isLocked ? nil : LibraryCommandActions(
                 importFiles: { isShowingFileImporter = true },
                 newGroup: { isNewGroupPromptPresented = true },
@@ -193,10 +193,10 @@ struct LibraryView: View {
     }
 
     #if os(macOS)
-    // Ogni controllo è un `ToolbarItem` a sé, non un `HStack` dentro un `ToolbarItem` solo:
-    // un'unica view opaca non si scompone correttamente nel menu "»" quando la finestra è
-    // stretta — macOS riesce a farne un sottomenu solo per controlli nativi riconoscibili
-    // (es. il Picker qui sotto, che diventa "Vista").
+    // Each control is its own `ToolbarItem`, not an `HStack` inside a single `ToolbarItem`:
+    // a single opaque view doesn't break down correctly into the "»" menu when the window is
+    // narrow — macOS can only turn recognizable native controls into a submenu
+    // (e.g. the Picker below, which becomes "View").
     @ToolbarContentBuilder
     private var macOSToolbarContent: some ToolbarContent {
         if isEditing {
@@ -219,9 +219,9 @@ struct LibraryView: View {
             ToolbarItem { displayModeButton }
             ToolbarItem {
                 Picker("Vista", selection: $usesTableLayout) {
-                    // Label anche qui: se la finestra è stretta, l'intero Picker collassa in un
-                    // sottomenu "Vista" — senza testo, le due voci sarebbero due icone identiche
-                    // di forma ma senza indicazione di cosa selezionano.
+                    // Label here too: if the window is narrow, the whole Picker collapses into a
+                    // "View" submenu — without text, the two entries would be two icons identical
+                    // in shape but with no indication of what they select.
                     Label("Griglia", systemImage: "square.grid.2x2").tag(false)
                     Label("Lista", systemImage: "list.bullet").tag(true)
                 }
@@ -242,29 +242,29 @@ struct LibraryView: View {
     }
     #endif
 
-    /// Pannello, non una push a tutto schermo. È anche il punto da cui si importano i fumetti
-    /// (Downloads / Web / iCloud Drive / altri servizi cloud): non c'è un pulsante "Importa"
-    /// separato.
+    /// Panel, not a full-screen push. It's also the entry point for importing comics
+    /// (Downloads / Web / iCloud Drive / other cloud services): there's no separate "Import"
+    /// button.
     private var accountsLink: some View {
         Button(action: { isAccountsPresented = true }) {
-            // Label, non Image da sola: quando questo pulsante finisce nel menu di overflow
-            // (finestra stretta su Mac, o iPhone in orizzontale), un'icona senza testo non
-            // spiega cosa fa. Label mostra solo l'icona nella toolbar normale e icona+testo
-            // quando collassato in un menu.
+            // Label, not a bare Image: when this button ends up in the overflow menu
+            // (narrow window on Mac, or iPhone in landscape), an icon without text doesn't
+            // explain what it does. Label shows only the icon in the normal toolbar and icon+text
+            // when collapsed into a menu.
             Label("Account", systemImage: "cloud")
         }
     }
 
-    /// Apre il pannello "Tools" (Colori/Impostazioni/Blocco genitori/Feedback/Informazioni).
+    /// Opens the "Tools" panel (Colors/Settings/Parental Lock/Feedback/Info).
     private var toolsMenu: some View {
         Button(action: { isToolsPresented = true }) {
             Label("Strumenti", systemImage: "wrench.and.screwdriver")
         }
     }
 
-    /// Segna i fumetti selezionati come Non letto/In lettura/Terminato agendo direttamente su
-    /// `lastReadPage`, l'unico stato che il modello già tiene traccia (non serve un campo
-    /// dedicato).
+    /// Marks the selected comics as Unread/Reading/Finished by acting directly on
+    /// `lastReadPage`, the only state the model already tracks (no need for a
+    /// dedicated field).
     private var statusMenu: some View {
         Menu {
             Picker("Stato", selection: statusBinding) {
@@ -277,8 +277,8 @@ struct LibraryView: View {
         }
     }
 
-    /// Auto ri-deriva il nome serie dal titolo (stessa euristica usata in import), altrimenti si
-    /// assegna un gruppo esistente o se ne crea uno nuovo.
+    /// Auto re-derives the series name from the title (same heuristic used at import time), otherwise
+    /// an existing group is assigned or a new one is created.
     private var groupMenu: some View {
         Menu {
             Picker("Gruppo", selection: groupBinding) {
@@ -311,7 +311,7 @@ struct LibraryView: View {
         Binding(
             get: {
                 let statuses = Set(selectedComics.map(status(for:)))
-                // Selezione mista (o vuota): il picker mostra "In lettura" senza applicare nulla.
+                // Mixed (or empty) selection: the picker shows "Reading" without applying anything.
                 guard statuses.count == 1, let onlyStatus = statuses.first else { return .reading }
                 return onlyStatus
             },
@@ -362,23 +362,23 @@ struct LibraryView: View {
         try? context.save()
     }
 
-    /// Apre il picker di sistema (Files su iOS, NSOpenPanel su Mac) per importare fumetti —
-    /// altrimenti raggiungibile solo da ⌘O su Mac o dallo stato vuoto della libreria, quindi
-    /// invisibile una volta che la libreria contiene già qualcosa.
+    /// Opens the system picker (Files on iOS, NSOpenPanel on Mac) to import comics —
+    /// otherwise reachable only via ⌘O on Mac or from the library's empty state, so
+    /// invisible once the library already has something in it.
     private var addButton: some View {
         Button(action: { isShowingFileImporter = true }) {
             Label("Aggiungi", systemImage: "plus")
         }
     }
 
-    /// Testo, non icona: alterna tra vista raggruppata per serie e A-Z.
+    /// Text, not an icon: toggles between the view grouped by series and A-Z.
     private var displayModeButton: some View {
         Button(displayMode == .grouped ? "Raggruppato" : "A-Z") {
             displayMode = displayMode == .grouped ? .alphabetical : .grouped
         }
     }
 
-    /// Il fumetto aperto più di recente, se ce n'è almeno uno: alimenta il popover "Ora in lettura".
+    /// The most recently opened comic, if there's at least one: feeds the "Now Reading" popover.
     private var lastReadComic: ComicEntity? {
         comics
             .filter { $0.dateLastOpened != nil }
@@ -463,8 +463,8 @@ struct LibraryView: View {
         }
     }
 
-    /// Fumetti importati negli ultimi 7 giorni e non ancora "smarcati" con Cancella: alimentano
-    /// il popover "Nuovi", non una sezione fissa in libreria.
+    /// Comics imported in the last 7 days and not yet "unmarked" with Clear: feed
+    /// the "New" popover, not a fixed section in the library.
     private var recentComics: [ComicEntity] {
         let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? .distantPast
         let clearedAt = Date(timeIntervalSince1970: newTrayClearedAtTimestamp)
@@ -474,7 +474,7 @@ struct LibraryView: View {
             .sorted { ($0.dateAdded ?? .distantPast) > ($1.dateAdded ?? .distantPast) }
     }
 
-    /// Sempre visibile, anche senza fumetti nuovi.
+    /// Always visible, even without new comics.
     private var newComicsButton: some View {
         Button(action: { isNewComicsPresented = true }) {
             Label("Novità", systemImage: "envelope")
@@ -559,16 +559,16 @@ struct LibraryView: View {
         }
     }
 
-    /// Unico punto da cui si "apre" un fumetto: su iOS imposta lo stato che presenta il
-    /// `fullScreenCover`, su Mac apre una finestra indipendente (vedi `ComicID`,
+    /// The single place from which a comic is "opened": on iOS it sets the state that presents the
+    /// `fullScreenCover`, on Mac it opens an independent window (see `ComicID`,
     /// `ReaderWindowContainer`).
     private func openComic(_ comic: ComicEntity) {
         #if os(macOS)
         guard let id = ComicID(comic) else {
-            // In pratica non dovrebbe capitare (l'inserimento salva l'entity sincronamente
-            // prima che compaia nella griglia, quindi il suo objectID è già permanente), ma
-            // se succede il tap non deve restare senza alcun riscontro: si riusa lo stesso
-            // canale d'errore già in uso per gli import falliti.
+            // In practice this shouldn't happen (insertion saves the entity synchronously
+            // before it appears in the grid, so its objectID is already permanent), but
+            // if it does happen the tap shouldn't go without any feedback: the same
+            // error channel already used for failed imports is reused.
             viewModel.importError = "Impossibile aprire questo fumetto."
             return
         }
@@ -595,14 +595,14 @@ struct LibraryView: View {
         )
     }
 
-    /// Il testo lo decide il view model (`importStatus`): la stessa passata di scansione che
-    /// gira in automatico a ogni foreground mostrava "Importazione…" anche quando non stava
-    /// importando niente, senza dire cosa stesse facendo.
+    /// The text is decided by the view model (`importStatus`): the same scan pass that
+    /// runs automatically on every foreground used to show "Importing…" even when it wasn't
+    /// importing anything, without saying what it was actually doing.
     ///
-    /// Colori espliciti e non ereditati: il riquadro è scuro fisso, ma `.foregroundColor(theme.text)`
-    /// e `.accentColor(theme.accent)` più in basso si applicano anche a questo overlay — con un
-    /// tema dal testo scuro, spinner ed etichetta finivano neri su nero e restava solo un
-    /// rettangolo vuoto senza nulla scritto dentro.
+    /// Explicit, non-inherited colors: the box is fixed dark, but `.foregroundColor(theme.text)`
+    /// and `.accentColor(theme.accent)` further down also apply to this overlay — with a
+    /// theme with dark text, the spinner and label ended up black on black and all that was left
+    /// was an empty rectangle with nothing written inside it.
     private var importingOverlay: some View {
         Group {
             if viewModel.isImporting {
@@ -660,8 +660,8 @@ private struct ComicCell: View {
     let allowsDeletion: Bool
     let onSelect: () -> Void
     let onDelete: () -> Void
-    /// Stessa fonte del badge sulla copertina: il comando di download deve comparire e sparire
-    /// insieme al badge, non a seconda di quando la cella è stata ridisegnata.
+    /// Same source as the cover badge: the download command must appear and disappear
+    /// together with the badge, not depending on when the cell was last redrawn.
     @ObservedObject private var downloadTracker = ICloudDownloadTracker.shared
 
     private var isPendingDownload: Bool {
@@ -713,9 +713,9 @@ private struct ComicCell: View {
         try? comic.managedObjectContext?.save()
     }
 
-    /// Scarica senza aprire il lettore: il progresso si segue dalla schermata Downloads. La
-    /// copertina e il numero di pagine arrivano subito dopo, quando `ICloudDownloadTracker` si
-    /// accorge che il file è locale e fa partire il completamento dei segnaposto.
+    /// Downloads without opening the reader: progress can be followed from the Downloads screen. The
+    /// cover and page count arrive right after, when `ICloudDownloadTracker` notices
+    /// that the file is now local and kicks off the placeholder completion.
     private func downloadFromICloud() {
         ComicDownloadService.downloadIfNeeded(comic: comic)
     }

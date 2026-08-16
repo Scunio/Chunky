@@ -1,9 +1,9 @@
 import Foundation
 
-/// Client per cataloghi OPDS (Open Publication Distribution System), lo standard usato da
-/// Calibre Content Server, Ubooquity e simili. Un catalogo OPDS è un feed Atom in cui ogni
-/// <entry> è o una sotto-cartella (link di navigazione) o un fumetto scaricabile (link di
-/// acquisizione).
+/// Client for OPDS (Open Publication Distribution System) catalogs, the standard used by
+/// Calibre Content Server, Ubooquity, and similar. An OPDS catalog is an Atom feed in which each
+/// <entry> is either a subfolder (navigation link) or a downloadable comic (acquisition
+/// link).
 final class OPDSClient: RemoteBrowsing {
     func listEntries(at url: URL, account: RemoteAccountEntity) async throws -> [RemoteEntry] {
         let request = authenticatedRequest(for: url, account: account)

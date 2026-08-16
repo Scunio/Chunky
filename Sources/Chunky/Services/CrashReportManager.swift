@@ -3,10 +3,10 @@ import Foundation
 import MetricKit
 #endif
 
-/// Cattura locale di crash/hang tramite MetricKit — nessun invio remoto: i payload arrivano
-/// solo a questa app, con il ritardo imposto da Apple (in pratica solo su dispositivo fisico,
-/// quasi mai in simulatore). Vengono solo aggiunti a `DiagnosticLog`, consultabile da
-/// Impostazioni > Diagnostica. MetricKit non esiste su macOS: lì il toggle non ha effetto.
+/// Local capture of crashes/hangs via MetricKit — no remote submission: the payloads arrive
+/// only to this app, with the delay imposed by Apple (in practice only on a physical device,
+/// almost never in the simulator). They're only appended to `DiagnosticLog`, viewable from
+/// Settings > Diagnostics. MetricKit doesn't exist on macOS: there, the toggle has no effect.
 enum CrashReportManager {
     static func configure() {
         #if os(iOS)

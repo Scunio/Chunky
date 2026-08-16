@@ -2,12 +2,12 @@
 import SwiftUI
 import CoreData
 
-/// Sidebar del Mac: "Tutti i fumetti" più le serie già esistenti in libreria.
+/// Mac sidebar: "All Comics" plus the series already present in the library.
 ///
-/// Contiene solo ciò che c'è: le stesse etichette e gli stessi conteggi delle sezioni
-/// collassabili della griglia (`LibraryGrouping`). Novità, Ora in lettura, Account e
-/// Strumenti restano dove sono sempre stati, cioè in toolbar — non diventano voci di
-/// navigazione.
+/// Contains only what exists: the same labels and the same counts as the grid's
+/// collapsible sections (`LibraryGrouping`). New, Now Reading, Account and
+/// Tools stay where they've always been, i.e. in the toolbar — they don't become
+/// navigation items.
 struct LibrarySidebarView: View {
     @Binding var selection: LibrarySelection
     @ObservedObject private var theme = AppTheme.shared
@@ -27,9 +27,9 @@ struct LibrarySidebarView: View {
                 .tag(LibrarySelection.all)
                 .accessibilityIdentifier("sidebar.all")
 
-            // Le stesse sezioni della griglia (comprese "Altri fumetti" quando c'è):
-            // nasconderla qui la lascerebbe comunque visibile come intestazione nella
-            // griglia, disallineando sidebar e contenuto invece di semplificare qualcosa.
+            // The same sections as the grid (including "Other Comics" when present):
+            // hiding it here would still leave it visible as a header in the
+            // grid, misaligning sidebar and content instead of simplifying anything.
             if !sections.isEmpty {
                 Section("Serie") {
                     ForEach(sections) { section in
@@ -44,10 +44,10 @@ struct LibrarySidebarView: View {
         .listStyle(.sidebar)
         .accessibilityIdentifier("library.sidebar")
         .accentColor(theme.accent)
-        // Se il gruppo selezionato smette di esistere (ultimo fumetto spostato altrove o
-        // cancellato), la sidebar lo toglie da sé dall'elenco ma la selezione ci restava
-        // comunque puntata: la griglia mostrava "nessun risultato" per una ricerca vuota,
-        // senza modo di capire perché. Si torna a "Tutti i fumetti".
+        // If the selected group stops existing (last comic moved elsewhere or
+        // deleted), the sidebar removes it from the list on its own, but the selection
+        // would stay pointed at it anyway: the grid would show "no results" for an empty
+        // search, with no way to understand why. It falls back to "All Comics".
         .onChange(of: sections.map(\.title)) { _, titles in
             if case .group(let title) = selection, !titles.contains(title) {
                 selection = .all

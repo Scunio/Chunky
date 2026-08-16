@@ -1,25 +1,26 @@
 import Foundation
 import Combine
 
-/// Tiene aggiornato l'elenco dei fumetti della libreria che su questo dispositivo sono ancora
-/// solo placeholder iCloud (non scaricati in locale), usato dalla griglia per il badge
-/// "da scaricare". Serve una `NSMetadataQuery` viva: lo stato di un file può cambiare anche
-/// senza che l'app faccia nulla (download avviato dall'app File o dal sistema), e leggendo il
-/// filesystem solo quando la vista appare il badge resterebbe indietro.
+/// Keeps an up-to-date list of the library's comics that on this device are still
+/// only iCloud placeholders (not downloaded locally), used by the grid for the
+/// "to download" badge. This needs a live `NSMetadataQuery`: a file's status can change
+/// even without the app doing anything (a download started from the Files app or by the
+/// system), and reading the filesystem only when the view appears would leave the badge
+/// out of date.
 ///
-/// `NSMetadataQuery` consegna gli aggiornamenti sulla coda impostata in `operationQueue`
-/// (qui `.main`): va quindi avviata e fermata dal thread principale.
+/// `NSMetadataQuery` delivers updates on the queue set in `operationQueue`
+/// (here `.main`): it must therefore be started and stopped from the main thread.
 final class ICloudDownloadTracker: ObservableObject {
     static let shared = ICloudDownloadTracker()
 
-    /// Percorsi relativi (le stesse stringhe salvate in `ComicEntity.relativePath`) dei file
-    /// non ancora scaricati. Vuoto se iCloud non è attivo: in quel caso i file sono tutti locali.
+    /// Relative paths (the same strings stored in `ComicEntity.relativePath`) of files
+    /// not yet downloaded. Empty if iCloud isn't active: in that case all files are local.
     @Published private(set) var pendingRelativePaths: Set<String> = []
 
-    /// Tutti i percorsi relativi visti nel container ubiquity, scaricati o no. Usato da
-    /// `ICloudSyncFolderView` per accorgersi di file nuovi depositati da un altro dispositivo
-    /// (via Files/Finder) senza un `Timer` di polling: la stessa query che alimenta il badge
-    /// "da scaricare" enumera già tutto ciò che serve.
+    /// All relative paths seen in the ubiquity container, downloaded or not. Used by
+    /// `ICloudSyncFolderView` to notice new files dropped in by another device
+    /// (via Files/Finder) without a polling `Timer`: the same query that feeds the
+    /// "to download" badge already enumerates everything needed.
     @Published private(set) var allRelativePaths: Set<String> = []
 
     private let query = NSMetadataQuery()
@@ -30,10 +31,10 @@ final class ICloudDownloadTracker: ObservableObject {
     func start() {
         guard !isRunning, LibraryStorage.isICloudAvailable else { return }
         isRunning = true
-        // Nessun predicato sul percorso della cartella: il path riportato dalla query può essere
-        // la forma `/private/var/...` mentre quello della libreria è `/var/...`, e un
-        // BEGINSWITH fallirebbe silenziosamente restituendo zero risultati. Si filtra invece
-        // sui risultati, confrontando i percorsi risolti.
+        // No predicate on the folder path: the path reported by the query can be in
+        // the `/private/var/...` form while the library's is `/var/...`, and a
+        // BEGINSWITH would fail silently, returning zero results. Filtering is done
+        // on the results instead, by comparing the resolved paths.
         query.predicate = NSPredicate(format: "%K LIKE '*'", NSMetadataItemFSNameKey)
         query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
         query.operationQueue = .main
@@ -46,9 +47,9 @@ final class ICloudDownloadTracker: ObservableObject {
         guard isRunning else { return }
         isRunning = false
         query.stop()
-        // Rimozione mirata invece di `removeObserver(self)`: questa classe osserva solo la
-        // propria query, e la rimozione in blocco cancellerebbe anche eventuali altre
-        // osservazioni registrate altrove sullo stesso oggetto.
+        // Targeted removal instead of `removeObserver(self)`: this class only observes
+        // its own query, and a blanket removal would also cancel any other
+        // observations registered elsewhere on the same object.
         NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidUpdate, object: query)
         NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidFinishGathering, object: query)
     }

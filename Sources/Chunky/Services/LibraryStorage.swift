@@ -1,17 +1,17 @@
 import Foundation
 
-/// Gestisce la cartella fisica in cui vengono copiati i fumetti importati.
-/// Se l'utente ha iCloud Drive attivo, usa il container ubiquity dell'app (i file
-/// sincronizzano automaticamente su tutti i dispositivi); altrimenti ricade sulla
-/// cartella Documents locale della sandbox.
+/// Manages the physical folder into which imported comics are copied.
+/// If the user has iCloud Drive active, it uses the app's ubiquity container (files
+/// automatically sync across all devices); otherwise it falls back to the
+/// sandbox's local Documents folder.
 enum LibraryStorage {
     private static let ubiquityContainerID = "iCloud.com.scunio.Chunky"
     private static let comicsFolderName = "Comics"
 
     nonisolated(unsafe) private static var cachedRootURL: URL?
 
-    /// True se l'utente ha iCloud Drive attivo e il container ubiquity dell'app è raggiungibile:
-    /// in tal caso i fumetti importati sincronizzano automaticamente su tutti i dispositivi.
+    /// True if the user has iCloud Drive active and the app's ubiquity container is reachable:
+    /// in that case imported comics automatically sync across all devices.
     static var isICloudAvailable: Bool {
         FileManager.default.url(forUbiquityContainerIdentifier: ubiquityContainerID) != nil
     }
@@ -22,10 +22,10 @@ enum LibraryStorage {
         }
         let root: URL
         if let ubiquityURL = FileManager.default.url(forUbiquityContainerIdentifier: ubiquityContainerID) {
-            // La cartella root deve essere "Documents" (non un livello sotto, es.
-            // "Documents/Comics"): il messaggio mostrato all'utente in ICloudSyncFolderView dice
-            // di mettere i fumetti direttamente "dentro Chunky", quindi il comportamento reale
-            // deve allinearsi a quel messaggio.
+            // The root folder must be "Documents" (not one level below, e.g.
+            // "Documents/Comics"): the message shown to the user in ICloudSyncFolderView says
+            // to put comics directly "inside Chunky", so the actual behavior
+            // must match that message.
             root = ubiquityURL.appendingPathComponent("Documents")
         } else {
             root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -36,12 +36,12 @@ enum LibraryStorage {
         return root
     }
 
-    /// Sposta alla radice i fumetti lasciati da un layout di cartelle precedente nella
-    /// sottocartella "Comics" (vedi il commento in `rootFolderURL()`): senza questo passaggio, chi aveva già
-    /// una libreria se la ritroverebbe "sparita" al primo avvio dopo l'update, pur restando i
-    /// file fisicamente presenti su iCloud/disco. In caso di collisione di nome (es. un file che
-    /// l'utente aveva già messo per sbaglio alla radice) rinomina l'arrivo, con lo stesso schema
-    /// usato da `importFile`.
+    /// Moves to the root any comics left by a previous folder layout in the
+    /// "Comics" subfolder (see the comment in `rootFolderURL()`): without this step, anyone who already had
+    /// a library would find it "gone" on the first launch after the update, even though the
+    /// files are physically still present on iCloud/disk. In case of a name collision (e.g. a file
+    /// the user had already mistakenly placed at the root) the incoming one is renamed, using the same scheme
+    /// used by `importFile`.
     private static func migrateLegacyComicsSubfolderIfNeeded(newRoot: URL) {
         let legacyRoot = newRoot.appendingPathComponent(comicsFolderName)
         guard FileManager.default.fileExists(atPath: legacyRoot.path) else { return }
@@ -54,9 +54,9 @@ enum LibraryStorage {
         try? FileManager.default.removeItem(at: legacyRoot)
     }
 
-    /// Percorso libero dentro `folder` per un file di nome `fileName`: se il nome è già occupato
-    /// aggiunge un progressivo ("Topolino 1.cbz"). Unica implementazione per tutti i punti in cui
-    /// un file entra nella libreria, così i duplicati si comportano allo stesso modo ovunque.
+    /// A free path inside `folder` for a file named `fileName`: if the name is already taken,
+    /// it appends a counter ("Topolino 1.cbz"). The single implementation for every place where
+    /// a file enters the library, so duplicates behave the same way everywhere.
     private static func availableDestination(forFileNamed fileName: String, in folder: URL) -> URL {
         var destinationURL = folder.appendingPathComponent(fileName)
         guard FileManager.default.fileExists(atPath: destinationURL.path) else { return destinationURL }
@@ -71,11 +71,11 @@ enum LibraryStorage {
         return destinationURL
     }
 
-    /// Il Finder copia nella cartella Documents mentre l'app è viva, quindi un file può essere
-    /// ancora a metà trasferimento nel momento in cui lo troviamo: spostarlo o aprirlo adesso
-    /// significherebbe troncare la copia o registrare in libreria un archivio illeggibile.
-    /// Chi è stato scritto negli ultimi secondi viene lasciato dov'è: lo riprende il passaggio
-    /// successivo (foreground o rescan periodico), quindi saltarlo non lo perde.
+    /// Finder copies into the Documents folder while the app is alive, so a file can still
+    /// be mid-transfer at the moment we find it: moving or opening it now
+    /// would mean truncating the copy or registering an unreadable archive in the library.
+    /// Anything written in the last few seconds is left where it is: it's picked up by the
+    /// next pass (foreground or periodic rescan), so skipping it doesn't lose it.
     private static func isBeingWritten(_ url: URL) -> Bool {
         guard let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else {
             return false
@@ -83,21 +83,21 @@ enum LibraryStorage {
         return Date().timeIntervalSince(modified) < 5
     }
 
-    /// Cartella Documents locale della sandbox. È quella che iOS espone in Files e nella tab
-    /// "File" del Finder grazie a `UIFileSharingEnabled`, quindi è dove atterrano i fumetti
-    /// trascinati dal Mac con il device collegato via USB. Coincide con `rootFolderURL()` solo
-    /// quando iCloud Drive non è disponibile: con iCloud attivo la libreria vive nel container
-    /// ubiquity, e senza `adoptFilesDroppedInLocalDocuments()` i file trascinati resterebbero
-    /// qui senza mai comparire in libreria.
+    /// The sandbox's local Documents folder. This is what iOS exposes in Files and in the
+    /// "Files" tab of Finder thanks to `UIFileSharingEnabled`, so it's where comics dragged
+    /// from the Mac with the device connected via USB land. It coincides with `rootFolderURL()` only
+    /// when iCloud Drive isn't available: with iCloud active the library lives in the
+    /// ubiquity container, and without `adoptFilesDroppedInLocalDocuments()` dragged files would stay
+    /// here without ever appearing in the library.
     static var localDocumentsURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
 
-    /// Porta nella libreria i fumetti lasciati nella Documents locale e restituisce i loro
-    /// percorsi relativi alla root, pronti per la registrazione in Core Data. Se la libreria è
-    /// già quella cartella (niente iCloud) non sposta niente e li elenca dov'erano.
-    /// Non cancella e non registra nulla: la deduplica contro la libreria esistente spetta al
-    /// chiamante, che sa cosa c'è già in Core Data.
+    /// Brings into the library the comics left in the local Documents folder and returns their
+    /// paths relative to the root, ready for registration in Core Data. If the library is
+    /// already that folder (no iCloud) it moves nothing and lists them where they were.
+    /// It doesn't delete or register anything: deduplication against the existing library is
+    /// up to the caller, which knows what's already in Core Data.
     static func adoptFilesDroppedInLocalDocuments() -> [String] {
         let inbox = localDocumentsURL
         let root = rootFolderURL()
@@ -125,8 +125,8 @@ enum LibraryStorage {
         rootFolderURL().appendingPathComponent(relativePath)
     }
 
-    /// Copia un file scelto dall'utente (via file importer / document picker) nella libreria,
-    /// gestendo eventuali nomi duplicati, e restituisce il percorso relativo salvato nel modello.
+    /// Copies a file chosen by the user (via file importer / document picker) into the library,
+    /// handling any duplicate names, and returns the relative path saved in the model.
     static func importFile(from sourceURL: URL) throws -> String {
         let needsSecurityScope = sourceURL.startAccessingSecurityScopedResource()
         defer {
@@ -144,9 +144,9 @@ enum LibraryStorage {
         try? FileManager.default.removeItem(at: url)
     }
 
-    /// Su un secondo dispositivo un file nella libreria iCloud può essere solo un
-    /// placeholder non ancora scaricato: lo richiede e attende (bloccando, va quindi
-    /// chiamata fuori dal thread principale) prima che venga aperto come archivio.
+    /// On a second device a file in the iCloud library can be only a
+    /// placeholder not yet downloaded: this requests it and waits (blocking, so it must be
+    /// called off the main thread) before it's opened as an archive.
     static func ensureDownloaded(_ url: URL, timeout: TimeInterval = 30) throws {
         guard FileManager.default.isUbiquitousItem(at: url) else { return }
 
@@ -166,18 +166,18 @@ enum LibraryStorage {
         throw ComicReadError.notDownloaded
     }
 
-    /// Vero se `url` è un fumetto iCloud i cui byte non sono ancora tutti in locale
-    /// (placeholder non scaricato). Usata in libreria per mostrare un badge "da scaricare".
+    /// True if `url` is an iCloud comic whose bytes aren't all local yet
+    /// (undownloaded placeholder). Used in the library to show a "to download" badge.
     static func isPendingDownload(_ url: URL) -> Bool {
         guard FileManager.default.isUbiquitousItem(at: url) else { return false }
         let status = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]).ubiquitousItemDownloadingStatus
         return status != .current
     }
 
-    /// Come `ensureDownloaded`, ma senza timeout fisso: riporta la percentuale reale via
-    /// `onProgress` (0...1), tramite `NSMetadataQuery` — le resourceValues su `URL` da sole non
-    /// espongono l'avanzamento byte-per-byte su iOS, solo lo stato (scaricato o no).
-    /// `isCancelled` viene controllato periodicamente per permettere l'annullamento manuale.
+    /// Like `ensureDownloaded`, but without a fixed timeout: reports the real percentage via
+    /// `onProgress` (0...1), through `NSMetadataQuery` — resourceValues on `URL` alone don't
+    /// expose byte-by-byte progress on iOS, only the status (downloaded or not).
+    /// `isCancelled` is checked periodically to allow manual cancellation.
     static func downloadIfNeeded(
         _ url: URL,
         isCancelled: @escaping () -> Bool = { false },
@@ -205,9 +205,9 @@ enum LibraryStorage {
         if let downloadError = downloadError { throw downloadError }
     }
 
-    /// Include o esclude la cartella della libreria dai backup di iCloud/iTunes. Rilevante solo
-    /// quando si ricade sulla cartella locale (senza iCloud Drive attivo, quella iCloud è già
-    /// gestita dalla sincronizzazione stessa).
+    /// Includes or excludes the library folder from iCloud/iTunes backups. Relevant only
+    /// when falling back to the local folder (without iCloud Drive active; the iCloud one is already
+    /// handled by sync itself).
     static func setExcludedFromBackup(_ excluded: Bool) {
         var url = rootFolderURL()
         var resourceValues = URLResourceValues()
@@ -216,10 +216,10 @@ enum LibraryStorage {
     }
 }
 
-/// Segue l'avanzamento di un singolo download iCloud con `NSMetadataQuery` (l'unica API che
-/// espone la percentuale byte-per-byte, non solo lo stato "scaricato/non scaricato").
-/// `NSMetadataQuery` consegna i suoi aggiornamenti sulla coda impostata in `operationQueue`
-/// (qui `.main`): va quindi avviata/fermata dal thread principale.
+/// Tracks the progress of a single iCloud download with `NSMetadataQuery` (the only API that
+/// exposes byte-by-byte percentage, not just the "downloaded/not downloaded" status).
+/// `NSMetadataQuery` delivers its updates on the queue set in `operationQueue`
+/// (here `.main`): it must therefore be started/stopped from the main thread.
 private final class UbiquitousDownloadObserver: NSObject {
     private let query = NSMetadataQuery()
     private let url: URL
@@ -244,9 +244,9 @@ private final class UbiquitousDownloadObserver: NSObject {
 
     func stop() {
         query.stop()
-        // Rimozione mirata invece di `removeObserver(self)`: questa classe osserva solo la
-        // propria query, e la rimozione in blocco cancellerebbe anche eventuali altre
-        // osservazioni registrate altrove sullo stesso oggetto.
+        // Targeted removal instead of `removeObserver(self)`: this class only observes
+        // its own query, and a blanket removal would also cancel any other
+        // observations registered elsewhere on the same object.
         NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidUpdate, object: query)
         NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidFinishGathering, object: query)
     }

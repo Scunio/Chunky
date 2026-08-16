@@ -26,9 +26,9 @@ struct ParentalLockSettingsView: View {
     }
 }
 
-/// Contenuto del blocco genitori senza `Form` propria, per poterlo incorporare in una `Form`
-/// più ampia (es. la tab "Blocco genitori" delle Preferenze Mac) oltre che mostrarlo da solo
-/// dietro `NavigationLink` su iOS (`ParentalLockSettingsView` sopra).
+/// Content of the parental lock without its own `Form`, so it can be embedded in a larger
+/// `Form` (e.g. the "Parental Lock" tab in the Mac Preferences) as well as being shown on its
+/// own behind a `NavigationLink` on iOS (`ParentalLockSettingsView` above).
 struct ParentalLockSections: View {
     @ObservedObject private var lock = ParentalLock.shared
     @AppStorage("parentalLockAutoLockTrigger") private var autoLockTriggerRawValue = ParentalAutoLockTrigger.doNothing.rawValue

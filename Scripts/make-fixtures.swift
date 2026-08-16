@@ -1,12 +1,12 @@
 #!/usr/bin/env swift
-// Genera le immagini e il PDF usati come fixture dei test.
+// Generates the images and PDF used as test fixtures.
 //
-// Le fixture sono committate, non generate a ogni run: `Unrar.swift` sa solo decomprimere e
-// non esiste un compressore RAR utilizzabile in CI, quindi il .cbr va comunque versionato.
-// Avere metà fixture generate e metà committate significherebbe due fonti di verità.
-// Questo script serve a rigenerarle in modo riproducibile, e documenta come sono fatte.
+// The fixtures are committed, not generated on every run: `Unrar.swift` only knows how to
+// decompress, and there's no usable RAR compressor in CI, so the .cbr has to be versioned
+// anyway. Having half generated and half committed fixtures would mean two sources of truth.
+// This script exists to regenerate them reproducibly, and documents how they're made.
 //
-// Uso: swift Scripts/make-fixtures.swift <cartella-output>
+// Usage: swift Scripts/make-fixtures.swift <output-folder>
 
 import CoreGraphics
 import Foundation
@@ -18,9 +18,9 @@ try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories
 
 let rgb = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
 
-/// I colori vanno creati NELLO spazio del contesto. `CGColor(red:green:blue:alpha:)` crea il
-/// colore in generic RGB, e la conversione verso sRGB sposta le componenti (un rosso puro
-/// diventa ~rgb(255, 38, 0)): le fixture non conterrebbero i colori che dichiarano.
+/// Colors must be created IN the context's space. `CGColor(red:green:blue:alpha:)` creates the
+/// color in generic RGB, and the conversion to sRGB shifts the components (a pure red
+/// becomes ~rgb(255, 38, 0)): the fixtures wouldn't contain the colors they claim to.
 func color(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) -> CGColor {
     CGColor(colorSpace: rgb, components: [r, g, b, 1])!
 }
@@ -30,8 +30,8 @@ func makeContext(_ size: Int) -> CGContext {
               space: rgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
 }
 
-/// PNG 8×8 di tinta unita: il colore identifica la pagina, così un test può verificare
-/// non solo che l'immagine esista ma che sia *quella giusta* nell'ordine giusto.
+/// Solid-color 8×8 PNG: the color identifies the page, so a test can verify
+/// not just that the image exists but that it's the *right one* in the right order.
 func writePNG(named name: String, red: CGFloat, green: CGFloat, blue: CGFloat) {
     let ctx = makeContext(8)
     ctx.setFillColor(color(red, green, blue))
@@ -47,20 +47,20 @@ writePNG(named: "page_0001.png", red: 1, green: 0, blue: 0)
 writePNG(named: "page_0002.png", red: 0, green: 1, blue: 0)
 writePNG(named: "page_0003.png", red: 0, green: 0, blue: 1)
 
-/// PDF di 2 pagine con un quadrante colorato in ALTO A SINISTRA e il resto bianco.
-/// L'asimmetria è il punto: un rendering capovolto verticalmente mette il colore in basso,
-/// ed è esattamente il bug che il ramo macOS di PDFPageProvider aveva.
+/// 2-page PDF with a colored quadrant in the TOP LEFT and the rest white.
+/// The asymmetry is the point: a rendering flipped vertically puts the color at the bottom,
+/// which is exactly the bug the macOS branch of PDFPageProvider had.
 func writePDF(named name: String) {
     let url = outDir.appendingPathComponent(name) as CFURL
     var mediaBox = CGRect(x: 0, y: 0, width: 100, height: 200)
     let ctx = CGContext(url, mediaBox: &mediaBox, nil)!
-    // Colore diverso per pagina, così un test può anche verificare l'indice di pagina.
+    // Different color per page, so a test can also verify the page index.
     for (index, pageColor) in [color(1, 0, 0), color(0, 0, 1)].enumerated() {
         ctx.beginPDFPage(nil)
         ctx.setFillColor(color(1, 1, 1))
         ctx.fill(mediaBox)
         ctx.setFillColor(pageColor)
-        // In spazio PDF la y cresce verso l'alto: la metà superiore è il quadrante "in alto".
+        // In PDF space y grows upward: the upper half is the "top" quadrant.
         ctx.fill(CGRect(x: 0, y: mediaBox.height / 2, width: mediaBox.width / 2, height: mediaBox.height / 2))
         ctx.endPDFPage()
         _ = index

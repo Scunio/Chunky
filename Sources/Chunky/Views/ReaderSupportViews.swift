@@ -4,51 +4,52 @@ import AppKit
 #endif
 
 #if os(iOS)
-/// Zone di tap per cambiare pagina: due terzi laterali (avanti/indietro) e una fascia centrale
-/// per mostrare/nascondere i controlli, oppure — in modalità "una mano" — l'intero lato
-/// sinistro/destro (senza fascia centrale, per restare comodi col pollice a schermo intero).
+/// Tap zones to change page: two side thirds (forward/back) and a central band to show/hide
+/// the controls, or — in "one-handed" mode — the whole left/right side (no central band, to
+/// stay comfortable with the thumb across the full screen).
 ///
-/// Non tre `Color.clear` sovrapposte al contenuto con `.contentShape` + `simultaneousGesture`
-/// (versione precedente): per l'hit-testing di UIKit, chi sta sopra in un ZStack vince sempre il
-/// tocco iniziale, a prescindere da `simultaneousGesture` — che arbitra fra gesture SwiftUI sulla
-/// stessa view, non fa passare i tocchi a un `UIViewRepresentable` fratello sottostante (il pager,
-/// lo scroll view dello zoom). Verificato dal vivo con log su `touchesBegan`: zero tocchi
-/// arrivavano al contenuto vero, nemmeno un tap semplice.
+/// Not three `Color.clear` overlaid on the content with `.contentShape` +
+/// `simultaneousGesture` (previous version): for UIKit's hit-testing, whoever is on top in a
+/// ZStack always wins the initial touch, regardless of `simultaneousGesture` — which arbitrates
+/// between SwiftUI gestures on the same view, it doesn't pass touches through to a sibling
+/// `UIViewRepresentable` underneath (the pager, the zoom scroll view). Verified live with logs
+/// on `touchesBegan`: zero touches reached the real content, not even a simple tap.
 ///
-/// Qui invece — come fa `ReaderViewController.handleTap` in Aidoku
-/// (github.com/Aidoku/Aidoku/blob/main/iOS/UI/Reader/ReaderViewController.swift) — un solo
-/// `UITapGestureRecognizer`, e la zona toccata (sinistra/centro/destra/angoli) si calcola dalle
-/// coordinate del tocco invece di avere una view per zona. Agganciato alla `window` anziché a
-/// questa view (`hitTest` sempre `nil`, mai in cima all'hit-test): la `window` è antenata di
-/// qualunque vista colpita dall'hit-test, quindi riceve comunque il tocco — stessa tecnica già
-/// usata per la luminosità a due dita e per pinch/pan/doppio-tap in `ZoomableImageView`.
+/// Here instead — as `ReaderViewController.handleTap` does in Aidoku
+/// (github.com/Aidoku/Aidoku/blob/main/iOS/UI/Reader/ReaderViewController.swift) — there's a
+/// single `UITapGestureRecognizer`, and the touched zone (left/center/right/corners) is
+/// computed from the touch coordinates instead of having one view per zone. Hooked onto the
+/// `window` rather than this view (`hitTest` always `nil`, never on top of the hit-test): the
+/// `window` is an ancestor of whatever view gets hit by the hit-test, so it receives the touch
+/// regardless — the same technique already used for two-finger brightness and for
+/// pinch/pan/double-tap in `ZoomableImageView`.
 ///
-/// Le etichette di accessibilità restano SwiftUI (`allowsHitTesting(false)`, così non
-/// interferiscono con l'hit-test): VoiceOver naviga l'albero delle view indipendentemente
-/// dall'hit-test dei tocchi normali.
+/// The accessibility labels stay SwiftUI (`allowsHitTesting(false)`, so they don't interfere
+/// with the hit-test): VoiceOver navigates the view tree independently of normal touch
+/// hit-testing.
 struct PageTapZones: View {
     let oneHanded: Bool
-    /// In modalità "una mano", scambia quale lato (sinistro/destro) avanza e quale
-    /// retrocede: comodo per adattarsi a mano destra/sinistra o a come si tiene il telefono.
+    /// In "one-handed" mode, swaps which side (left/right) goes forward and which goes
+    /// back: handy to adapt to right/left hand or to how the phone is held.
     let oneHandedReversed: Bool
     let hotCorners: Bool
-    /// Senza zone (tap page-turn disattivato): qualunque tocco mostra/nasconde i controlli,
-    /// come nell'app originale.
+    /// With no zones (tap page-turn disabled): any touch shows/hides the controls, as in
+    /// the original app.
     let zonesEnabled: Bool
-    /// Nei manga il lato sinistro è quello che *avanza*: serve solo alle etichette di
-    /// accessibilità, perché l'inversione vera del verso avviene già in `step`.
+    /// In manga the left side is the one that *advances*: only needed for the
+    /// accessibility labels, since the actual direction reversal already happens in `step`.
     let rightToLeft: Bool
-    /// Altezza delle barre dei controlli quando sono visibili, in alto e in basso: dentro
-    /// quelle fasce il tocco appartiene ai controlli, non alle zone di pagina. Senza questo un
-    /// tocco sulla parte vuota della barra (a destra o a sinistra del titolo) cadeva nella zona
-    /// laterale sottostante e faceva avanzare o retrocedere il fumetto.
+    /// Height of the control bars when visible, at the top and bottom: within those bands
+    /// the touch belongs to the controls, not to the page zones. Without this, a touch on
+    /// the empty part of the bar (to the right or left of the title) fell into the side
+    /// zone underneath and advanced or went back a page in the comic.
     var topInset: CGFloat = 0
     var bottomInset: CGFloat = 0
     let onPrevious: () -> Void
     let onNext: () -> Void
     let onToggleControls: () -> Void
-    /// Angoli attivi con "Hot corners": in alto a sinistra esce dalla lettura, in alto a
-    /// destra apre le impostazioni, in basso a destra alterna la doppia pagina.
+    /// Active corners with "Hot corners": top left exits the reader, top right opens
+    /// settings, bottom right toggles double page.
     let onExit: () -> Void
     let onOpenSettings: () -> Void
     let onToggleDoublePage: () -> Void
@@ -72,8 +73,8 @@ struct PageTapZones: View {
         .overlay(accessibilityOverlay)
     }
 
-    /// Solo etichette/azioni per VoiceOver, invisibili ai tocchi normali: le vere zone (con le
-    /// stesse dimensioni, vedi `PageTapZoneGeometry`) le calcola `TapZoneRelay`.
+    /// Only labels/actions for VoiceOver, invisible to normal touches: the real zones (with
+    /// the same dimensions, see `PageTapZoneGeometry`) are computed by `TapZoneRelay`.
     @ViewBuilder
     private var accessibilityOverlay: some View {
         if zonesEnabled {
@@ -92,11 +93,11 @@ struct PageTapZones: View {
                                 y: proxy.size.height - PageTapZoneGeometry.cornerSize / 2
                             )
                     }
-                    // Le larghezze qui devono rispecchiare quelle usate da `TapZoneRelay` per il
-                    // vero hit-testing (vedi `PageTapZoneGeometry.action`): in one-handed i due
-                    // lati fanno la stessa azione (nessuna asimmetria); altrimenti la zona larga
-                    // segue quale lato è "avanti" nell'ordine di lettura — a destra normalmente,
-                    // a sinistra con lettura RTL.
+                    // The widths here must mirror the ones used by `TapZoneRelay` for the
+                    // real hit-testing (see `PageTapZoneGeometry.action`): in one-handed
+                    // mode the two sides do the same action (no asymmetry); otherwise the
+                    // wide zone follows whichever side is "forward" in reading order — on
+                    // the right normally, on the left with RTL reading.
                     let leftWidth = oneHanded
                         ? PageTapZoneGeometry.oneHandedSideWidth(for: proxy.size.width)
                         : (rightToLeft ? PageTapZoneGeometry.forwardSideWidth(for: proxy.size.width) : PageTapZoneGeometry.backSideWidth(for: proxy.size.width))
@@ -121,8 +122,8 @@ struct PageTapZones: View {
     }
 
     private var sharedAction: () -> Void { oneHandedReversed ? onPrevious : onNext }
-    /// `onPrevious`/`onNext` sono la zona sinistra e quella destra: nei manga la sinistra è
-    /// quella che manda avanti, quindi le etichette vanno scambiate.
+    /// `onPrevious`/`onNext` are the left zone and the right one: in manga the left is the
+    /// one that moves forward, so the labels must be swapped.
     private var previousLabel: String { rightToLeft ? "Pagina successiva" : "Pagina precedente" }
     private var nextLabel: String { rightToLeft ? "Pagina precedente" : "Pagina successiva" }
     private var sharedLabel: String { oneHandedReversed ? previousLabel : nextLabel }
@@ -138,31 +139,31 @@ struct PageTapZones: View {
     }
 }
 
-/// Geometria delle zone, condivisa fra `TapZoneRelay` (che decide l'azione da un tocco reale) e
-/// l'overlay di accessibilità di `PageTapZones` (che deve posizionare gli stessi rettangoli):
-/// un'unica fonte di verità, altrimenti VoiceOver e il tocco reale rischiano di disallinearsi.
+/// Zone geometry, shared between `TapZoneRelay` (which decides the action from a real touch)
+/// and `PageTapZones`'s accessibility overlay (which must position the same rectangles): a
+/// single source of truth, otherwise VoiceOver and the real touch risk getting out of sync.
 private enum PageTapZoneGeometry {
     static let cornerSize: CGFloat = 88
 
-    /// Zona "indietro": più stretta, come nei reader Kindle-style — si torna indietro molto
-    /// meno spesso di quanto si avanzi, quindi una zona larga qui aumenta solo i tocchi
-    /// accidentali che tornano alla pagina precedente invece di aprire i controlli.
+    /// "Back" zone: narrower, as in Kindle-style readers — you go back far less often than
+    /// you go forward, so a wide zone here only increases accidental touches that return to
+    /// the previous page instead of opening the controls.
     static func backSideWidth(for totalWidth: CGFloat) -> CGFloat {
         min(totalWidth * 0.11, 55)
     }
 
-    /// Zona "avanti": più larga della zona indietro, per lo stesso motivo al contrario. Lo
-    /// stesso tetto (90pt) di prima dell'asimmetria, non più largo: verificato dal vivo che un
-    /// tetto più alto (120pt) arriva a coprire il bottone "···" della toolbar in alto, che senza
-    /// `hotCorners` attivo non ha un'esclusione verticale — un tocco lì avanzava anche la pagina.
+    /// "Forward" zone: wider than the back zone, for the same reason in reverse. The same
+    /// cap (90pt) as before the asymmetry, not any wider: verified live that a higher cap
+    /// (120pt) ends up covering the "···" button on the top toolbar, which without
+    /// `hotCorners` active has no vertical exclusion — a touch there also advanced the page.
     static func forwardSideWidth(for totalWidth: CGFloat) -> CGFloat {
         min(totalWidth * 0.18, 90)
     }
 
-    /// Modalità "una mano": entrambi i lati fanno la stessa azione (vedi `sharedAction` in
-    /// `PageTapZones`), quindi l'asimmetria avanti/indietro non ha senso qui — un lato non è
-    /// "più avanti" dell'altro, sono la stessa identica azione duplicata per comodità del
-    /// pollice. Larghezza fissa, come prima dell'introduzione delle zone asimmetriche.
+    /// "One-handed" mode: both sides do the same action (see `sharedAction` in
+    /// `PageTapZones`), so the forward/back asymmetry doesn't make sense here — one side
+    /// isn't "more forward" than the other, they're the exact same action duplicated for
+    /// thumb convenience. Fixed width, as before the asymmetric zones were introduced.
     static func oneHandedSideWidth(for totalWidth: CGFloat) -> CGFloat {
         min(totalWidth * 0.18, 90)
     }
@@ -171,16 +172,16 @@ private enum PageTapZoneGeometry {
         case previous, next, toggleControls, exit, openSettings, toggleDoublePage
     }
 
-    /// Le impostazioni che decidono la mappa delle zone, raccolte insieme: viaggiano sempre
-    /// tutte assieme dal lettore fino a `action(at:in:options:)`, e passarle una per una
-    /// significava solo sette parametri posizionali facili da scambiare fra loro.
+    /// The settings that decide the zone map, gathered together: they always travel all
+    /// together from the reader down to `action(at:in:options:)`, and passing them one by
+    /// one just meant seven positional parameters easy to mix up with each other.
     struct Options {
         var oneHanded: Bool
         var oneHandedReversed: Bool
         var rightToLeft: Bool
         var hotCorners: Bool
         var zonesEnabled: Bool
-        /// Fasce occupate dalle barre dei controlli quando sono visibili — vedi
+        /// Bands occupied by the control bars when visible — see
         /// `PageTapZones.topInset`.
         var topInset: CGFloat = 0
         var bottomInset: CGFloat = 0
@@ -193,9 +194,9 @@ private enum PageTapZoneGeometry {
         let hotCorners = options.hotCorners
         let zonesEnabled = options.zonesEnabled
         guard size.width > 0, size.height > 0 else { return nil }
-        // Fasce dei controlli: il tocco è dei controlli (o non è di nessuno, se cade sul vuoto
-        // della barra), mai delle zone di pagina. Prima degli angoli attivi, che altrimenti
-        // resterebbero sotto la barra superiore.
+        // Control bands: the touch belongs to the controls (or to no one, if it falls on the
+        // empty part of the bar), never to the page zones. Before the active corners, which
+        // would otherwise end up underneath the top bar.
         if point.y < options.topInset || point.y > size.height - options.bottomInset { return nil }
         guard zonesEnabled else { return .toggleControls }
 
@@ -209,8 +210,8 @@ private enum PageTapZoneGeometry {
         guard point.y >= verticalInset, point.y <= size.height - verticalInset else { return nil }
 
         if oneHanded {
-            // I due lati chiamano la stessa closure (vedi `sharedAction`): non c'è un lato
-            // "avanti" e uno "indietro" da rendere asimmetrici, sono la stessa azione.
+            // Both sides call the same closure (see `sharedAction`): there's no "forward"
+            // side and "back" side to make asymmetric, they're the same action.
             let sideWidth = oneHandedSideWidth(for: size.width)
             let sharedAction: Action = oneHandedReversed ? .previous : .next
             if point.x <= sideWidth { return sharedAction }
@@ -218,10 +219,11 @@ private enum PageTapZoneGeometry {
             return .toggleControls
         }
 
-        // `onPrevious`/`onNext` sono legate a sinistra/destra a prescindere da `rightToLeft`
-        // (chi le implementa, `ReaderPagination.step`, inverte già la direzione per i manga) —
-        // qui cambia solo QUALE lato è "avanti" nell'ordine di lettura, e quindi quale prende
-        // la zona larga: a destra normalmente, a sinistra quando la lettura è RTL.
+        // `onPrevious`/`onNext` are tied to left/right regardless of `rightToLeft` (whoever
+        // implements them, `ReaderPagination.step`, already reverses the direction for
+        // manga) — here only WHICH side is "forward" in reading order changes, and
+        // therefore which one gets the wide zone: on the right normally, on the left when
+        // reading is RTL.
         let leftWidth = rightToLeft ? forwardSideWidth(for: size.width) : backSideWidth(for: size.width)
         let rightWidth = rightToLeft ? backSideWidth(for: size.width) : forwardSideWidth(for: size.width)
 
@@ -274,9 +276,9 @@ private struct TapZoneRelay: UIViewRepresentable {
         context.coordinator.onToggleDoublePage = onToggleDoublePage
     }
 
-    /// Non intercetta mai l'hit-testing (vedi il commento su `PageTapZones` sopra): il suo
-    /// recognizer, agganciato alla window in `didMoveToWindow`, riceve comunque ogni tocco
-    /// perché la window è antenata di qualunque vista colpita dall'hit-test.
+    /// Never intercepts hit-testing (see the comment on `PageTapZones` above): its
+    /// recognizer, hooked onto the window in `didMoveToWindow`, receives every touch anyway
+    /// because the window is an ancestor of whatever view gets hit by the hit-test.
     final class RelayView: UIView {
         weak var coordinator: Coordinator?
         private weak var recognizer: UITapGestureRecognizer?
@@ -356,30 +358,29 @@ private struct TapZoneRelay: UIViewRepresentable {
     }
 }
 #else
-/// Zone di tap/click per cambiare pagina: due terzi laterali (avanti/indietro) e una fascia
-/// centrale per mostrare/nascondere i controlli, oppure — in modalità "una mano" — l'intero
-/// lato sinistro/destro.
+/// Tap/click zones to change page: two side thirds (forward/back) and a central band to
+/// show/hide the controls, or — in "one-handed" mode — the whole left/right side.
 ///
-/// Qui restano tre `Color.clear` con `.contentShape` + `simultaneousGesture`: il problema di
-/// hit-testing per cui la versione iOS è stata riscritta (vedi sopra) nasce dalla competizione
-/// con `TabView(.page)`/`UIPageViewController` e con lo `UIScrollView` di zoom di
-/// `ZoomableImageView` — nessuno dei due esiste su macOS, dove il pager non è a scorrimento
-/// touch e lo zoom di `PageView` resta sul `MagnificationGesture` SwiftUI nella stessa
-/// gerarchia. Non c'è quindi lo stesso motivo per abbandonare l'approccio semplice.
+/// Here three `Color.clear` with `.contentShape` + `simultaneousGesture` remain: the
+/// hit-testing problem for which the iOS version was rewritten (see above) arises from the
+/// competition with `TabView(.page)`/`UIPageViewController` and with the zoom
+/// `UIScrollView` of `ZoomableImageView` — neither exists on macOS, where the pager isn't
+/// touch-scrolled and `PageView`'s zoom stays on SwiftUI's `MagnificationGesture` within the
+/// same hierarchy. So there's no equivalent reason to abandon the simple approach.
 struct PageTapZones: View {
     let oneHanded: Bool
-    /// In modalità "una mano", scambia quale lato (sinistro/destro) avanza e quale
-    /// retrocede: comodo per adattarsi a mano destra/sinistra o a come si tiene il telefono.
+    /// In "one-handed" mode, swaps which side (left/right) goes forward and which goes
+    /// back: handy to adapt to right/left hand or to how the phone is held.
     let oneHandedReversed: Bool
     let hotCorners: Bool
-    /// Nei manga il lato sinistro è quello che *avanza*: serve solo alle etichette di
-    /// accessibilità, perché l'inversione vera del verso avviene già in `step`.
+    /// In manga the left side is the one that *advances*: only needed for the
+    /// accessibility labels, since the actual direction reversal already happens in `step`.
     let rightToLeft: Bool
     let onPrevious: () -> Void
     let onNext: () -> Void
     let onToggleControls: () -> Void
-    /// Angoli attivi con "Hot corners": in alto a sinistra esce dalla lettura, in alto a
-    /// destra apre le impostazioni, in basso a destra alterna la doppia pagina.
+    /// Active corners with "Hot corners": top left exits the reader, top right opens
+    /// settings, bottom right toggles double page.
     let onExit: () -> Void
     let onOpenSettings: () -> Void
     let onToggleDoublePage: () -> Void
@@ -387,8 +388,8 @@ struct PageTapZones: View {
     var body: some View {
         GeometryReader { proxy in
             if hotCorners {
-                // Righe non sovrapposte (anziché uno ZStack): due zone di tap che si sovrappongono
-                // userebbero entrambe simultaneousGesture e scatterebbero insieme sullo stesso tocco.
+                // Non-overlapping rows (rather than a ZStack): two overlapping tap zones
+                // would both use simultaneousGesture and would both fire on the same touch.
                 VStack(spacing: 0) {
                     HStack {
                         zone(label: "Esci dalla lettura", action: onExit)
@@ -413,9 +414,9 @@ struct PageTapZones: View {
     @ViewBuilder
     private func mainZones(proxy: GeometryProxy) -> some View {
         if oneHanded {
-            // Sinistra e destra fanno la stessa azione (il pollice non deve mirare al bordo
-            // esatto): quale, lo sceglie oneHandedReversed. Fascia centrale per i controlli,
-            // come in modalità normale.
+            // Left and right do the same action (the thumb doesn't need to aim at the exact
+            // edge): which one, oneHandedReversed decides. Central band for the controls,
+            // as in normal mode.
             let sharedAction = oneHandedReversed ? onPrevious : onNext
             let sharedLabel = oneHandedReversed ? previousLabel : nextLabel
             HStack(spacing: 0) {
@@ -436,16 +437,16 @@ struct PageTapZones: View {
         }
     }
 
-    /// `onPrevious`/`onNext` sono la zona sinistra e quella destra: nei manga la sinistra è
-    /// quella che manda avanti, quindi le etichette vanno scambiate.
+    /// `onPrevious`/`onNext` are the left zone and the right one: in manga the left is the
+    /// one that moves forward, so the labels must be swapped.
     private var previousLabel: String { rightToLeft ? "Pagina successiva" : "Pagina precedente" }
     private var nextLabel: String { rightToLeft ? "Pagina precedente" : "Pagina successiva" }
 
-    /// Etichetta e trait espliciti: la zona è una `Color.clear`, quindi senza questi VoiceOver
-    /// non avrebbe alcun modo di girare pagina (e i test automatici nessun bersaglio).
+    /// Explicit label and trait: the zone is a `Color.clear`, so without these VoiceOver
+    /// would have no way to turn the page (and automated tests no target).
     private func zone(label: String, action: @escaping () -> Void) -> some View {
-        // simultaneousGesture, non .onTapGesture: quest'ultimo reclama il tocco in esclusiva,
-        // impedendo allo swipe sottostante di funzionare del tutto.
+        // simultaneousGesture, not .onTapGesture: the latter claims the touch exclusively,
+        // preventing the underlying swipe from working at all.
         Color.clear
             .contentShape(Rectangle())
             .simultaneousGesture(TapGesture().onEnded(action))
@@ -456,12 +457,13 @@ struct PageTapZones: View {
 #endif
 
 #if os(macOS)
-/// Su Mac non esiste lo swipe a dito: l'equivalente è lo scorrimento orizzontale a due dita sul
-/// trackpad (o la rotella orizzontale del mouse), che SwiftUI non espone — DragGesture su Mac
-/// segue il trascinamento col tasto premuto, non le due dita. Lo leggiamo quindi dagli eventi
-/// scrollWheel, con una soglia e un solo scatto per gesto per non saltare più pagine insieme.
+/// On the Mac there's no finger swipe: the equivalent is horizontal two-finger scrolling on
+/// the trackpad (or the mouse's horizontal wheel), which SwiftUI doesn't expose — Mac's
+/// DragGesture follows a drag with the button held down, not two fingers. We therefore read
+/// it from scrollWheel events, with a threshold and a single trigger per gesture so as not
+/// to skip several pages at once.
 struct ScrollSwipeMonitor: NSViewRepresentable {
-    /// +1 = pagina successiva, -1 = precedente (nel senso di lettura, come lo swipe su iOS).
+    /// +1 = next page, -1 = previous (in reading order, like the swipe on iOS).
     let onSwipe: (Int) -> Void
 
     func makeNSView(context: Context) -> NSView {
@@ -480,9 +482,9 @@ struct ScrollSwipeMonitor: NSViewRepresentable {
         private var accumulated: CGFloat = 0
         private var didFireForCurrentGesture = false
 
-        // Chiamato anche quando la vista *esce* da una finestra: senza le due guardie si
-        // accumulerebbe un monitor a ogni riapertura del lettore, e un solo swipe girerebbe
-        // altrettante pagine.
+        // Also called when the view *leaves* a window: without the two guards, a monitor
+        // would accumulate on every reopening of the reader, and a single swipe would turn
+        // just as many pages.
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             guard window != nil else {
@@ -497,18 +499,19 @@ struct ScrollSwipeMonitor: NSViewRepresentable {
         }
 
         private func handle(_ event: NSEvent) {
-            // Il monitor è di app, non di vista: senza questo filtro reagiremmo anche agli
-            // scorrimenti sopra le impostazioni o un'altra finestra.
+            // The monitor is app-wide, not view-scoped: without this filter we'd also react
+            // to scrolling over settings or another window.
             guard let window = window, event.window === window,
                   bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
-            // L'inerzia dopo il rilascio delle dita è la coda dello stesso gesto: contarla
-            // farebbe girare una seconda pagina da sola.
+            // The inertia after releasing the fingers is the tail of the same gesture:
+            // counting it would turn a second page on its own.
             guard event.momentumPhase == [] else { return }
 
-            // Una rotella del mouse tradizionale (non un trackpad) non manda mai `.began`/
-            // `.ended`: `event.phase` resta sempre vuoto, quindi il reset legato alle fasi
-            // sotto non scatta mai per lei. Va gestita a parte, PRIMA del filtro di dominanza
-            // orizzontale sotto — che comunque la include, essendo solo un ulteriore controllo.
+            // A traditional mouse wheel (not a trackpad) never sends `.began`/`.ended`:
+            // `event.phase` always stays empty, so the phase-based reset below never
+            // triggers for it. It needs to be handled separately, BEFORE the horizontal
+            // dominance filter below — which includes it anyway, being just an additional
+            // check.
             if event.phase.isEmpty {
                 guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return }
                 accumulated += event.scrollingDeltaX
@@ -519,10 +522,10 @@ struct ScrollSwipeMonitor: NSViewRepresentable {
                 return
             }
 
-            // Il reset ai bordi del gesto resta incondizionato rispetto alla dominanza
-            // orizzontale: un frame di inizio/fine gesto verticale deve comunque azzerare lo
-            // stato, altrimenti un gesto successivo può risultare già "consumato" e non girare
-            // pagina.
+            // The reset at the gesture's edges stays unconditional with respect to
+            // horizontal dominance: a vertical gesture start/end frame must still zero out
+            // the state, otherwise a subsequent gesture might come across as already
+            // "consumed" and not turn the page.
             if event.phase.contains(.began) {
                 accumulated = 0
                 didFireForCurrentGesture = false

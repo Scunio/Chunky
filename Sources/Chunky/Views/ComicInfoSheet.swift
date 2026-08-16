@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Scheda informativa del fumetto, raggiungibile dall'icona "info" del reader. Ospita anche
-/// azioni (vai a pagina, preferiti, direzione lettura): su questo target i Menu con contenuti
-/// interattivi si sono dimostrati inaffidabili (vedi ToolsPanelView), quindi qui usiamo una
-/// vera List.
+/// Info sheet for the comic, reachable from the reader's "info" icon. Also hosts
+/// actions (jump to page, favorites, reading direction): on this target, Menus with
+/// interactive content have proven unreliable (see ToolsPanelView), so here we use a
+/// real List instead.
 struct ComicInfoSheet: View {
     @ObservedObject var comic: ComicEntity
     let loadedPageCount: Int?

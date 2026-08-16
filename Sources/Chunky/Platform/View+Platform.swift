@@ -3,24 +3,24 @@ import SwiftUI
 import UIKit
 
 extension UIScreen {
-    /// `UIScreen.main` è deprecato in un mondo multi-scena: la luminosità va letta/scritta
-    /// sullo schermo della scena attiva, non su un main screen implicito.
+    /// `UIScreen.main` is deprecated in a multi-scene world: brightness needs to be read/written
+    /// on the active scene's screen, not on an implicit main screen.
     static var current: UIScreen? {
         (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.screen
     }
 }
 #endif
 
-/// Confine tra le due piattaforme per le presentazioni: le viste di contenuto restano
-/// agnostiche, e chiedono qui "mostrami come si conviene" invece di ramificarsi da sole.
+/// Boundary between the two platforms for presentations: content views stay
+/// agnostic, and ask here "show me the way that's appropriate" instead of branching on their own.
 extension View {
-    /// Un foglio senza dimensioni esplicite resta, su Mac, un modale piccolo e fisso — non
-    /// il pannello a piena altezza che ci si aspetta. Su iOS non serve: il sistema decide già
-    /// bene la dimensione dei fogli.
+    /// A sheet without explicit dimensions stays, on Mac, a small fixed modal — not
+    /// the full-height panel one would expect. Not needed on iOS: the system already
+    /// picks a good size for sheets on its own.
     ///
-    /// La larghezza minima è quella che serve a `ToolsPanelView`/`SettingsView` perché
-    /// un'etichetta come "Colore evidenziazione" non venga tagliata — anche per i form più
-    /// semplici (AddAccountView, ComicInfoSheet), che restano comunque leggibili più larghi.
+    /// The minimum width is the one `ToolsPanelView`/`SettingsView` need so that
+    /// a label like "Highlight Color" doesn't get truncated — even for the simpler
+    /// forms (AddAccountView, ComicInfoSheet), which stay readable when wider too.
     func sheetSized() -> some View {
         #if os(macOS)
         self.frame(minWidth: 640, idealWidth: 760, minHeight: 480, idealHeight: 680)
@@ -31,9 +31,9 @@ extension View {
 }
 
 extension View {
-    /// Sfondo della schermata di blocco genitori, condiviso da tutte le finestre in cui
-    /// compare (libreria, reader, Preferenze su Mac). Deve restare OPACO: un materiale
-    /// traslucido lascerebbe intravedere il contenuto che dovrebbe nascondere.
+    /// Background of the parental lock screen, shared by all the windows it
+    /// appears in (library, reader, Preferences on Mac). Must stay OPAQUE: a translucent
+    /// material would let the content it's supposed to hide show through.
     func lockScreenBackground() -> some View {
         self.background(.background, ignoresSafeAreaEdges: .all)
     }

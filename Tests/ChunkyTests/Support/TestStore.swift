@@ -2,16 +2,16 @@ import Foundation
 import CoreData
 import Testing
 
-/// Stack Core Data in memoria, indipendente da `PersistenceController` (che usa
-/// `NSPersistentCloudKitContainer` e quindi vorrebbe gli entitlement iCloud). Il modello si
-/// prende dal bundle dei test, dove il target compila anche le risorse dell'app.
+/// In-memory Core Data stack, independent of `PersistenceController` (which uses
+/// `NSPersistentCloudKitContainer` and would therefore want the iCloud entitlements). The
+/// model is taken from the test bundle, where the target also builds the app's resources.
 ///
-/// Condiviso fra i suite proprio per la cache qui sotto: due copie private caricherebbero il
-/// modello due volte.
+/// Shared across suites precisely because of the cache below: two private copies would load
+/// the model twice.
 enum TestStore {
-    /// Una sola istanza del modello per tutto il processo: caricarlo una volta per contesto
-    /// registra più `NSEntityDescription` per la stessa classe, e Core Data lo segnala con
-    /// "Failed to find a unique match for an NSEntityDescription to a managed object subclass".
+    /// A single instance of the model for the whole process: loading it once per context
+    /// registers multiple `NSEntityDescription`s for the same class, and Core Data flags it
+    /// with "Failed to find a unique match for an NSEntityDescription to a managed object subclass".
     nonisolated(unsafe) private static var cachedModel: NSManagedObjectModel?
 
     private static func model() throws -> NSManagedObjectModel {

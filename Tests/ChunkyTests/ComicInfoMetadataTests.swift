@@ -30,8 +30,8 @@ struct ComicInfoMetadataTests {
         #expect(ComicInfoMetadata.parse(from: Data("non è xml".utf8)) == nil)
     }
 
-    /// Un ComicInfo valido ma senza nessuno dei tre campi non deve produrre metadati "vuoti":
-    /// altrimenti l'import salterebbe la derivazione del nome serie dal titolo del file.
+    /// A valid ComicInfo that has none of the three fields must not produce "empty" metadata:
+    /// otherwise the import would skip deriving the series name from the file title.
     @Test("Un ComicInfo senza campi utili restituisce nil")
     func rejectsEmptyComicInfo() {
         let xml = Data("<?xml version=\"1.0\"?><ComicInfo><Publisher>Panini</Publisher></ComicInfo>".utf8)
@@ -53,8 +53,8 @@ struct SeriesNameDerivationTests {
         ("Topolino   3595   ", "Topolino"),
         ("Dylan Dog 442", "Dylan Dog"),
         ("Corto Maltese #7", "Corto Maltese"),
-        // Decorazioni di coda dei rilasci scansionati: senza toglierle il titolo non finisce
-        // con un numero e il fumetto resterebbe in "Altri fumetti".
+        // Trailing decorations found on scanned releases: without stripping them the title
+        // wouldn't end with a number and the comic would stay in "Other comics".
         ("Topolino 3652 (Panini 2025-11-19) [c2c CPPT Edition] 1.0", "Topolino"),
         ("Topolino 3653 (Panini 2025-11-26) [c2c CPPT Edition] 1.1 (corrette pagine doppie)", "Topolino"),
         ("Topolino 3636 + Cover Abbonati", "Topolino"),
@@ -66,19 +66,19 @@ struct SeriesNameDerivationTests {
     }
 
     @Test("Restituisce nil quando non c'è una serie da dedurre", arguments: [
-        "Batman",          // nessun numero
-        "3595",            // solo un numero: non resta nulla come serie
+        "Batman",          // no number
+        "3595",            // just a number: nothing is left as the series
         "#12",
         "",
-        "Watchmen Vol",    // numero assente
-        "Batman + Robin",  // tolta la coda con "+" non resta nessun numero
-        "(2025)"           // tolta la parentesi non resta niente
+        "Watchmen Vol",    // missing number
+        "Batman + Robin",  // after stripping the "+" tail, no number is left
+        "(2025)"           // after stripping the parenthesis, nothing is left
     ])
     func returnsNil(title: String) {
         #expect(LibraryViewModel.deriveSeriesName(fromFallbackTitle: title) == nil)
     }
 
-    /// Un numero a metà titolo non è un numero di albo: "Fantastici 4" è il nome della serie.
+    /// A number in the middle of the title is not an issue number: "Fantastici 4" is the series name.
     @Test("Non tocca i numeri che non sono in fondo")
     func ignoresMidTitleNumbers() {
         #expect(LibraryViewModel.deriveSeriesName(fromFallbackTitle: "Fantastici 4 contro Doom") == nil)

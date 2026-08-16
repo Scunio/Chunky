@@ -2,8 +2,8 @@ import CoreGraphics
 import Foundation
 import Testing
 
-/// Provider minimale che restituisce testo già digitale (come farebbe un PDF nativo): evita di
-/// dover far girare davvero l'OCR solo per testare persistenza e cancellazione dell'indice.
+/// Minimal provider that returns text that's already digital (as a native PDF would): avoids
+/// having to actually run OCR just to test index persistence and deletion.
 private struct FakeTextProvider: ComicPageProvider {
     let pageCount: Int
     let lines: [[RecognizedTextLine]]
@@ -111,8 +111,8 @@ struct ComicTextIndexTests {
             try await Task.sleep(nanoseconds: 5_000_000)
         }
 
-        // Un nuovo indice per lo stesso identificatore, con un provider che non troverebbe mai
-        // "trovami" da sé: se il risultato compare, viene dal file persistito.
+        // A new index for the same identifier, with a provider that would never find
+        // "trovami" on its own: if the result shows up, it comes from the persisted file.
         let reopened = ComicTextIndex(
             provider: FakeTextProvider(pageCount: 1, lines: [[]]),
             comicIdentifier: identifier

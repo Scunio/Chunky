@@ -36,8 +36,8 @@ struct ChunkyApp: App {
             }
         }
         #if os(macOS)
-        // `.contentMinSize` lascia liberi di ridimensionare oltre il minimo, fissando solo
-        // dimensione minima e iniziale della finestra.
+        // `.contentMinSize` leaves us free to resize beyond the minimum, fixing only the
+        // window's minimum and initial size.
         .defaultSize(width: 1100, height: 720)
         .windowResizability(.contentMinSize)
         .commands { ChunkyCommands() }
@@ -52,45 +52,45 @@ struct ChunkyApp: App {
         }
 
         #if os(macOS)
-        // Una finestra per fumetto: ogni fumetto aperto vive nella propria finestra,
-        // chiudibile e spostabile indipendentemente dalle altre.
+        // One window per comic: each open comic lives in its own window,
+        // closable and movable independently of the others.
         WindowGroup("Fumetto", for: ComicID.self) { $comicID in
             if let comicID {
                 ReaderWindowContainer(comicID: comicID)
                     .environment(\.managedObjectContext, persistenceController.container.viewContext)
-                    // Il reader espone Account/Strumenti dal proprio header: senza questo, la
-                    // finestra reader non è più un .sheet di LibraryView e non eredita più
-                    // l'environmentObject da lì. AccountsView legge @EnvironmentObject
-                    // LibraryViewModel e crasherebbe senza.
+                    // The reader exposes Account/Tools from its own header: without this, the
+                    // reader window is no longer a .sheet of LibraryView and no longer inherits
+                    // the environmentObject from there. AccountsView reads @EnvironmentObject
+                    // LibraryViewModel and would crash without it.
                     .environmentObject(libraryViewModel)
             }
         }
         .defaultSize(width: 900, height: 720)
         .windowResizability(.contentMinSize)
 
-        // ⌘, apre le Preferenze come finestra separata invece che dentro il foglio Tools —
-        // dove restano raggiungibili anche su iOS. Una `Window` invece di `Settings`: quella
-        // scena, con un pannello a sidebar come contenuto, si è rivelata dal vivo bloccata a
-        // una dimensione fissa nonostante `.windowResizability` (né zoom né trascinamento del
-        // bordo avevano effetto) e non offre `.defaultSize` per partire più alta — `Window` fa
-        // entrambe le cose. `CommandGroup(replacing: .appSettings)` in ChunkyCommands tiene
-        // ⌘, e la voce di menu "Impostazioni…" dove un utente Mac se le aspetta.
+        // ⌘, opens Preferences as a separate window instead of inside the Tools sheet —
+        // where they remain reachable on iOS too. A `Window` instead of `Settings`: that
+        // scene, with a sidebar panel as content, turned out in practice to be locked to
+        // a fixed size despite `.windowResizability` (neither zooming nor dragging the
+        // edge had any effect) and doesn't offer `.defaultSize` to start out taller — `Window`
+        // does both. `CommandGroup(replacing: .appSettings)` in ChunkyCommands keeps
+        // ⌘, and the "Settings…" menu item where a Mac user expects them.
         Window("Impostazioni", id: "settings") {
-            // Le Preferenze non devono restare accessibili da sotto il blocco genitori: la
-            // finestra si apre comunque, ma mostra il lucchetto finché non si sblocca.
+            // Preferences must not remain accessible from under the parental lock: the
+            // window still opens, but shows the lock icon until it's unlocked.
             //
-            // Serve lo stesso `.environment` del WindowGroup principale: le sezioni Diagnostica
-            // e Stato iCloud, raggiungibili da qui, leggono `LibraryViewModel` e il
-            // `managedObjectContext` — senza questi la prima crasha e la seconda mostra
-            // sempre zero fumetti.
+            // Needs the same `.environment` as the main WindowGroup: the Diagnostics
+            // and iCloud Status sections, reachable from here, read `LibraryViewModel` and
+            // `managedObjectContext` — without these the first crashes and the second always
+            // shows zero comics.
             Group {
                 if lock.isLocked {
                     ParentalLockGateView()
                         .lockScreenBackground()
                 } else {
-                    // Sidebar di categorie + pannello di dettaglio, come System Settings.app,
-                    // invece dell'unica Form lunga e navigabile di SettingsView (quel pattern
-                    // resta corretto per iOS, dove SettingsView è ancora usata).
+                    // Category sidebar + detail pane, like System Settings.app,
+                    // instead of the single long scrollable Form of SettingsView (that pattern
+                    // is still correct for iOS, where SettingsView is still used).
                     MacSettingsView()
                 }
             }

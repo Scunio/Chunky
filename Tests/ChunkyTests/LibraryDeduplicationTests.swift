@@ -4,8 +4,8 @@ import Testing
 
 @Suite("Deduplica libreria")
 struct LibraryDeduplicationTests {
-    /// I record duplicati nascono con lo stesso `relativePath` (il file su disco è uno solo):
-    /// è quello, non il titolo, il criterio con cui vanno riconosciuti.
+    /// Duplicate records are born with the same `relativePath` (there's only one file on disk):
+    /// that, not the title, is the criterion by which they must be recognized.
     @discardableResult
     private func makeComic(
         in context: NSManagedObjectContext,
@@ -33,8 +33,8 @@ struct LibraryDeduplicationTests {
         try context.fetch(ComicEntity.fetchRequest())
     }
 
-    /// UUID fissi, non casuali: il superstite si sceglie anche in base all'`id`, quindi i test
-    /// devono poter dire quale dei due record si aspettano.
+    /// Fixed UUIDs, not random ones: the survivor is also chosen based on `id`, so the tests
+    /// need to be able to say which of the two records they expect.
     private func uuid(_ string: String) throws -> UUID {
         try #require(UUID(uuidString: string))
     }
@@ -63,8 +63,8 @@ struct LibraryDeduplicationTests {
         #expect(try comics(in: context).count == 2)
     }
 
-    /// Senza la fusione, deduplicare si mangerebbe il progresso fatto sull'altro dispositivo:
-    /// il superstite non è necessariamente quello con cui si è letto di più.
+    /// Without the merge, deduplicating would eat up the progress made on the other device:
+    /// the survivor is not necessarily the one that was read the furthest.
     @Test("Il superstite eredita il progresso più avanzato e la copertina")
     func mergesProgressIntoSurvivor() throws {
         let context = try TestStore.makeContext()
@@ -96,9 +96,9 @@ struct LibraryDeduplicationTests {
         #expect(survivor.dateLastOpened == opened)
     }
 
-    /// iPad e Mac deduplicano ciascuno per conto proprio sugli stessi record sincronizzati: se
-    /// scegliessero superstiti diversi, ognuno cancellerebbe quello tenuto dall'altro e il
-    /// fumetto sparirebbe da entrambi.
+    /// iPad and Mac each deduplicate on their own over the same synced records: if
+    /// they picked different survivors, each would delete the one the other kept, and the
+    /// comic would disappear from both.
     @Test("Il superstite è lo stesso a prescindere dall'ordine di inserimento")
     func picksDeterministicSurvivor() throws {
         let older = try uuid("00000000-0000-0000-0000-0000000000AA")
@@ -119,8 +119,8 @@ struct LibraryDeduplicationTests {
         #expect(try survivorID(insertingNewerFirst: true) == older)
     }
 
-    /// È il guard che rende `registerComic` idempotente: un file già in libreria non va
-    /// registrato una seconda volta.
+    /// This is the guard that makes `registerComic` idempotent: a file already in the library
+    /// shouldn't be registered a second time.
     @Test("Un path già registrato viene riconosciuto")
     func detectsAlreadyRegisteredPath() throws {
         let context = try TestStore.makeContext()
@@ -132,8 +132,8 @@ struct LibraryDeduplicationTests {
         #expect(!viewModel.isRegistered(relativePath: "Topolino 3621.cbz", in: context))
     }
 
-    /// Cancellare un duplicato non deve portarsi via il file: è lo stesso del gemello, che
-    /// resterebbe a puntare nel vuoto e verrebbe poi rimosso dalla scansione successiva.
+    /// Deleting a duplicate must not take the file with it: it's the same file as its twin's,
+    /// which would be left pointing at nothing and would then get removed by the next scan.
     @Test("Il file resta finché un altro record lo referenzia")
     func keepsFileWhileAnotherRecordReferencesIt() throws {
         let context = try TestStore.makeContext()

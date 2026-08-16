@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Radice dell'app. È l'unico punto in cui la navigazione diverge tra le piattaforme:
-/// il resto delle viste non sa su quale sistema sta girando.
+/// Root of the app. It's the only place where navigation diverges between platforms:
+/// the rest of the views don't know which system they're running on.
 struct ContentView: View {
     #if os(macOS)
     @State private var selection: LibrarySelection = .all
@@ -14,36 +14,36 @@ struct ContentView: View {
     @ObservedObject private var tracker = ICloudDownloadTracker.shared
     @AppStorage("icloudSyncFolderEnabled") private var isSyncFolderEnabled = false
 
-    /// Coalesce gli aggiornamenti di `tracker.allRelativePaths`: durante la raccolta iniziale di
-    /// una libreria iCloud non banale, `NSMetadataQuery` pubblica molti aggiornamenti
-    /// incrementali in rapida sequenza — senza attendere che si stabilizzino, ognuno
-    /// rilancerebbe una scansione completa della libreria.
+    /// Coalesces updates to `tracker.allRelativePaths`: during the initial gathering of a
+    /// non-trivial iCloud library, `NSMetadataQuery` publishes many incremental updates
+    /// in rapid succession — without waiting for them to settle, each one
+    /// would trigger a full library rescan.
     @State private var debounceTask: Task<Void, Never>?
-    /// Rete di sicurezza oltre agli aggiornamenti live di `NSMetadataQuery`: nella pratica la
-    /// query non sempre notifica un cambiamento avvenuto mentre l'app era in background, quindi
-    /// un rescan periodico a bassa frequenza copre quel caso senza dipendere dal solo evento.
+    /// Safety net on top of `NSMetadataQuery`'s live updates: in practice the
+    /// query doesn't always notify a change that happened while the app was in the background, so
+    /// a low-frequency periodic rescan covers that case without relying on the event alone.
     @State private var periodicRescanTask: Task<Void, Never>?
-    /// Le modifiche remote di CloudKit arrivano in raffiche di notifiche: come per il tracker,
-    /// una sola passata di deduplica dopo che si sono calmate.
+    /// CloudKit's remote changes arrive in bursts of notifications: as with the tracker,
+    /// a single deduplication pass after they've settled down.
     @State private var deduplicationTask: Task<Void, Never>?
-    /// Stessa logica per i fumetti che finiscono di scaricarsi da iCloud: vedi
+    /// Same logic for comics that finish downloading from iCloud: see
     /// `scheduleDebouncedPlaceholderBackfill`.
     @State private var placeholderBackfillTask: Task<Void, Never>?
 
     var body: some View {
         rootNavigation
-            // Avviata una sola volta per tutta la durata dell'app (la query è inerte se iCloud non
-            // è attivo): fermarla e riavviarla entrando/uscendo dal lettore costringerebbe a una
-            // nuova fase di raccolta ogni volta.
+            // Started only once for the entire lifetime of the app (the query is inert if iCloud
+            // isn't active): stopping and restarting it when entering/leaving the reader would force
+            // a new gathering phase every time.
             .onAppear {
                 ICloudDownloadTracker.shared.start()
                 syncSyncFolderIfNeeded()
                 adoptFilesDroppedInDocuments()
                 viewModel.deduplicateLibrary(context: context)
-                // All'avvio la query dei metadati parte da zero, quindi il suo primo
-                // aggiornamento è sempre una crescita e non innesca nulla: un fumetto scaricato
-                // dall'app File mentre Chunky era chiuso resterebbe senza copertina fino al
-                // download successivo. La passata è un no-op quando non ci sono segnaposto.
+                // At startup the metadata query starts from scratch, so its first
+                // update is always a growth and doesn't trigger anything: a comic downloaded
+                // from the Files app while Chunky was closed would stay without a cover until the
+                // next download. This pass is a no-op when there are no placeholders.
                 viewModel.backfillPlaceholderMetadata(context: context)
                 startPeriodicRescan()
             }
@@ -53,22 +53,22 @@ struct ContentView: View {
                 deduplicationTask?.cancel()
                 placeholderBackfillTask?.cancel()
             }
-            // I duplicati non nascono solo qui: l'altro dispositivo con lo stesso account crea il
-            // proprio record per lo stesso file, e arriva da CloudKit. Questa è la notifica che
-            // segnala l'arrivo di modifiche remote — la cartella di sincronizzazione può anche
-            // essere disattivata, quindi non basta agganciarsi a `rebuildLibrary`.
+            // Duplicates don't only originate here: the other device with the same account creates
+            // its own record for the same file, and it arrives via CloudKit. This is the notification
+            // that signals the arrival of remote changes — the sync folder can also be
+            // disabled, so hooking into `rebuildLibrary` alone isn't enough.
             .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
                 scheduleDebouncedDeduplication()
             }
-            // ContentView è radice sempre viva per tutta la sessione: l'aggiornamento di
-            // `allRelativePaths` innesca qui il rescan indipendentemente da cosa sta guardando
-            // l'utente, invece di dipendere dall'apertura di una schermata specifica.
+            // ContentView is the root that's always alive for the whole session: updates to
+            // `allRelativePaths` trigger the rescan here regardless of what the user
+            // is currently looking at, instead of depending on a specific screen being open.
             .onChange(of: tracker.allRelativePaths) { _, _ in scheduleDebouncedSync() }
-            // Un fumetto che smette di essere "da scaricare" è un file appena arrivato in
-            // locale: è il momento di aprirlo e ricavarne copertina e numero di pagine, che al
-            // momento della registrazione non c'erano (vedi `registerComic`). Si guarda solo il
-            // restringersi dell'insieme: quando cresce sono comparsi nuovi segnaposto, e lì non
-            // c'è niente da leggere.
+            // A comic that stops being "to download" is a file that just arrived
+            // locally: this is the moment to open it and extract its cover and page count, which
+            // weren't available at registration time (see `registerComic`). Only the
+            // shrinking of the set is watched: when it grows, new placeholders have appeared, and
+            // there's nothing to read there.
             .onChange(of: tracker.pendingRelativePaths) { previous, current in
                 guard !previous.subtracting(current).isEmpty else { return }
                 scheduleDebouncedPlaceholderBackfill()
@@ -77,8 +77,8 @@ struct ContentView: View {
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
                 syncSyncFolderIfNeeded()
-                // Il momento in cui i file trascinati dal Finder possono essere comparsi è
-                // esattamente questo: l'utente li copia con l'app in background e poi la riapre.
+                // The moment when files dragged from the Finder may have appeared is
+                // exactly this one: the user copies them while the app is in the background and then reopens it.
                 adoptFilesDroppedInDocuments()
                 viewModel.deduplicateLibrary(context: context)
                 viewModel.backfillPlaceholderMetadata(context: context)
@@ -94,9 +94,9 @@ struct ContentView: View {
         }
     }
 
-    /// Come per gli altri innesti su `NSMetadataQuery`: scaricando più fumetti insieme i file
-    /// diventano locali uno dopo l'altro, e senza attendere che la raffica si calmi ogni singolo
-    /// arrivo rilancerebbe una passata sull'intera libreria.
+    /// As with the other hooks into `NSMetadataQuery`: when downloading several comics together
+    /// the files become local one after another, and without waiting for the burst to settle each
+    /// single arrival would trigger a pass over the entire library.
     private func scheduleDebouncedPlaceholderBackfill() {
         placeholderBackfillTask?.cancel()
         placeholderBackfillTask = Task {
@@ -115,8 +115,8 @@ struct ContentView: View {
         }
     }
 
-    /// Solo iOS: su macOS non esiste il File Sharing e la cartella Documents dell'app non è
-    /// una destinazione in cui l'utente possa trascinare qualcosa.
+    /// iOS only: on macOS there's no File Sharing and the app's Documents folder isn't
+    /// a destination the user can drag something into.
     private func adoptFilesDroppedInDocuments() {
         #if os(iOS)
         viewModel.adoptFilesDroppedInDocuments(context: context)
@@ -132,12 +132,12 @@ struct ContentView: View {
         periodicRescanTask?.cancel()
         periodicRescanTask = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 180_000_000_000) // 3 minuti
+                try? await Task.sleep(nanoseconds: 180_000_000_000) // 3 minutes
                 guard !Task.isCancelled else { return }
                 syncSyncFolderIfNeeded()
-                // Ripesca i file che l'adozione aveva saltato perché il Finder li stava ancora
-                // copiando: senza questo, restare in foreground durante un trasferimento lungo
-                // li lascerebbe fuori dalla libreria fino al riavvio dell'app.
+                // Re-picks up files that adoption had skipped because the Finder was still
+                // copying them: without this, staying in the foreground during a long transfer
+                // would leave them out of the library until the app restarts.
                 adoptFilesDroppedInDocuments()
             }
         }
@@ -146,7 +146,7 @@ struct ContentView: View {
     @ViewBuilder
     private var rootNavigation: some View {
         #if os(macOS)
-        // Su Mac la libreria sta nella finestra principale e la sidebar elenca le serie.
+        // On Mac the library lives in the main window and the sidebar lists the series.
         NavigationSplitView(columnVisibility: $columnVisibility) {
             LibrarySidebarView(selection: $selection)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)

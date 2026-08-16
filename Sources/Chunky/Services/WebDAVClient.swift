@@ -1,7 +1,7 @@
 import Foundation
 
-/// Client WebDAV minimale: elenca una cartella con PROPFIND (Depth: 1) e scarica i file con
-/// una GET autenticata. Copre NAS, Nextcloud/ownCloud e qualunque server WebDAV generico.
+/// Minimal WebDAV client: lists a folder with PROPFIND (Depth: 1) and downloads files with
+/// an authenticated GET. Covers NAS boxes, Nextcloud/ownCloud, and any generic WebDAV server.
 final class WebDAVClient: RemoteBrowsing {
     func listEntries(at url: URL, account: RemoteAccountEntity) async throws -> [RemoteEntry] {
         var request = authenticatedRequest(for: url, account: account)
@@ -99,7 +99,7 @@ private final class WebDAVMultistatusDelegate: NSObject, XMLParserDelegate {
             currentDisplayName = trimmed
         case "response":
             defer { isFirstResponse = false }
-            // La prima <response> del multistatus è tipicamente la cartella stessa: la saltiamo.
+            // The first <response> in the multistatus is typically the folder itself: we skip it.
             guard !isFirstResponse, let href = currentHref, let url = URL(string: href, relativeTo: baseURL) else { return }
             let displayName = currentDisplayName.flatMap { $0.isEmpty ? nil : $0 }
             let name = displayName
@@ -119,7 +119,7 @@ private final class WebDAVMultistatusDelegate: NSObject, XMLParserDelegate {
         }
     }
 
-    /// Rimuove il prefisso di namespace (es. "D:href" -> "href") per non doverlo gestire esplicitamente.
+    /// Strips the namespace prefix (e.g. "D:href" -> "href") so it doesn't need to be handled explicitly.
     private func localName(_ elementName: String) -> String {
         if let range = elementName.range(of: ":") {
             return String(elementName[range.upperBound...]).lowercased()

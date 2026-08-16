@@ -1,9 +1,9 @@
 import CoreData
 import Foundation
 
-/// Identificatore di un `ComicEntity` che attraversa i confini di `Codable`/`Hashable`
-/// richiesti da `WindowGroup(for:)`. `NSManagedObjectID` non conforma a `Codable`, quindi
-/// il reader su Mac (una finestra per fumetto) passa questo invece dell'entity stessa.
+/// Identifier for a `ComicEntity` that crosses the `Codable`/`Hashable` boundaries
+/// required by `WindowGroup(for:)`. `NSManagedObjectID` doesn't conform to `Codable`, so
+/// the reader on Mac (one window per comic) passes this instead of the entity itself.
 struct ComicID: Codable, Hashable {
     let uriString: String
 
@@ -12,11 +12,11 @@ struct ComicID: Codable, Hashable {
         self.uriString = comic.objectID.uriRepresentation().absoluteString
     }
 
-    /// Risolve l'identificatore nell'entity corrispondente, se esiste ancora.
+    /// Resolves the identifier to the corresponding entity, if it still exists.
     ///
-    /// Il caso "non trovato" non è difensivo: `PersistenceController` cancella e ricrea lo
-    /// store quando il caricamento fallisce, quindi al ripristino di una finestra dopo un
-    /// riavvio dell'app il fumetto a cui puntava potrebbe non esserci più.
+    /// The "not found" case isn't defensive: `PersistenceController` deletes and recreates the
+    /// store when loading fails, so when a window is restored after an app restart, the comic
+    /// it pointed to might no longer be there.
     func resolve(in context: NSManagedObjectContext) -> ComicEntity? {
         guard let url = URL(string: uriString),
               let objectID = context.persistentStoreCoordinator?.managedObjectID(forURIRepresentation: url)

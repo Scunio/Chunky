@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Popover "Nuovi", agganciato all'icona a forma di vassoio nella toolbar della libreria:
-/// una lista verticale di copertine a piena larghezza (non una griglia di miniature), con
-/// "Cancella" per smarcare i fumetti come già visti.
+/// "New" popover, anchored to the tray-shaped icon in the library toolbar:
+/// a vertical list of full-width covers (not a grid of thumbnails), with
+/// "Clear" to unmark comics as already seen.
 struct NewComicsView: View {
     let comics: [ComicEntity]
     let onSelect: (ComicEntity) -> Void

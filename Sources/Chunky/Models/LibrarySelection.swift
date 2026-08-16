@@ -1,10 +1,10 @@
 import Foundation
 
-/// Cosa la finestra principale sta mostrando: tutta la libreria o una singola serie.
+/// What the main window is showing: the whole library or a single series.
 ///
-/// Vive fuori dalle viste perché è lo stato condiviso tra la sidebar del Mac e la griglia,
-/// ed è ciò che permette alla griglia di restare nella finestra principale invece di
-/// finire dentro la sidebar.
+/// Lives outside the views because it's the state shared between the Mac sidebar and the
+/// grid, and it's what lets the grid stay in the main window instead of
+/// ending up inside the sidebar.
 enum LibrarySelection: Hashable {
     case all
     case group(String)

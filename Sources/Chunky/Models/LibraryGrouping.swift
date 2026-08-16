@@ -1,12 +1,12 @@
 import Foundation
 
-/// Raggruppamento della libreria per serie.
+/// Grouping of the library by series.
 ///
-/// Vive fuori da `LibraryView` perché serve in due punti — la griglia e la sidebar del Mac —
-/// e duplicarlo significherebbe vedere due elenchi di gruppi diversi nella stessa finestra.
-/// Essendo logica pura è anche l'unica parte del raggruppamento che si possa testare.
+/// Lives outside `LibraryView` because it's needed in two places — the grid and the Mac
+/// sidebar — and duplicating it would mean seeing two different lists of groups in the
+/// same window. Being pure logic, it's also the only part of the grouping that can be tested.
 enum LibraryGrouping {
-    /// Sezione per i fumetti che non appartengono a nessuna serie.
+    /// Section for comics that don't belong to any series.
     static let ungroupedTitle = "Altri fumetti"
 
     struct Section: Identifiable {
@@ -16,8 +16,8 @@ enum LibraryGrouping {
         var id: String { title }
     }
 
-    /// Serie ordinate alfabeticamente; i fumetti senza serie finiscono in una sezione a parte,
-    /// in fondo.
+    /// Series sorted alphabetically; comics without a series end up in a separate section,
+    /// at the bottom.
     static func sections(for comics: [ComicEntity]) -> [Section] {
         let groups = Dictionary(grouping: comics) { $0.seriesName ?? ungroupedTitle }
         return groups.keys.sorted { lhs, rhs in
@@ -29,8 +29,8 @@ enum LibraryGrouping {
         }
     }
 
-    /// "TOPOLINO 3594-3687" quando i titoli finiscono con un numero (es. testate periodiche):
-    /// altrimenti solo il nome della serie.
+    /// "TOPOLINO 3594-3687" when the titles end with a number (e.g. periodical issues):
+    /// otherwise just the series name.
     static func headerText(title: String, comics: [ComicEntity]) -> String {
         guard title != ungroupedTitle else { return title.uppercased() }
         let numbers = comics.compactMap { issueNumber(fromTitle: $0.title ?? "") }
@@ -46,17 +46,17 @@ enum LibraryGrouping {
         return Int(cleaned[range].trimmingCharacters(in: .whitespaces))
     }
 
-    /// Toglie dalla coda del titolo quello che i rilasci scansionati ci appendono dopo il numero
-    /// dell'albo, così il numero torna in fondo alla stringa ed è di nuovo riconoscibile:
-    /// i gruppi fra parentesi ("Topolino 3652 (Panini 2025-11-19) [c2c CPPT Edition]"), le
-    /// aggiunte introdotte da un "+" ("Topolino 3636 + Cover Abbonati") e il numero di versione
-    /// del rilascio ("… [c2c CPPT Edition] 1.0").
+    /// Strips from the tail of the title what scanned releases append after the issue
+    /// number, so the number lands at the end of the string again and is recognizable
+    /// once more: parenthesized groups ("Topolino 3652 (Panini 2025-11-19) [c2c CPPT Edition]"),
+    /// additions introduced by a "+" ("Topolino 3636 + Cover Abbonati"), and the release's
+    /// version number ("… [c2c CPPT Edition] 1.0").
     ///
-    /// La versione deve avere almeno un punto: è quello che la distingue dal numero dell'albo,
-    /// che non ne ha mai e non va toccato.
+    /// The version must have at least one dot: that's what distinguishes it from the issue
+    /// number, which never has one and must not be touched.
     ///
-    /// Il ciclo serve perché le decorazioni si alternano — "… [c2c CPPT Edition] 1.1 (corrette
-    /// pagine doppie)" ne ha tre, una dentro l'altra.
+    /// The loop is needed because decorations are nested — "… [c2c CPPT Edition] 1.1 (corrected
+    /// double pages)" has three of them, one inside another.
     static func titleWithoutTrailingDecorations(_ title: String) -> String {
         let patterns = [
             #"\s*\([^()]*\)\s*$"#,

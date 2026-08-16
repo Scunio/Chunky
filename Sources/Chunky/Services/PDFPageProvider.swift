@@ -14,9 +14,9 @@ final class PDFPageProvider: ComicPageProvider {
         self.document = document
     }
 
-    /// I PDF nativi (non scansionati) hanno già il testo: leggerlo da PDFKit è immediato ed
-    /// esatto, mentre passarli per l'OCR costerebbe secondi per pagina e darebbe un risultato
-    /// peggiore. Sui PDF fatti di sole scansioni `page.string` è vuoto e si torna all'OCR.
+    /// Native (non-scanned) PDFs already have the text: reading it from PDFKit is instant and
+    /// exact, whereas running them through OCR would cost seconds per page and give a worse
+    /// result. On PDFs made only of scans `page.string` is empty and we fall back to OCR.
     func textLines(atPage index: Int) throws -> [RecognizedTextLine]? {
         guard let page = document.page(at: index) else { throw ComicReadError.pageOutOfRange }
         let bounds = page.bounds(for: .mediaBox)
@@ -26,9 +26,9 @@ final class PDFPageProvider: ComicPageProvider {
         let lines = selection.selectionsByLine().compactMap { line -> RecognizedTextLine? in
             let text = (line.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return nil }
-            // Lo spazio PDF ha già l'origine in basso a sinistra come quello di Vision (ed è lo
-            // stesso in cui `image(atPage:)` disegna, senza ribaltamenti): basta normalizzare
-            // sui bounds della pagina perché i due tipi di riga siano intercambiabili.
+            // PDF space already has its origin at the bottom left like Vision's (and it's the
+            // same space in which `image(atPage:)` draws, without any flipping): it's enough to
+            // normalize against the page bounds for the two kinds of line to be interchangeable.
             let rect = line.bounds(for: page)
             return RecognizedTextLine(
                 text: text,
@@ -53,13 +53,13 @@ final class PDFPageProvider: ComicPageProvider {
         let height = Int((bounds.height * scale).rounded())
         guard width > 0, height > 0 else { throw ComicReadError.corruptArchive }
 
-        // Un CGContext bitmap condiviso al posto di UIGraphicsImageRenderer (iOS) e di
-        // NSImage.lockFocus (macOS). lockFocus è deprecato e, soprattutto, disegna nel
-        // contesto grafico corrente del thread: questo provider viene invocato fuori dal
-        // main thread da ReaderView, dove quel contesto non esiste.
+        // A shared bitmap CGContext in place of UIGraphicsImageRenderer (iOS) and
+        // NSImage.lockFocus (macOS). lockFocus is deprecated and, more importantly, draws into
+        // the thread's current graphics context: this provider is invoked off the
+        // main thread by ReaderView, where that context doesn't exist.
         //
-        // Lo spazio bitmap ha origine in basso a sinistra come lo spazio PDF, quindi non
-        // serve alcun ribaltamento: basta scalare.
+        // The bitmap space has its origin at the bottom left like PDF space, so no
+        // flipping is needed: just scaling.
         guard let context = CGContext(
             data: nil,
             width: width,
@@ -72,8 +72,8 @@ final class PDFPageProvider: ComicPageProvider {
             throw ComicReadError.corruptArchive
         }
 
-        // Le pagine PDF sono spesso senza sfondo: senza questo riempimento resterebbero
-        // trasparenti e in tema scuro risulterebbero illeggibili.
+        // PDF pages often have no background: without this fill they'd remain
+        // transparent and would be unreadable in dark theme.
         context.setFillColor(gray: 1, alpha: 1)
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
         context.scaleBy(x: scale, y: scale)

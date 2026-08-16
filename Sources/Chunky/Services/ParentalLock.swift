@@ -2,8 +2,9 @@ import Foundation
 import LocalAuthentication
 import Combine
 
-/// Gestisce il codice di blocco genitori: il codice non viene mai salvato in chiaro, solo il suo
-/// hash (SHA-256 con salt) in Keychain. Sblocco anche via Face ID/Touch ID se disponibile.
+/// Manages the parental lock passcode: the passcode is never stored in plain text, only its
+/// hash (salted SHA-256) in the Keychain. Unlock is also available via Face ID/Touch ID if
+/// available.
 final class ParentalLock: ObservableObject {
     static let shared = ParentalLock()
 
@@ -32,13 +33,13 @@ final class ParentalLock: ObservableObject {
 
     private init() {
         isLocked = false
-        // Se il blocco è configurato, l'app deve richiedere il codice anche al primo avvio
-        // "a freddo" (es. dopo force-quit): altrimenti basterebbe chiudere l'app dal
-        // multitasking per bypassare completamente il blocco.
+        // If the lock is configured, the app must ask for the passcode even on the first
+        // "cold" launch (e.g. after a force-quit): otherwise closing the app from the
+        // multitasking switcher would be enough to bypass the lock entirely.
         isLocked = isEnabled && hasPasscode
     }
 
-    /// Da chiamare quando l'app torna in primo piano: se il blocco è attivo, richiede lo sblocco.
+    /// To be called when the app returns to the foreground: if the lock is active, it asks for unlock.
     func lockIfNeeded() {
         guard isEnabled, hasPasscode else { return }
         isLocked = true
@@ -77,11 +78,11 @@ final class ParentalLock: ObservableObject {
         }
     }
 
-    /// UUID fisso e stabile usato come "account" nel Keychain condiviso: il passcode non è
-    /// legato a un fumetto o account remoto, quindi non serve generarne uno nuovo ogni volta.
+    /// Fixed, stable UUID used as the "account" in the shared Keychain: the passcode isn't
+    /// tied to a comic or a remote account, so there's no need to generate a new one each time.
     private var passcodeUUID: UUID {
-        // Letterale costante e valido per costruzione. Un `?? UUID()` qui sarebbe peggio:
-        // renderebbe silenziosamente irrecuperabile il passcode invece di fallire subito.
+        // Constant literal, valid by construction. A `?? UUID()` here would be worse:
+        // it would silently make the passcode unrecoverable instead of failing right away.
         // swiftlint:disable:next force_unwrapping
         UUID(uuidString: "5D6A9B7E-0000-4000-8000-000000000001")!
     }

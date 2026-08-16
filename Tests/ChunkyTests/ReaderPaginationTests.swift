@@ -195,8 +195,8 @@ struct ReaderPaginationShowsSecondPageTests {
     @Test("Un indice che non è inizio-spread non altera il conteggio")
     func nonSpreadStartStillReports() {
         let sut = ReaderPagination(pageCount: 10, pageStep: 2, isRightToLeft: false)
-        // 3 non è un inizio-spread valido, ma la funzione non deve andare in crash: risponde
-        // in base al passo, coerente col fallback già presente nell'implementazione originale.
+        // 3 isn't a valid spread start, but the function must not crash: it responds
+        // based on the step, consistent with the fallback already present in the original implementation.
         #expect(sut.showsSecondPage(from: 3))
     }
 }

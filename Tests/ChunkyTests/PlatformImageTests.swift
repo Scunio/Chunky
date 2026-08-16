@@ -14,8 +14,8 @@ struct PlatformImageTests {
         return try #require(context.makeImage())
     }
 
-    /// Su macOS `NSImage(cgImage:size: .zero)` produceva un'immagine 0×0: chiunque leggesse
-    /// `.size` (invece dei pixel) otteneva zero. È il percorso del ritaglio pannello → condivisione.
+    /// On macOS `NSImage(cgImage:size: .zero)` used to produce a 0×0 image: anyone reading
+    /// `.size` (instead of the pixels) got zero. This is the panel-crop → sharing path.
     @Test("from(cgImage:) conserva le dimensioni")
     func preservesSize() throws {
         let cgImage = try makeCGImage(width: 40, height: 25)

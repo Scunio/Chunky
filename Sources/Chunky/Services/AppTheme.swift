@@ -5,8 +5,8 @@ import UIKit
 import AppKit
 #endif
 
-/// Modalità chiara/scura dell'intera app (libreria + lettore). "Automatica" segue l'impostazione
-/// di sistema; le altre due la forzano indipendentemente dal sistema.
+/// Light/dark mode for the whole app (library + reader). "Automatic" follows the system
+/// setting; the other two force it regardless of the system.
 enum AppColorSchemeMode: String, CaseIterable, Identifiable {
     case automatic
     case light
@@ -22,7 +22,7 @@ enum AppColorSchemeMode: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Valore da passare a `.preferredColorScheme`: nil lascia decidere al sistema.
+    /// Value to pass to `.preferredColorScheme`: nil lets the system decide.
     var colorScheme: ColorScheme? {
         switch self {
         case .automatic: return nil
@@ -32,8 +32,8 @@ enum AppColorSchemeMode: String, CaseIterable, Identifiable {
     }
 }
 
-/// Colori personalizzabili della libreria, persistiti come stringhe esadecimali. Un valore
-/// nil/non impostato ricade sui colori di sistema (Dark/Light Mode automatico).
+/// Customizable library colors, persisted as hex strings. A nil/unset value
+/// falls back to system colors (automatic Dark/Light Mode).
 final class AppTheme: ObservableObject {
     static let shared = AppTheme()
 
@@ -73,7 +73,7 @@ extension Color {
         self = Color(red: r, green: g, blue: b)
     }
 
-    /// Rappresentazione esadecimale approssimata, usata per salvare il colore scelto da un ColorPicker.
+    /// Approximate hex representation, used to save the color chosen from a ColorPicker.
     var hexString: String {
         #if os(iOS)
         let components = UIColor(self).cgColor.components ?? [0, 0, 0]

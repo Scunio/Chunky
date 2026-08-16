@@ -5,9 +5,9 @@ final class CBRPageProvider: ComicPageProvider {
     private let archive: Archive
     private let entries: [Entry]
     let comicInfoXML: Data?
-    /// Stesso motivo di `CBZPageProvider.extractionLock`: `Archive.extract` non è sicuro per
-    /// chiamate concorrenti, e la doppia pagina carica due pagine in parallelo su thread
-    /// diversi.
+    /// Same reason as `CBZPageProvider.extractionLock`: `Archive.extract` is not safe for
+    /// concurrent calls, and double-page spread loads two pages in parallel on different
+    /// threads.
     private let extractionLock = NSLock()
 
     private static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "bmp"]

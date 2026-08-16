@@ -6,13 +6,13 @@ import UIKit
 import AppKit
 #endif
 
-/// Copertine già decodificate dai PNG salvati in `coverImageData`.
+/// Covers already decoded from the PNGs stored in `coverImageData`.
 ///
-/// Senza questa cache, `ComicGridItemView` ridecodificava la copertina a ogni valutazione di
-/// `body` — non solo alla comparsa della cella, ma a ogni ridisegno innescato da
-/// `ICloudDownloadTracker`. Con un gruppo da un centinaio di fumetti che appare tutto insieme
-/// (es. espandendo una sezione), decine di decodifiche sincrone sul thread principale nella
-/// stessa animazione bastavano a farla scattare a scatti.
+/// Without this cache, `ComicGridItemView` would re-decode the cover on every evaluation of
+/// `body` — not just when the cell appears, but on every redraw triggered by
+/// `ICloudDownloadTracker`. With a batch of a hundred or so comics appearing all at once
+/// (e.g. expanding a section), dozens of synchronous decodes on the main thread within the
+/// same animation were enough to make it stutter.
 enum CoverThumbnailCache {
     private static let cache: NSCache<NSManagedObjectIDBox, PlatformImage> = {
         let cache = NSCache<NSManagedObjectIDBox, PlatformImage>()
@@ -32,8 +32,8 @@ enum CoverThumbnailCache {
     }
 }
 
-/// `NSManagedObjectID` non è una classe: `NSCache` richiede chiavi `AnyObject`, quindi va
-/// incapsulato invece di usarlo direttamente.
+/// `NSManagedObjectID` isn't a class: `NSCache` requires `AnyObject` keys, so it needs
+/// to be boxed instead of being used directly.
 final class NSManagedObjectIDBox: NSObject {
     let objectID: NSManagedObjectID
     init(_ objectID: NSManagedObjectID) { self.objectID = objectID }

@@ -2,12 +2,12 @@
 import SwiftUI
 import CoreData
 
-/// Contenuto di una finestra reader su Mac, aperta con `openWindow(value: ComicID)`.
+/// Content of a reader window on Mac, opened with `openWindow(value: ComicID)`.
 ///
-/// Risolve l'id in un `ComicEntity` al momento della comparsa: se il fumetto non c'è più
-/// (cancellato, o store ricreato dopo un errore di caricamento — vedi `ComicID.resolve`),
-/// mostra un placeholder invece di far crashare la finestra ripristinata da una sessione
-/// precedente.
+/// Resolves the id into a `ComicEntity` when it appears: if the comic no longer exists
+/// (deleted, or the store was recreated after a loading error — see `ComicID.resolve`),
+/// it shows a placeholder instead of crashing the window restored from a previous
+/// session.
 struct ReaderWindowContainer: View {
     let comicID: ComicID
 
@@ -22,9 +22,9 @@ struct ReaderWindowContainer: View {
 
     var body: some View {
         Group {
-            // Una finestra reader aperta prima del blocco (o ripristinata all'avvio) non deve
-            // continuare a mostrare le pagine: la stessa schermata di blocco della finestra
-            // principale copre anche questa.
+            // A reader window opened before the lock (or restored at launch) must not
+            // keep showing pages: the same lock screen as the main window
+            // covers this one too.
             if lock.isLocked {
                 ParentalLockGateView()
                     .lockScreenBackground()

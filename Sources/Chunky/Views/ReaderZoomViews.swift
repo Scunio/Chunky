@@ -2,34 +2,34 @@ import SwiftUI
 #if os(iOS)
 import UIKit
 
-// Strato UIKit dello zoom del lettore (pinch, pan da zoomata, doppio tap), estratto da
-// `ReaderSupportViews.swift`. `ZoomableImageView` e `SpreadZoomableImageView` sono internal e
-// non più private perché il contenuto pagina, che le usa, ora sta in un altro file.
+// UIKit layer of the reader's zoom (pinch, pan while zoomed, double tap), extracted from
+// `ReaderSupportViews.swift`. `ZoomableImageView` and `SpreadZoomableImageView` are internal
+// and no longer private because the page content that uses them now lives in another file.
 
-/// Pinch-to-zoom, pan da zoomata e doppio-tap sulla pagina come in Foto: un vero `UIScrollView`
-/// con zoom nativo, non gesture SwiftUI sovrapposte al pager.
+/// Pinch-to-zoom, pan while zoomed and double-tap on the page as in Photos: a real
+/// `UIScrollView` with native zoom, not SwiftUI gestures layered on top of the pager.
 ///
-/// Il piano iniziale era lasciare che fosse lo `UIScrollView` stesso a "vincere" i tocchi a due
-/// dita, appoggiandosi al riconoscimento simultaneo che UIKit gestisce già per gli scroll view
-/// annidati. Non basta: `PageTapZones` (le zone invisibili tap-per-girare-pagina) sta *sopra*
-/// il contenuto nello stesso ZStack e con `.contentShape(Rectangle())` copre l'intera pagina —
-/// per le regole di hit-testing di UIKit è lei a vincere il tocco iniziale, sempre, a
-/// prescindere da quale pager sta sotto. Verificato dal vivo con log su `touchesBegan`: zero
-/// tocchi arrivavano allo scroll view, nemmeno un tap singolo.
+/// The initial plan was to let the `UIScrollView` itself "win" the two-finger touches,
+/// relying on the simultaneous recognition UIKit already handles for nested scroll views.
+/// That's not enough: `PageTapZones` (the invisible tap-to-turn-page zones) sits *above* the
+/// content in the same ZStack and, with `.contentShape(Rectangle())`, covers the whole page
+/// — by UIKit's hit-testing rules it's the one that wins the initial touch, always,
+/// regardless of which pager is underneath. Verified live with logs on `touchesBegan`: zero
+/// touches reached the scroll view, not even a single tap.
 ///
-/// La soluzione è la stessa già usata per la luminosità a due dita (vedi `WindowPanRelayView`
-/// sotto): un recognizer agganciato alla `window`, non a questa view, con `hitTest` che
-/// restituisce sempre `nil`. La `window` è antenata di *qualunque* vista colpita dall'hit-test
-/// (`PageTapZones` compresa), quindi i suoi recognizer ricevono comunque tutti i tocchi — pinch
-/// e pan a due dita compresi — indipendentemente da chi "vince" l'hit-test per il tocco
-/// iniziale. Il pinch/pan native di `UIScrollView` (il suo `pinchGestureRecognizer` interno)
-/// resta inutilizzato per lo stesso motivo per cui era morto il `MagnificationGesture` SwiftUI
-/// originale: guida lo zoom "a mano" da un recognizer esterno, sullo stesso `UIScrollView`, che
-/// resta comunque il modo più semplice per avere gratis il rendering con pan/rubber-banding.
+/// The solution is the same one already used for two-finger brightness (see
+/// `WindowPanRelayView` below): a recognizer hooked onto the `window`, not this view, with
+/// `hitTest` always returning `nil`. The `window` is an ancestor of *any* view hit by the
+/// hit-test (`PageTapZones` included), so its recognizers still receive every touch — pinch
+/// and two-finger pan included — regardless of who "wins" the hit-test for the initial
+/// touch. `UIScrollView`'s native pinch/pan (its own internal `pinchGestureRecognizer`) stays
+/// unused for the same reason the original SwiftUI `MagnificationGesture` was dead: zoom is
+/// driven "by hand" from an external recognizer, on the same `UIScrollView`, which remains
+/// the simplest way to get pan/rubber-banding rendering for free.
 ///
-/// Più `PageView` possono essere vive contemporaneamente (il pager tiene in cache le pagine
-/// adiacenti per lo swipe fluido): ogni recognizer agisce solo se il punto del gesto cade nei
-/// bounds del proprio scroll view, così solo la pagina davvero visibile risponde.
+/// Several `PageView`s can be alive at the same time (the pager caches adjacent pages for
+/// smooth swiping): each recognizer only acts if the gesture's point falls within its own
+/// scroll view's bounds, so only the page that's actually visible responds.
 private final class ZoomingScrollView: UIScrollView {
     weak var coordinator: ZoomableImageView.Coordinator?
 
@@ -39,9 +39,9 @@ private final class ZoomingScrollView: UIScrollView {
     }
 }
 
-/// Non intercetta mai l'hit-testing (vedi il commento su `ZoomableImageView` sopra): i suoi
-/// recognizer, agganciati alla window, ricevono comunque ogni tocco perché la window è
-/// antenata di qualunque vista colpita dall'hit-test.
+/// Never intercepts hit-testing (see the comment on `ZoomableImageView` above): its
+/// recognizers, hooked onto the window, receive every touch anyway because the window is an
+/// ancestor of whatever view gets hit by the hit-test.
 private final class ZoomGestureRelayView: UIView {
     weak var coordinator: ZoomableImageView.Coordinator?
     private var recognizers: [UIGestureRecognizer] = []
@@ -79,9 +79,10 @@ private final class ZoomGestureRelayView: UIView {
     }
 }
 
-/// Identico a `ZoomGestureRelayView`, ma per `SpreadZoomableImageView.Coordinator`: i selettori
-/// `#selector` sono legati al tipo concreto, quindi non è possibile riusare la stessa classe fra
-/// le due (la duplicazione qui è il prezzo di quel vincolo di Objective-C, non una scelta).
+/// Identical to `ZoomGestureRelayView`, but for `SpreadZoomableImageView.Coordinator`: the
+/// `#selector` selectors are tied to the concrete type, so the same class can't be reused
+/// between the two (the duplication here is the price of that Objective-C constraint, not a
+/// choice).
 private final class SpreadZoomGestureRelayView: UIView {
     weak var coordinator: SpreadZoomableImageView.Coordinator?
     private var recognizers: [UIGestureRecognizer] = []
@@ -123,8 +124,8 @@ struct ZoomableImageView: UIViewRepresentable {
     let image: UIImage?
     let isZoomed: Binding<Bool>
     var isActive: Bool = true
-    /// Vero solo nel percorso a doppia pagina (`pairedContent`), dove la larghezza deve
-    /// derivare dall'altezza proposta invece che dalla larghezza — vedi `sizeThatFits`.
+    /// True only in the double-page path (`pairedContent`), where the width must derive
+    /// from the proposed height instead of from the width — see `sizeThatFits`.
     var widthFollowsHeight: Bool = false
 
     func makeCoordinator() -> Coordinator { Coordinator(isZoomed: isZoomed) }
@@ -162,17 +163,17 @@ struct ZoomableImageView: UIViewRepresentable {
         guard let imageView = context.coordinator.imageView else { return }
         if imageView.image !== image {
             imageView.image = image
-            // Cambio pagina: si riparte sempre da non zoomato, come nell'app originale (lo
-            // zoom non "segue" da una pagina all'altra).
+            // Page change: always restart from unzoomed, as in the original app (zoom
+            // doesn't "follow" from one page to the next).
             scrollView.setZoomScale(1, animated: false)
         }
         context.coordinator.layOutImage(in: scrollView)
     }
 
-    /// Permette a `ZoomableImageView` di dimensionarsi come farebbe `Image().scaledToFit()`:
-    /// senza questo, un `UIViewRepresentable` non sa calcolare da sé una dimensione dalle
-    /// proporzioni dell'immagine, e finirebbe o senza dimensioni o grande quanto lo spazio
-    /// disponibile invece che quanto l'immagine.
+    /// Lets `ZoomableImageView` size itself the way `Image().scaledToFit()` would: without
+    /// this, a `UIViewRepresentable` can't compute a size on its own from the image's
+    /// proportions, and would end up either with no dimensions or as big as the available
+    /// space instead of as big as the image.
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIScrollView, context: Context) -> CGSize? {
         guard let image, image.size.width > 0, image.size.height > 0 else { return nil }
         let aspect = image.size.width / image.size.height
@@ -182,22 +183,22 @@ struct ZoomableImageView: UIViewRepresentable {
         }
         let width = usable(proposal.width)
         let height = usable(proposal.height)
-        // Solo in doppia pagina la larghezza deve derivare dall'altezza a prescindere (vedi
-        // `pairedContent`): lì l'HStack propone comunque una larghezza sua, che non è quella
-        // che vogliamo. Altrove la larghezza proposta è quella reale del viewport.
+        // Only in double page must the width derive from the height regardless (see
+        // `pairedContent`): there the HStack always proposes a width of its own, which
+        // isn't the one we want. Elsewhere the proposed width is the viewport's real one.
         if widthFollowsHeight, let height {
             return CGSize(width: height * aspect, height: height)
         }
         switch (width, height) {
         case let (width?, height?):
-            // Tutto il riquadro proposto, non la sagoma della pagina: l'adattamento
-            // dell'immagine avviene DENTRO lo scroll view (`layOutImage`), che la centra
-            // lasciando le bande di sfondo. Dimensionare invece la vista sulla pagina la
-            // incastrava nel proprio rettangolo: a riposo si vedeva uguale, ma da zoomata il
-            // contenuto restava tagliato lì dentro e le bande sopra e sotto non venivano mai
-            // riempite. (Dare la priorità all'altezza, come faceva il codice originale, è
-            // l'errore opposto: la vista diventava più larga dello schermo e il `.clipped()`
-            // di `PageView` tagliava la pagina ai lati.)
+            // The whole proposed frame, not the page's shape: the image's fitting happens
+            // INSIDE the scroll view (`layOutImage`), which centers it leaving the
+            // background bands. Sizing the view to the page instead boxed it into its own
+            // rectangle: at rest it looked the same, but once zoomed the content stayed
+            // clipped inside it and the bands above and below never got filled. (Giving
+            // priority to the height, as the original code did, is the opposite mistake:
+            // the view became wider than the screen and `PageView`'s `.clipped()` cut the
+            // page off at the sides.)
             return CGSize(width: width, height: height)
         case let (width?, nil):
             return CGSize(width: width, height: width / aspect)
@@ -210,10 +211,10 @@ struct ZoomableImageView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UIScrollViewDelegate, UIGestureRecognizerDelegate {
         var isZoomed: Binding<Bool>
-        /// Vedi `ZoomableImageView.isActive` / `PageSpreadView.isActive`: senza questo, pinch,
-        /// pan e doppio-tap agiscono anche sulla pagina vicina che il pager tiene viva per lo
-        /// swipe, non solo su quella davvero mostrata — verificato dal vivo, tre `Coordinator`
-        /// diversi ricevevano lo stesso pinch.
+        /// See `ZoomableImageView.isActive` / `PageSpreadView.isActive`: without this,
+        /// pinch, pan and double-tap also act on the nearby page the pager keeps alive for
+        /// swiping, not just on the one that's really shown — verified live, three
+        /// different `Coordinator`s received the same pinch.
         var isActive = true
         weak var imageView: UIImageView?
         weak var scrollView: UIScrollView?
@@ -223,13 +224,13 @@ struct ZoomableImageView: UIViewRepresentable {
 
         func layOutImage(in scrollView: UIScrollView) {
             guard let imageView, let image = imageView.image else { return }
-            // `layoutSubviews` (che chiama questo metodo, vedi `ZoomingScrollView`) scatta
-            // anche DURANTE un pinch o un pan da zoomata, non solo ai cambi di pagina: senza
-            // questa guardia, ricalcolare qui il fit "a riposo" e ri-centrare rimetteva la
-            // vista a ogni passaggio nella posizione non zoomata, mentre lo zoom/pan restava
-            // applicato sopra — il risultato visibile era lo zoom che finiva sempre in alto a
-            // sinistra e il contenuto tagliato. Da zoomata la posizione/dimensione la governano
-            // `handlePinch`/`handlePan` tramite `zoomScale`/`contentOffset`, non questo metodo.
+            // `layoutSubviews` (which calls this method, see `ZoomingScrollView`) also fires
+            // DURING a pinch or a pan while zoomed, not just on page changes: without this
+            // guard, recomputing the "at rest" fit and re-centering here reset the view to
+            // the unzoomed position on every pass, while the zoom/pan stayed applied on top
+            // — the visible result was the zoom always ending up in the top left and the
+            // content clipped. While zoomed, position/size are governed by
+            // `handlePinch`/`handlePan` via `zoomScale`/`contentOffset`, not this method.
             guard scrollView.zoomScale <= 1.01 else { return }
             let boundsSize = scrollView.bounds.size
             guard boundsSize.width > 0, boundsSize.height > 0, image.size.width > 0, image.size.height > 0 else { return }
@@ -258,16 +259,16 @@ struct ZoomableImageView: UIViewRepresentable {
         func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
 
         func scrollViewDidZoom(_ scrollView: UIScrollView) {
-            // Solo da non-zoomata: da zoomata, ricentrare qui combatterebbe contro il pan
-            // dell'utente esattamente come in `layOutImage` — vedi il commento lì.
+            // Only when not zoomed: while zoomed, re-centering here would fight against the
+            // user's pan exactly as in `layOutImage` — see the comment there.
             if let imageView, scrollView.zoomScale <= 1.01 { center(imageView, in: scrollView) }
             let zoomed = scrollView.zoomScale > 1.01
             if isZoomed.wrappedValue != zoomed { isZoomed.wrappedValue = zoomed }
         }
 
-        /// Riceve ogni tocco a prescindere da chi vince l'hit-test (vedi commento su
-        /// `ZoomableImageView`): deve quindi coesistere con tap zone, swipe pagina e con gli
-        /// altri recognizer di questo stesso relay.
+        /// Receives every touch regardless of who wins the hit-test (see comment on
+        /// `ZoomableImageView`): it must therefore coexist with tap zones, page swipe, and
+        /// the other recognizers of this same relay.
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
@@ -295,9 +296,9 @@ struct ZoomableImageView: UIViewRepresentable {
         }
 
         @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
-            // Solo pan-da-zoomata: a riposo (scala 1) il trascinamento a un dito resta allo
-            // swipe pagina/tap zone sottostanti, esattamente come nella versione SwiftUI
-            // originale (`including: scale > 1 ? .all : .subviews`).
+            // Pan-while-zoomed only: at rest (scale 1) a one-finger drag stays with the page
+            // swipe/tap zone underneath, exactly as in the original SwiftUI version
+            // (`including: scale > 1 ? .all : .subviews`).
             guard isActive, let scrollView, scrollView.zoomScale > 1.01 else { return }
             switch recognizer.state {
             case .began:
@@ -334,12 +335,12 @@ struct ZoomableImageView: UIViewRepresentable {
     }
 }
 
-/// Come `ZoomableImageView`, ma per due pagine affiancate zoomabili come un'unica unità (vedi
-/// il commento su `SpreadPairView`): un solo `UIScrollView`, contenuto = le due `UIImageView`
-/// una accanto all'altra. Stesso trucco della window per pinch/pan/doppio-tap, per lo stesso
-/// motivo — vedi il commento su `ZoomableImageView`.
+/// Like `ZoomableImageView`, but for two side-by-side pages zoomable as a single unit (see
+/// the comment on `SpreadPairView`): a single `UIScrollView`, content = the two
+/// `UIImageView`s next to each other. Same window trick for pinch/pan/double-tap, for the
+/// same reason — see the comment on `ZoomableImageView`.
 struct SpreadZoomableImageView: UIViewRepresentable {
-    /// Esattamente due immagini, già nell'ordine visivo (sinistra, destra).
+    /// Exactly two images, already in visual order (left, right).
     let images: [UIImage]
     let isZoomed: Binding<Bool>
     var isActive: Bool = true
@@ -387,17 +388,17 @@ struct SpreadZoomableImageView: UIViewRepresentable {
             || zip(context.coordinator.images, images).contains { $0 !== $1 }
         context.coordinator.images = images
         if spreadChanged {
-            // Cambio spread: si riparte sempre da non zoomato, esattamente come nel percorso a
-            // pagina singola (`ZoomableImageView.updateUIView`). Senza questo lo zoom "seguiva"
-            // da uno spread all'altro, e per di più `layOutImages` restava bloccato dalla
-            // guardia sullo zoom, lasciando le pagine nuove dentro i frame di quelle vecchie.
+            // Spread change: always restart from unzoomed, exactly as in the single-page
+            // path (`ZoomableImageView.updateUIView`). Without this, zoom "followed" from
+            // one spread to the next, and on top of that `layOutImages` stayed blocked by
+            // the zoom guard, leaving the new pages inside the old ones' frames.
             scrollView.setZoomScale(1, animated: false)
         }
         context.coordinator.layOutImages(in: scrollView)
     }
 
-    /// Ricalcola il layout a ogni cambio di bounds reale, non solo quando SwiftUI richiama
-    /// `updateUIView` — stesso motivo di `ZoomingScrollView`.
+    /// Recomputes the layout on every real bounds change, not only when SwiftUI calls
+    /// `updateUIView` — same reason as `ZoomingScrollView`.
     final class SpreadZoomingScrollView: UIScrollView {
         weak var coordinator: Coordinator?
 
@@ -409,8 +410,8 @@ struct SpreadZoomableImageView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UIScrollViewDelegate, UIGestureRecognizerDelegate {
         var isZoomed: Binding<Bool>
-        /// Vedi `ZoomableImageView.Coordinator.isActive`: stesso problema, stessa soluzione,
-        /// per lo spread a due pagine.
+        /// See `ZoomableImageView.Coordinator.isActive`: same problem, same solution, for
+        /// the two-page spread.
         var isActive = true
         var images: [UIImage] = []
         weak var container: UIView?
@@ -425,14 +426,14 @@ struct SpreadZoomableImageView: UIViewRepresentable {
                 let container, let leadingImageView, let trailingImageView,
                 images.count == 2
             else { return }
-            // Le immagini si assegnano solo insieme al ricalcolo dei frame, sotto le guardie:
-            // assegnarle prima significherebbe disegnare pagine nuove dentro i frame di quelle
-            // vecchie (proporzioni diverse) ogni volta che lo spread cambia da zoomato.
-            // Vedi il commento su `ZoomableImageView.Coordinator.layOutImage`: `layoutSubviews`
-            // scatta anche durante il pinch/pan da zoomata, e ricalcolare qui la larghezza "a
-            // riposo" delle due pagine da `scrollView.bounds` (il viewport, non scalato)
-            // rimetteva `container` a dimensione non zoomata mentre lo zoom restava applicato
-            // al suo `frame` — risultato: contenuto tagliato o disallineato durante lo zoom.
+            // Images are only assigned together with the frame recomputation, below the
+            // guards: assigning them earlier would mean drawing new pages inside the old
+            // ones' frames (different proportions) every time the spread changes while
+            // zoomed. See the comment on `ZoomableImageView.Coordinator.layOutImage`:
+            // `layoutSubviews` also fires during pinch/pan while zoomed, and recomputing
+            // the two pages' "at rest" width here from `scrollView.bounds` (the viewport,
+            // unscaled) reset `container` to its unzoomed size while the zoom stayed applied
+            // to its `frame` — result: content clipped or misaligned during zoom.
             guard scrollView.zoomScale <= 1.01 else { return }
             let boundsHeight = scrollView.bounds.height
             guard boundsHeight > 0 else { return }

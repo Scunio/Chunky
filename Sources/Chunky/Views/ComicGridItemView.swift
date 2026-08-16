@@ -2,24 +2,24 @@ import SwiftUI
 
 struct ComicGridItemView: View {
     @ObservedObject var comic: ComicEntity
-    /// Unica fonte di verità per il badge "da scaricare": una `NSMetadataQuery` viva a livello
-    /// di libreria, così il badge si aggiorna da solo quando il download termina invece di
-    /// dipendere da un ridisegno della griglia per altri motivi.
+    /// Single source of truth for the "to download" badge: a live library-level `NSMetadataQuery`,
+    /// so the badge updates on its own when the download finishes instead of depending on
+    /// a grid redraw triggered for other reasons.
     @ObservedObject private var downloadTracker = ICloudDownloadTracker.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // .overlay(alignment:), non uno ZStack con figli condizionali: dentro una
-            // LazyVGrid uno ZStack a volte non ridimensiona/posiziona correttamente i figli
-            // aggiunti via "if" (osservato empiricamente — la stessa barra di progresso
-            // compariva nella tray orizzontale "Nuovi" ma non nella griglia sottostante).
+            // .overlay(alignment:), not a ZStack with conditional children: inside a
+            // LazyVGrid a ZStack sometimes fails to correctly resize/position children
+            // added via "if" (observed empirically — the same progress bar
+            // showed up in the horizontal "New" tray but not in the grid below it).
             coverImage
                 .aspectRatio(2/3, contentMode: .fill)
                 .frame(maxWidth: .infinity)
                 .clipped()
                 .cornerRadius(8)
-                // Un fumetto già finito si vede a colpo d'occhio, come una spunta fatta
-                // su una lista: non serve leggere il badge per capire lo stato.
+                // A comic that's already finished is visible at a glance, like a checkmark
+                // ticked off a list: no need to read the badge to understand the status.
                 .saturation(comic.isFinished ? 0 : 1)
                 .opacity(comic.isFinished ? 0.55 : 1)
                 .overlay(progressBar, alignment: .bottom)
@@ -41,13 +41,13 @@ struct ComicGridItemView: View {
 
     @ViewBuilder
     private var progressBar: some View {
-        // ProgressView nativo invece di calcolare a mano la larghezza con GeometryReader:
-        // in una LazyVGrid quest'ultimo si è dimostrato inaffidabile (a volte non riceveva
-        // una larghezza valida e la barra spariva del tutto, in modo incoerente tra celle).
+        // Native ProgressView instead of computing the width by hand with GeometryReader:
+        // in a LazyVGrid the latter proved unreliable (it sometimes didn't receive
+        // a valid width and the bar disappeared entirely, inconsistently across cells).
         if comic.progress > 0 && !comic.isFinished {
-            // Il valore mostrato è alzato a un minimo visivo (non il vero progresso salvato):
-            // a inizio lettura di un fumetto lungo il progresso reale è troppo piccolo per
-            // essere percepito come una barra, anche col contrasto qui sotto.
+            // The displayed value is raised to a visual minimum (not the actual saved progress):
+            // at the start of reading a long comic, the real progress is too small to be
+            // perceived as a bar, even with the contrast applied below.
             ProgressView(value: max(comic.progress, 0.08))
                 .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
                 .frame(height: 5)
@@ -84,9 +84,9 @@ struct ComicGridItemView: View {
         }
     }
 
-    /// Mostrato se il fumetto è solo un placeholder iCloud, non ancora scaricato in locale:
-    /// senza questo indizio, aprirlo può far comparire un errore dopo un lungo caricamento
-    /// senza che sia chiaro il motivo.
+    /// Shown when the comic is only an iCloud placeholder, not yet downloaded locally:
+    /// without this hint, opening it can produce an error after a long loading time
+    /// with no clear reason why.
     @ViewBuilder
     private var pendingDownloadBadge: some View {
         if isPendingDownload {
@@ -96,10 +96,10 @@ struct ComicGridItemView: View {
 
     @ViewBuilder
     private var coverImage: some View {
-        // Decodificata una sola volta e riusata: senza `CoverThumbnailCache` questo veniva
-        // rieseguito a ogni valutazione di `body`, e con un gruppo intero che appare in una
-        // volta sola (es. espandendo una sezione) le decodifiche sincrone si accumulavano
-        // abbastanza da far scattare l'animazione.
+        // Decoded once and reused: without `CoverThumbnailCache` this used to run again on
+        // every evaluation of `body`, and with an entire group appearing all at once
+        // (e.g. expanding a section) the synchronous decodes piled up
+        // enough to noticeably stall the animation.
         if let platformImage = CoverThumbnailCache.image(for: comic) {
             platformImage.asSwiftUIImage
                 .resizable()

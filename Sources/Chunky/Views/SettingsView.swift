@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Stile di transizione per il cambio pagina, usato sia per "Tap page-turn" che per
-/// "Swipe page-turn" (stesse opzioni per entrambi). Con "Scorrimento" lo swipe usa il
-/// pager nativo di `TabView(.page)` su iOS (segue il dito); le altre opzioni passano a un
-/// pager gestito manualmente — vedi nota in ReaderView.
+/// Transition style for the page change, used both for "Tap page-turn" and for "Swipe
+/// page-turn" (same options for both). With "Scroll" the swipe uses `TabView(.page)`'s
+/// native pager on iOS (follows the finger); the other options switch to a manually
+/// managed pager — see the note in ReaderView.
 enum TapPageTurnStyle: String, CaseIterable, Identifiable {
     case disabled
     case slide
@@ -22,9 +22,9 @@ enum TapPageTurnStyle: String, CaseIterable, Identifiable {
     }
 }
 
-/// Come la pagina viene adattata allo schermo. "Adatta pagina" mostra l'intera pagina
-/// (comportamento attuale/di sempre); "Adatta larghezza" scala alla larghezza dello schermo,
-/// rendendo la pagina scorrevole verticalmente se più alta dello schermo.
+/// How the page is fitted to the screen. "Fit page" shows the whole page (current/original
+/// behavior); "Fit width" scales to the screen's width, making the page scrollable
+/// vertically if it's taller than the screen.
 enum PageZoomMode: String, CaseIterable, Identifiable {
     case auto
     case fitPage
@@ -41,8 +41,8 @@ enum PageZoomMode: String, CaseIterable, Identifiable {
     }
 }
 
-/// Le opzioni osservate per il timer di reset a pagina 1 dopo inattività (funzione pensata
-/// per l'uso "vetrina/kiosk", vicino a Modalità Kiosk): il numero è in secondi, 0 = "Mai".
+/// The observed options for the reset-to-page-1 timer after inactivity (a feature designed
+/// for "showcase/kiosk" use, related to Kiosk Mode): the number is in seconds, 0 = "Never".
 enum ReaderIdleResetOption: Int, CaseIterable, Identifiable {
     case never = 0
     case seconds10 = 10
@@ -67,7 +67,7 @@ enum ReaderIdleResetOption: Int, CaseIterable, Identifiable {
     }
 }
 
-/// Icona "ⓘ" con spiegazione a comparsa.
+/// "ⓘ" icon with a pop-up explanation.
 struct InfoButton: View {
     let text: String
     @State private var isPresented = false
@@ -89,17 +89,18 @@ struct InfoButton: View {
         Text(text)
             .font(.footnote)
             .multilineTextAlignment(.leading)
-            // La larghezza fissa va data al Text *prima* del padding: senza una larghezza concreta
-            // il popover propone una dimensione ambigua e l'altezza calcolata tronca le ultime righe.
+            // The fixed width must be given to the Text *before* the padding: without a
+            // concrete width the popover proposes an ambiguous size and the computed height
+            // truncates the last lines.
             .frame(width: 260, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .padding()
     }
 }
 
-/// `compact: true` omette lo Spacer finale: usarlo per l'etichetta di un Picker, dove SwiftUI
-/// aggiunge già da sé il valore corrente e la freccina dopo l'intera label — uno Spacer qui la
-/// farebbe espandere in modo scomposto invece di restare compatta accanto al titolo.
+/// `compact: true` omits the trailing Spacer: use it for a Picker's label, where SwiftUI
+/// already adds the current value and the little arrow after the whole label on its own —
+/// a Spacer here would make it expand awkwardly instead of staying compact next to the title.
 func labelWithInfo(_ title: String, info: String, compact: Bool = false) -> some View {
     HStack(spacing: compact ? 4 : nil) {
         Text(title)
@@ -219,9 +220,9 @@ struct SettingsView: View {
                 NavigationLink("Diagnostica", destination: DiagnosticsView())
                 NavigationLink("Stato iCloud", destination: ICloudStatusView())
                 #if os(macOS)
-                // Senza iCloud la cartella libreria vive nel container sandbox
-                // (~/Library/Containers/com.scunio.Chunky/...), che nessuno trova da sé nel
-                // Finder: un modo diretto per arrivarci, invece di lasciarlo nascosto.
+                // Without iCloud the library folder lives inside the sandbox container
+                // (~/Library/Containers/com.scunio.Chunky/...), which nobody finds on their
+                // own in the Finder: a direct way to get there, instead of leaving it hidden.
                 Button("Mostra la cartella della libreria nel Finder") {
                     RevealInFinder.reveal(LibraryStorage.rootFolderURL())
                 }
@@ -271,8 +272,8 @@ struct SettingsView: View {
                 }
             }
 
-            // MetricKit, da cui dipende questa funzione, non esiste su macOS: mostrare il
-            // toggle lì significherebbe promettere qualcosa che non fa nulla.
+            // MetricKit, on which this feature depends, doesn't exist on macOS: showing
+            // the toggle there would mean promising something that does nothing.
             #if os(iOS)
             Section(
                 header: Text("Diagnostica avanzata"),
@@ -295,14 +296,14 @@ struct SettingsView: View {
             }
         }
         #if os(macOS)
-        // Senza uno stile esplicito, una Form spinta in una NavigationStack (non root) su
-        // macOS cade su una lista piatta senza sfondi raggruppati — verificato dal vivo,
-        // aspetto completamente diverso dalla stessa Form mostrata come radice.
+        // Without an explicit style, a Form pushed into a NavigationStack (not root) on
+        // macOS falls back to a flat list with no grouped backgrounds — verified live,
+        // completely different look from the same Form shown as the root.
         .formStyle(.grouped)
-        // Un `maxHeight` qui taglierebbe il contenuto in eccesso senza scroll (verificato: è
-        // esattamente quello che succedeva). Solo un limite di larghezza, e la finestra —
-        // resa ridimensionabile in ChunkyApp.swift — può aprirsi più bassa e lasciare che la
-        // Form scorra da sé, come qualunque lista/form scrollabile.
+        // A `maxHeight` here would clip the excess content with no scrolling (verified:
+        // that's exactly what happened). Just a width limit, and the window — made
+        // resizable in ChunkyApp.swift — can open shorter and let the Form scroll on its
+        // own, like any other scrollable list/form.
         .frame(maxWidth: 600)
         #endif
         .navigationTitle("Impostazioni")
