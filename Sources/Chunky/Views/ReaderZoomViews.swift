@@ -159,6 +159,17 @@ struct ZoomableImageView: UIViewRepresentable {
 
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
         context.coordinator.isZoomed = isZoomed
+        // The pager keeps nearby pages alive for smooth swiping (see `isActive`'s doc
+        // comment below): if a page goes from active to inactive while still zoomed in
+        // (e.g. the user zooms, then taps/swipes to another page without zooming back out
+        // first), nothing else ever calls `scrollViewDidZoom` on this now-inactive scroll
+        // view again, and the shared `isZoomed` binding — which gates every swipe-to-turn
+        // path — stays stuck at `true` for the rest of the session. Resetting here as soon
+        // as the page deactivates keeps the binding in sync with what's actually on screen.
+        if context.coordinator.isActive, !isActive, scrollView.zoomScale > 1.01 {
+            scrollView.setZoomScale(1, animated: false)
+            if isZoomed.wrappedValue { isZoomed.wrappedValue = false }
+        }
         context.coordinator.isActive = isActive
         guard let imageView = context.coordinator.imageView else { return }
         if imageView.image !== image {
@@ -383,6 +394,13 @@ struct SpreadZoomableImageView: UIViewRepresentable {
 
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
         context.coordinator.isZoomed = isZoomed
+        // See the identical guard in `ZoomableImageView.updateUIView`: same shared
+        // `isZoomed` binding, same stuck-scroll risk if a zoomed spread deactivates
+        // without zooming back out first.
+        if context.coordinator.isActive, !isActive, scrollView.zoomScale > 1.01 {
+            scrollView.setZoomScale(1, animated: false)
+            if isZoomed.wrappedValue { isZoomed.wrappedValue = false }
+        }
         context.coordinator.isActive = isActive
         let spreadChanged = context.coordinator.images.count != images.count
             || zip(context.coordinator.images, images).contains { $0 !== $1 }
