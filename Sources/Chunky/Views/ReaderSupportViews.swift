@@ -328,6 +328,26 @@ private struct TapZoneRelay: UIViewRepresentable {
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool { true }
 
+        /// Without this, this single tap (1 tap required) fires immediately on the first
+        /// touch of a double tap-to-zoom gesture (`ZoomGestureRelayView`'s `doubleTap`, 2
+        /// taps required, registered separately on the same window): a `UITapGestureRecognizer`
+        /// doesn't wait to see if a second tap follows unless explicitly told to require
+        /// another recognizer's failure. That meant every double-tap-to-zoom also fired one
+        /// (sometimes two, since both taps of the pair can land in a page-turn zone) calls to
+        /// `onNext`/`onPrevious` — the "jumps ahead pages" bug. Requiring failure of any
+        /// multi-tap recognizer sharing the window makes this tap wait out the standard
+        /// double-tap window before firing, exactly like a normal single-tap-vs-double-tap
+        /// disambiguation within one view.
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            if let other = otherGestureRecognizer as? UITapGestureRecognizer, other.numberOfTapsRequired > 1 {
+                return true
+            }
+            return false
+        }
+
         @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
             guard let relayView, relayView.window != nil else { return }
             let point = recognizer.location(in: relayView)
