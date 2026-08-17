@@ -19,3 +19,5 @@ Config/ExportOptions.plist
 
 # Local Claude Code project instructions, not shared via git.
 /CLAUDE.md
+.venv-asc/
+__pycache__/

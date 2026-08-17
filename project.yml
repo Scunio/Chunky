@@ -73,7 +73,7 @@ targetTemplates:
       base:
         PRODUCT_NAME: Chunky
         PRODUCT_BUNDLE_IDENTIFIER: com.scunio.Chunky
-        MARKETING_VERSION: "1.0"
+        MARKETING_VERSION: "1.0.1"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
         ENABLE_PREVIEWS: true
