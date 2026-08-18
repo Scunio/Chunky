@@ -7,10 +7,15 @@ Commands:
   get-version <platform> <version>   Show the appStoreVersion resource (IOS|MAC_OS, e.g. "1.0.1")
   set-notes <platform> <version> <locale> <text>   Set "What's New" for a version localization
   set-description <platform> <version> <locale> <text>   Set the app description
+  upload-screenshots <platform> <version> <locale> <displayType> <file>...
+      Upload one or more screenshots, appended to the set for displayType
+      (e.g. APP_IPHONE_67, APP_IPAD_PRO_3GEN_129, APP_DESKTOP). Creates the
+      set if it doesn't exist yet.
 
 Credentials come from Config/appstoreconnect.env (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH).
 """
 import base64
+import hashlib
 import json
 import os
 import sys
@@ -150,10 +155,79 @@ def cmd_set_description(platform, version_string, locale, text):
     print(f"ok: description aggiornata per {locale} su {version_string} ({platform})")
 
 
+def cmd_upload_screenshots(platform, version_string, locale, display_type, *file_paths):
+    if not file_paths:
+        sys.exit("error: nessun file specificato")
+    app_id = get_app_id()
+    version, res = get_version(app_id, platform, version_string)
+    if version is None:
+        sys.exit(f"error: versione {version_string} ({platform}) non trovata su App Store Connect")
+    loc = next(
+        (l for l in res.get("included", []) if l["attributes"]["locale"] == locale),
+        None,
+    )
+    if loc is None:
+        sys.exit(f"error: nessuna localizzazione '{locale}' per la versione {version_string}")
+
+    sets_res = call("GET", f"/appStoreVersionLocalizations/{loc['id']}/appScreenshotSets")
+    set_id = next(
+        (s["id"] for s in sets_res.get("data", []) if s["attributes"]["screenshotDisplayType"] == display_type),
+        None,
+    )
+    if set_id is None:
+        created = call(
+            "POST",
+            "/appScreenshotSets",
+            {
+                "data": {
+                    "type": "appScreenshotSets",
+                    "attributes": {"screenshotDisplayType": display_type},
+                    "relationships": {
+                        "appStoreVersionLocalization": {"data": {"type": "appStoreVersionLocalizations", "id": loc["id"]}}
+                    },
+                }
+            },
+        )
+        set_id = created["data"]["id"]
+        print(f"creato set {display_type} ({set_id})")
+
+    for path in file_paths:
+        with open(path, "rb") as f:
+            content = f.read()
+        file_name = os.path.basename(path)
+        reserved = call(
+            "POST",
+            "/appScreenshots",
+            {
+                "data": {
+                    "type": "appScreenshots",
+                    "attributes": {"fileName": file_name, "fileSize": len(content)},
+                    "relationships": {"appScreenshotSet": {"data": {"type": "appScreenshotSets", "id": set_id}}},
+                }
+            },
+        )
+        shot_id = reserved["data"]["id"]
+        for op in reserved["data"]["attributes"]["uploadOperations"]:
+            chunk = content[op["offset"]: op["offset"] + op["length"]]
+            req = urllib.request.Request(op["url"], data=chunk, method=op["method"])
+            for h in op["requestHeaders"]:
+                req.add_header(h["name"], h["value"])
+            with urllib.request.urlopen(req):
+                pass
+        checksum = hashlib.md5(content).hexdigest()
+        call(
+            "PATCH",
+            f"/appScreenshots/{shot_id}",
+            {"data": {"type": "appScreenshots", "id": shot_id, "attributes": {"uploaded": True, "sourceFileChecksum": checksum}}},
+        )
+        print(f"caricato: {file_name} -> {display_type}")
+
+
 COMMANDS = {
     "get-version": cmd_get_version,
     "set-notes": cmd_set_notes,
     "set-description": cmd_set_description,
+    "upload-screenshots": cmd_upload_screenshots,
 }
 
 
