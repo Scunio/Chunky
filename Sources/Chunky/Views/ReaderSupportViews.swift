@@ -328,30 +328,53 @@ private struct TapZoneRelay: UIViewRepresentable {
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool { true }
 
-        /// Without this, this single tap (1 tap required) fires immediately on the first
-        /// touch of a double tap-to-zoom gesture (`ZoomGestureRelayView`'s `doubleTap`, 2
-        /// taps required, registered separately on the same window): a `UITapGestureRecognizer`
-        /// doesn't wait to see if a second tap follows unless explicitly told to require
-        /// another recognizer's failure. That meant every double-tap-to-zoom also fired one
-        /// (sometimes two, since both taps of the pair can land in a page-turn zone) calls to
-        /// `onNext`/`onPrevious` — the "jumps ahead pages" bug. Requiring failure of any
-        /// multi-tap recognizer sharing the window makes this tap wait out the standard
-        /// double-tap window before firing, exactly like a normal single-tap-vs-double-tap
-        /// disambiguation within one view.
-        func gestureRecognizer(
-            _ gestureRecognizer: UIGestureRecognizer,
-            shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer
-        ) -> Bool {
-            if let other = otherGestureRecognizer as? UITapGestureRecognizer, other.numberOfTapsRequired > 1 {
-                return true
-            }
-            return false
-        }
+        /// This single tap (1 tap required) and `ZoomGestureRelayView`'s double tap-to-zoom (2
+        /// taps required) are separate recognizers on the same window: without disambiguation,
+        /// this one fires immediately on the very first touch of a double-tap-to-zoom gesture,
+        /// which meant every double-tap-to-zoom also fired one (sometimes two) calls to
+        /// `onNext`/`onPrevious` — the "jumps ahead pages" bug.
+        ///
+        /// The obvious fix, `shouldRequireFailureOf`, makes this recognizer wait out the whole
+        /// system multi-tap timeout on *every* single tap, not just ambiguous ones — noticeably
+        /// more sluggish than Photos (measured, tried it first). So instead disambiguation is
+        /// hand-rolled here, with our own short window: on a tap, the action is scheduled after
+        /// `doubleTapWindow` instead of firing right away; if a second tap lands nearby before
+        /// that fires, it's assumed to be turning into a double tap, so the pending action is
+        /// dropped and the real `ZoomGestureRelayView` double-tap recognizer (unaffected by any
+        /// of this, running with its own normal timing) is the one that ends up handling it.
+        private var pendingAction: (() -> Void)?
+        private var pendingTapPoint: CGPoint?
+        /// Bumped every time a pending action is dropped or fired, so the corresponding
+        /// `asyncAfter` closure below can tell it's stale and no-op instead of double-firing.
+        private var pendingToken = 0
+        private let doubleTapWindow: TimeInterval = 0.25
+        /// Taps further apart than this can't be the two halves of one double tap (mirrors the
+        /// system recognizer's own proximity requirement): treat the first as a genuine single
+        /// tap right away instead of waiting the window out for nothing.
+        private let doubleTapMaxDistance: CGFloat = 60
 
         @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
             guard let relayView, relayView.window != nil else { return }
             let point = recognizer.location(in: relayView)
             guard relayView.bounds.contains(point) else { return }
+
+            if let pendingTapPoint, distance(point, pendingTapPoint) <= doubleTapMaxDistance {
+                // Second tap of what's turning into a double tap: let the zoom recognizer take
+                // it from here, this one stays silent.
+                pendingAction = nil
+                self.pendingTapPoint = nil
+                pendingToken += 1
+                return
+            }
+            // An unrelated tap arrived while one was still pending (too far away to be its
+            // double-tap partner): that one was a genuine single tap all along, run it now
+            // rather than making it wait needlessly.
+            let stale = pendingAction
+            pendingAction = nil
+            pendingTapPoint = nil
+            pendingToken += 1
+            stale?()
+
             let action = PageTapZoneGeometry.action(
                 at: point,
                 in: relayView.bounds.size,
@@ -365,15 +388,31 @@ private struct TapZoneRelay: UIViewRepresentable {
                     bottomInset: bottomInset
                 )
             )
-            switch action {
-            case .previous: onPrevious()
-            case .next: onNext()
-            case .toggleControls: onToggleControls()
-            case .exit: onExit()
-            case .openSettings: onOpenSettings()
-            case .toggleDoublePage: onToggleDoublePage()
-            case nil: break
+            guard let action else { return }
+
+            let fire: () -> Void = { [weak self] in
+                switch action {
+                case .previous: self?.onPrevious()
+                case .next: self?.onNext()
+                case .toggleControls: self?.onToggleControls()
+                case .exit: self?.onExit()
+                case .openSettings: self?.onOpenSettings()
+                case .toggleDoublePage: self?.onToggleDoublePage()
+                }
             }
+            pendingAction = fire
+            pendingTapPoint = point
+            let token = pendingToken
+            DispatchQueue.main.asyncAfter(deadline: .now() + doubleTapWindow) { [weak self] in
+                guard let self, self.pendingToken == token else { return }
+                self.pendingAction = nil
+                self.pendingTapPoint = nil
+                fire()
+            }
+        }
+
+        private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
+            hypot(a.x - b.x, a.y - b.y)
         }
     }
 }
