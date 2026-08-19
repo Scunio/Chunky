@@ -33,19 +33,13 @@ struct PageCollectionPager<Content: View>: UIViewRepresentable {
     /// Duration of the `.fade` style's cross-dissolve, user-adjustable — see
     /// `Coordinator.crossFade`.
     var fadeDuration: TimeInterval = 0.25
-    /// The reader's own stable viewport size (`ReaderContentView.viewportSize`), used instead
-    /// of the collection view's live `bounds` for cell sizing — `bounds` still tracks the
-    /// status bar's safe area on every controls toggle even with `ignoresSafeArea`, which
-    /// cascaded into `ZoomingScrollView` re-fitting the image and visibly resizing the page.
-    /// `.zero` falls back to sizing cells from `bounds` (e.g. before the first layout pass).
-    let itemSize: CGSize
     let content: (Int) -> Content
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> PagingCollectionView {
         let coordinator = context.coordinator
-        let view = PagingCollectionView(frame: .zero, collectionViewLayout: Self.makeLayout(itemSize: itemSize))
+        let view = PagingCollectionView(frame: .zero, collectionViewLayout: Self.makeLayout())
         view.backgroundColor = .clear
         view.isPagingEnabled = true
         view.showsHorizontalScrollIndicator = false
@@ -70,12 +64,9 @@ struct PageCollectionPager<Content: View>: UIViewRepresentable {
 
     /// A cell as big as the viewport, no spacing: with `isPagingEnabled` the scroll step
     /// is the collection view's width, so cell and step must match exactly or pages get
-    /// misaligned as you page through. Sized from `itemSize` when available (see its doc
-    /// comment); falls back to matching the collection view's own live bounds otherwise.
-    fileprivate static func makeLayout(itemSize: CGSize) -> UICollectionViewCompositionalLayout {
-        let full = itemSize == .zero
-            ? NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .fractionalHeight(1))
-            : NSCollectionLayoutSize(widthDimension: .absolute(itemSize.width), heightDimension: .absolute(itemSize.height))
+    /// misaligned as you page through.
+    private static func makeLayout() -> UICollectionViewCompositionalLayout {
+        let full = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .fractionalHeight(1))
         let item = NSCollectionLayoutItem(layoutSize: full)
         let group = NSCollectionLayoutGroup.horizontal(layoutSize: full, repeatingSubitem: item, count: 1)
         let section = NSCollectionLayoutSection(group: group)
@@ -98,7 +89,6 @@ struct PageCollectionPager<Content: View>: UIViewRepresentable {
         /// Last index for which the cells' content has already been re-evaluated.
         private var lastRefreshedSelection: Int
         private var resetToken: PagerResetToken
-        private var itemSize: CGSize
         private weak var collectionView: PagingCollectionView?
         private var dataSource: UICollectionViewDiffableDataSource<Int, Int>?
         /// The spread starts in the order they appear on screen, left to right.
@@ -116,7 +106,6 @@ struct PageCollectionPager<Content: View>: UIViewRepresentable {
             self.currentIndex = parent.selection
             self.lastRefreshedSelection = parent.selection
             self.resetToken = parent.resetToken
-            self.itemSize = parent.itemSize
         }
 
         // MARK: - Construction
@@ -181,14 +170,6 @@ struct PageCollectionPager<Content: View>: UIViewRepresentable {
             // the `dataSource` and therefore reconfiguring the recognizers on every update.
             if view.isScrollEnabled != parent.interactiveSwipe {
                 view.isScrollEnabled = parent.interactiveSwipe
-            }
-
-            // Rebuilt only on a genuine size change (rotation, multitasking), not on every
-            // controls toggle: `itemSize` already ignores the status bar's safe-area churn.
-            if parent.itemSize != .zero, parent.itemSize != itemSize {
-                itemSize = parent.itemSize
-                view.setCollectionViewLayout(PageCollectionPager.makeLayout(itemSize: itemSize), animated: false)
-                realignToCurrentPage()
             }
 
             if resetToken != parent.resetToken {

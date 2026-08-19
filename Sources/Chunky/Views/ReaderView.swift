@@ -772,8 +772,7 @@ private struct ReaderContentView: View {
                     rightToLeft: comic.readingDirection == .rightToLeft,
                     pageCount: provider.pageCount
                 ),
-                fadeDuration: fadeTransitionDuration,
-                itemSize: viewportSize
+                fadeDuration: fadeTransitionDuration
             ) { start in
                 pageContent(provider: provider, start: start)
             }
