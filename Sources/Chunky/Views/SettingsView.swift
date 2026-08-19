@@ -160,8 +160,9 @@ struct SettingsView: View {
 
             Section(header: Text("Navigazione")) {
                 Toggle(isOn: $isTapToPanEnabled) {
-                    labelWithInfo("Tap-to-pan", info: "Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati.")
+                    labelWithInfo("Tap-to-pan", info: "Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati. Non si applica con la modalità una mano attiva, che già unifica le due zone a modo suo (vedi sotto).")
                 }
+                .disabled(isOneHandedModeEnabled)
                 Toggle(isOn: $isOneHandedModeEnabled) {
                     labelWithInfo("Modalità una mano", info: "Le zone di tap per cambiare pagina diventano orizzontali (alto/basso) invece che laterali, più comode da raggiungere con il pollice.")
                 }
