@@ -20,12 +20,23 @@ struct LibrarySidebarView: View {
         LibraryGrouping.sections(for: Array(comics))
     }
 
+    private var favoritesCount: Int {
+        comics.filter(\.isFavorite).count
+    }
+
     var body: some View {
         List(selection: $selection) {
             Label("Tutti i fumetti", systemImage: "books.vertical")
                 .badge(comics.count)
                 .tag(LibrarySelection.all)
                 .accessibilityIdentifier("sidebar.all")
+
+            if favoritesCount > 0 {
+                Label("Preferiti", systemImage: "star")
+                    .badge(favoritesCount)
+                    .tag(LibrarySelection.favorites)
+                    .accessibilityIdentifier("sidebar.favorites")
+            }
 
             // The same sections as the grid (including "Other Comics" when present):
             // hiding it here would still leave it visible as a header in the
@@ -50,6 +61,11 @@ struct LibrarySidebarView: View {
         // search, with no way to understand why. It falls back to "All Comics".
         .onChange(of: sections.map(\.title)) { _, titles in
             if case .group(let title) = selection, !titles.contains(title) {
+                selection = .all
+            }
+        }
+        .onChange(of: favoritesCount) { _, count in
+            if selection == .favorites, count == 0 {
                 selection = .all
             }
         }

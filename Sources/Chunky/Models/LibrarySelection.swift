@@ -7,6 +7,7 @@ import Foundation
 /// ending up inside the sidebar.
 enum LibrarySelection: Hashable {
     case all
+    case favorites
     case group(String)
 
     var groupTitle: String? {
