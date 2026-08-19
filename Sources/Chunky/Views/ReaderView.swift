@@ -330,18 +330,9 @@ private struct ReaderContentView: View {
                 .allowsHitTesting(true)
 
                 #if os(iOS)
-                // No `.ignoresSafeArea`/`.safeAreaInset` here: several placements of both
-                // measurably failed to reach the true bottom edge on iPad — a `GeometryReader`
-                // kept reporting the same `PlatformSafeArea.bottomInset`-sized shortfall no
-                // matter which one was used, with or without `StatusBarControllingHost` in
-                // the loop, so it's `.fullScreenCover` itself that never proposes more than
-                // the safe-area-inset frame here, regardless of what content asks for. This
-                // `VStack` positions `footer` the ordinary, safe-area-respecting way (its
-                // bottom edge lands exactly on the safe boundary); `footer`'s own `.offset`
-                // is what actually pushes it the rest of the way to the true edge — verified
-                // pixel-for-pixel with `xcrun simctl io screenshot` (the raw device image;
-                // the MCP screenshot tool's own processing pads a fixed strip at the bottom
-                // that looks identical to this bug but isn't it).
+                // `.fullScreenCover` never proposes more than the safe-area frame here, so
+                // this positions `footer` the ordinary way; its own `.offset` (see `footer`)
+                // is what reaches the true bottom edge.
                 VStack(spacing: 0) {
                     Spacer()
                     footer
@@ -1043,11 +1034,9 @@ private struct ReaderContentView: View {
     private var controlsChrome: some View {
         VStack {
             #if os(iOS)
-            // The footer isn't here: it's a direct sibling of `controlsChrome` in the
-            // outer `ZStack` instead (see `readerContent`), in its own `VStack`+`Spacer`
-            // positioned at the bottom — a `VStack` sibling of `header` inside *this* one
-            // wouldn't reach past the safe area no matter what's applied to it, since
-            // `Spacer` only ever pushes it up to the edge of the safe frame, not past it.
+            // The footer isn't here: it's a direct `readerContent` sibling instead, in its
+            // own `VStack`+`Spacer` (see there) — needs its own `.offset` to clear the
+            // safe area, which a `Spacer` inside *this* `VStack` can't give it.
             header
                 .background(GeometryReader { proxy in
                     Color.clear.preference(key: ChromeHeightKey.self, value: proxy.size.height)
@@ -1322,22 +1311,15 @@ private struct ReaderContentView: View {
                 }
                 .foregroundColor(chromeForeground)
                 .padding(.horizontal, 10)
-                .padding(.top, 4)
                 #if os(iOS)
-                // Extra bottom padding equal to the home indicator's own height, so the
-                // row's total height covers it, plus an equal `.offset` to push the whole
-                // taller row down by that same amount. Neither `.ignoresSafeArea` nor
-                // `.safeAreaInset` reach the true bottom edge here — confirmed with a
-                // `GeometryReader` on every full-bleed view in `readerContent`, with and
-                // without `StatusBarControllingHost` in the loop: `.fullScreenCover` itself
-                // never proposes more than the safe-area-inset frame, on this iPad, no
-                // matter what the content asks for. `.offset` sidesteps that entirely: it
-                // moves the already-laid-out view, not a size/position *request* that layout
-                // gets to cap. The padding keeps the row's own content (buttons, slider)
-                // sitting where it always did — only the background grows to follow it down.
-                .padding(.bottom, 4 + PlatformSafeArea.bottomInset)
+                // Extra padding, equal to the home indicator's height, grows the row so its
+                // background reaches past it once offset below; split top/bottom on iPad,
+                // where piling it all on the bottom left the content visibly off-center
+                // (iPhone's smaller inset didn't show that, so it keeps the old padding).
+                .padding(.top, 4 + (UIDevice.current.userInterfaceIdiom == .pad ? PlatformSafeArea.bottomInset / 2 : 0))
+                .padding(.bottom, 4 + (UIDevice.current.userInterfaceIdiom == .pad ? PlatformSafeArea.bottomInset / 2 : PlatformSafeArea.bottomInset))
                 #else
-                .padding(.bottom, 4)
+                .padding(.vertical, 4)
                 #endif
                 .frame(maxWidth: .infinity)
                 .background(chromeBackground)
