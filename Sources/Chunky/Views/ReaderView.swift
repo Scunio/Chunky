@@ -238,9 +238,19 @@ private struct ReaderContentView: View {
     /// white, these colors must adapt or they become unreadable (white on white).
     private var chromeForeground: Color { isBackgroundDark ? .white : .black }
 
-    /// System translucent material, like the Library's native `.toolbar`.
-    private var chromeBackground: some View {
-        Rectangle().fill(.bar)
+    /// Solid, not the system's translucent material: a blurred/see-through bar let the page
+    /// content show through underneath, which read as washed-out rather than a clean bar.
+    ///
+    /// Not the same color as the page (`readerBackground`) either: a bar in the *exact* same
+    /// black/white as the page it sits on gave no visual separation between "this is chrome"
+    /// and "this is the page" — the two areas just blended into one undifferentiated block.
+    /// iOS's own systemGray6 (the standard tone for a surface that reads as distinct from its
+    /// canvas without competing with it) at #1C1C1E dark / #F2F2F7 light: contrast against
+    /// `chromeForeground` (white/black) is ~18:1 / ~19.5:1, well past WCAG AAA's 7:1 for
+    /// normal text, so legibility isn't a concern with either.
+    private var chromeBackground: Color {
+        isBackgroundDark ? Color(red: 0x1C / 255, green: 0x1C / 255, blue: 0x1E / 255)
+                          : Color(red: 0xF2 / 255, green: 0xF2 / 255, blue: 0xF7 / 255)
     }
 
     var body: some View {
