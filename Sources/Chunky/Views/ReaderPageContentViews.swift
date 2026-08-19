@@ -32,6 +32,13 @@ struct PageSpreadView: View {
     /// preloaded spread could end up with a "ghost" zoom that then appeared cropped as soon
     /// as it became the visible one.
     var isActive: Bool = true
+    /// Same zone map `PageTapZones` uses for tap-to-turn-page, handed down so the zoom
+    /// coordinators can exclude the page-turn zones from double-tap-to-zoom — see the
+    /// comment on `ZoomableImageView.Coordinator.handleDoubleTap`.
+    var tapZoneOptions = PageTapZoneGeometry.Options(
+        oneHanded: false, oneHandedReversed: false, rightToLeft: false,
+        hotCorners: false, zonesEnabled: false, topInset: 0, bottomInset: 0
+    )
     @Environment(\.layoutDirection) private var layoutDirection
     #endif
 
@@ -62,13 +69,15 @@ struct PageSpreadView: View {
                     height: proxy.size.height,
                     isZoomed: isZoomed,
                     imageCache: imageCache,
-                    isActive: isActive
+                    isActive: isActive,
+                    tapZoneOptions: tapZoneOptions
                 )
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
             } else {
                 PageView(
                     provider: provider, index: leadingIndex, isDoublePage: pagination.pageStep > 1,
-                    isZoomed: isZoomed, imageCache: imageCache, pairedHeight: nil, isActive: isActive
+                    isZoomed: isZoomed, imageCache: imageCache, pairedHeight: nil, isActive: isActive,
+                    tapZoneOptions: tapZoneOptions
                 )
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
             }
@@ -105,6 +114,10 @@ private struct SpreadPairView: View {
     let isZoomed: Binding<Bool>
     var imageCache: PageImageCache?
     var isActive: Bool = true
+    var tapZoneOptions = PageTapZoneGeometry.Options(
+        oneHanded: false, oneHandedReversed: false, rightToLeft: false,
+        hotCorners: false, zonesEnabled: false, topInset: 0, bottomInset: 0
+    )
 
     @ObservedObject private var theme = AppTheme.shared
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
@@ -121,7 +134,7 @@ private struct SpreadPairView: View {
                 // The visual order (which page is on the left) follows the reading direction:
                 // in manga (RTL) the lower index is on the right.
                 let ordered = rightToLeft ? [trailingImage, leadingImage] : [leadingImage, trailingImage]
-                SpreadZoomableImageView(images: ordered, isZoomed: isZoomed, isActive: isActive)
+                SpreadZoomableImageView(images: ordered, isZoomed: isZoomed, isActive: isActive, tapZoneOptions: tapZoneOptions)
                     .frame(height: height)
                     .overlay(tintOverlay)
             } else {
@@ -230,6 +243,12 @@ private struct PageView: View {
     /// Ignored on macOS, where this preloading doesn't exist and zoom stays on ordinary
     /// SwiftUI gestures.
     var isActive: Bool = true
+    #if os(iOS)
+    var tapZoneOptions = PageTapZoneGeometry.Options(
+        oneHanded: false, oneHandedReversed: false, rightToLeft: false,
+        hotCorners: false, zonesEnabled: false, topInset: 0, bottomInset: 0
+    )
+    #endif
     @ObservedObject private var theme = AppTheme.shared
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
     @AppStorage("upscalingEnabled") private var isUpscalingEnabled = false
@@ -281,7 +300,7 @@ private struct PageView: View {
                             // the system behavior of a zoomable scroll view, not gestures bolted on
                             // top) takes part in UIKit's own gesture coordination protocol instead of
                             // having to reinvent it by hand.
-                            ZoomableImageView(image: image, isZoomed: isZoomed, isActive: isActive)
+                            ZoomableImageView(image: image, isZoomed: isZoomed, isActive: isActive, tapZoneOptions: tapZoneOptions)
                                 .frame(width: proxy.size.width, height: proxy.size.height)
                                 .overlay(tintOverlay)
                             #else

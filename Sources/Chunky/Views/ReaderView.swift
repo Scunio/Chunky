@@ -387,6 +387,15 @@ private struct ReaderContentView: View {
             textIndex?.cancelScanning()
         }
         .onChange(of: currentPage) { _, newValue in
+            // A page that turns is never still zoomed by definition (each page's zoom
+            // starts over, see `ZoomableImageView.updateUIView`): resetting the shared flag
+            // right here, on the one state change every page-turn path goes through, doesn't
+            // depend on the UIKit collection view cell for the zoomed-out page actually
+            // running through `isActive` becoming false before it's reused for another
+            // page — which isn't guaranteed (a cell scrolled far enough off-screen can be
+            // recycled for a different index without ever seeing that transition), and was
+            // the gap that still let `isZoomed` latch `true` and freeze swiping.
+            if isZoomed { isZoomed = false }
             guard let provider = provider else { return }
             comic.lastReadPage = Int32(min(max(newValue, 0), provider.pageCount - 1))
             comic.dateLastOpened = Date()
@@ -654,22 +663,42 @@ private struct ReaderContentView: View {
         }
     }
 
-    /// The tap zones live *inside* the page content, not overlaid on the pager in a ZStack:
-    /// an overlaid view (even a `Color.clear`) is a sibling drawn on top of the pager's
-    /// scroll view, and UIKit's hit-test assigns it every touch, swipes included — the
-    /// pager receives none of them and the page change stays dead (`simultaneousGesture`
-    /// doesn't change the hit-test, it only concerns arbitration between gestures). From
-    /// inside the content they're instead subviews of the scroll view, which keeps
-    /// recognizing the pan from its own recognizer.
-    private func pageContent(provider: ComicPageProvider, start: Int) -> some View {
-        ZStack {
-            PageSpreadView(provider: provider, leadingIndex: start, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache, isActive: start == currentPage)
-                .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
-
-            tapZonesOrControlsToggle(provider: provider)
-        }
+    /// Same options `tapZonesOrControlsToggle` builds for `PageTapZones`, handed down to the
+    /// zoom coordinators too — see `PageSpreadView.tapZoneOptions`.
+    private var tapZoneOptions: PageTapZoneGeometry.Options {
+        PageTapZoneGeometry.Options(
+            oneHanded: isOneHandedModeEnabled,
+            oneHandedReversed: isOneHandedZonesReversed,
+            rightToLeft: comic.readingDirection == .rightToLeft,
+            hotCorners: isHotCornersEnabled,
+            zonesEnabled: tapPageTurnStyle != .disabled,
+            topInset: isControlsVisible ? headerHeight : 0,
+            bottomInset: isControlsVisible ? footerHeight : 0
+        )
     }
 
+    private func pageContent(provider: ComicPageProvider, start: Int) -> some View {
+        PageSpreadView(provider: provider, leadingIndex: start, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache, isActive: start == currentPage, tapZoneOptions: tapZoneOptions)
+            .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
+    }
+
+    /// The tap zones are mounted once here, as a sibling of the pager, not inside each page's
+    /// content: `pageContent` is rebuilt per spread start, and the pager keeps 2-3 of them
+    /// alive at once for smooth swiping, so one `PageTapZones` per page meant that many
+    /// `TapZoneRelay` coordinators alive simultaneously — each with its own window-attached
+    /// recognizer and its own tap-debounce state (see `TapZoneRelay.Coordinator`). That state
+    /// needs to outlive a single tap's disambiguation window; a per-page coordinator doesn't
+    /// reliably: `PageCollectionPager.refreshVisibleContent()` reconfigures visible cells'
+    /// content on every page change, which tears down and rebuilds that page's `PageTapZones`
+    /// — silently dropping a tap still waiting out its window. Measured live: tap the center
+    /// band right after a page change and the pending "toggle controls" never fires.
+    ///
+    /// Mounting it once instead is safe here even though `pageContent` no longer overlays it:
+    /// the historical reason for nesting it inside the content (an overlaid sibling stealing
+    /// every touch via `hitTest`, see the old comment this replaced) doesn't apply to this
+    /// window-relay implementation — `RelayView.hitTest` already always returns `nil`, so it
+    /// was never "on top" for hit-testing purposes regardless of where in the tree it lives.
+    /// macOS's own `PageTapZones` has always been mounted this way, as a pager sibling.
     private func programmaticPager(provider: ComicPageProvider) -> some View {
         let isInteractiveSwipe = swipePageTurnStyle == .slide && !isZoomed
         return ZStack {
@@ -691,6 +720,8 @@ private struct ReaderContentView: View {
             if !isInteractiveSwipe && swipePageTurnStyle != .disabled && !isZoomed {
                 discreteSwipeCatcher(provider: provider)
             }
+
+            tapZonesOrControlsToggle(provider: provider)
         }
     }
 
@@ -718,7 +749,8 @@ private struct ReaderContentView: View {
             zonesEnabled: tapPageTurnStyle != .disabled,
             rightToLeft: comic.readingDirection == .rightToLeft,
             topInset: isControlsVisible ? headerHeight : 0,
-            bottomInset: isControlsVisible ? footerHeight : 0
+            bottomInset: isControlsVisible ? footerHeight : 0,
+            isZoomed: isZoomed
         ) {
             // With "Tap-to-pan" the "back" zone also advances: handy if you can't
             // comfortably reach both sides of the screen.

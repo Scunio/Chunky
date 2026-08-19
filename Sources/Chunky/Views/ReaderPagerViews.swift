@@ -231,6 +231,10 @@ struct TwoFingerBrightnessView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        /// The actual relay view mounted in the SwiftUI hierarchy (not `recognizer.view`,
+        /// which is the window the recognizer is attached to — see `handlePan`): needed to
+        /// find the reader's own hosting view controller via `UIView.hasPresentationAbove`.
+        weak var relayView: UIView?
         var onBegan: () -> Void
         var onChange: (CGFloat) -> Void
         init(onBegan: @escaping () -> Void, onChange: @escaping (CGFloat) -> Void) {
@@ -285,6 +289,11 @@ struct TwoFingerBrightnessView: UIViewRepresentable {
 
         @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
             guard let view = recognizer.view, view.bounds.height > 0 else { return }
+            // Same "don't act under a presented sheet" guard as the other window relays —
+            // see `UIView.hasPresentationAbove` — checked against `relayView` (the view
+            // actually mounted in the reader's SwiftUI hierarchy), not `recognizer.view`
+            // (the window this recognizer is attached to).
+            guard relayView?.hasPresentationAbove != true else { return }
             switch recognizer.state {
             case .began:
                 onBegan()
@@ -376,6 +385,7 @@ final class WindowPanRelayView: UIView {
             self.recognizer = nil
         }
         guard let window = window, let coordinator = coordinator else { return }
+        coordinator.relayView = self
         let recognizer = UIPanGestureRecognizer(
             target: coordinator,
             action: #selector(TwoFingerBrightnessView.Coordinator.handlePan(_:))
