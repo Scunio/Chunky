@@ -759,8 +759,13 @@ private struct ReaderContentView: View {
             isZoomed: isZoomed
         ) {
             // With "Tap-to-pan" the "back" zone also advances: handy if you can't
-            // comfortably reach both sides of the screen.
-            step(isTapToPanEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
+            // comfortably reach both sides of the screen. Ignored while one-handed mode is
+            // on: there both zones already share one action (`PageTapZoneGeometry.action`'s
+            // `sharedAction`, following `isOneHandedZonesReversed`) for the same "can't
+            // reach both sides" reason, so this would otherwise silently fight that choice
+            // — turning "one-handed, reversed" (meant to send both zones back) into "both
+            // zones forward" behind the user's back, with no indication why.
+            step(isTapToPanEnabled && !isOneHandedModeEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
         } onNext: {
             step(1, provider: provider, style: tapPageTurnStyle)
         } onToggleControls: {
