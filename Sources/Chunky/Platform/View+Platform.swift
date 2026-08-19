@@ -11,17 +11,7 @@ extension UIScreen {
 }
 
 enum PlatformSafeArea {
-    /// Home indicator height, read straight from the key window rather than through a
-    /// `GeometryReader` in the view tree: the reader's header/footer already extend their
-    /// background under it (see `ReaderView.header`/`footer`), and centering their content
-    /// within that taller bar needs this value as plain padding, not a reactive layout pass.
-    static var bottomInset: CGFloat {
-        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
-            .windows.first(where: \.isKeyWindow)?
-            .safeAreaInsets.bottom ?? 0
-    }
-
-    /// Status bar / notch / Dynamic Island height, read the same way as `bottomInset`. The
+    /// Status bar / notch / Dynamic Island height, read straight from the key window. The
     /// reader's tap zones live in a `.ignoresSafeArea()` pager (see `ReaderView.iOSPager`),
     /// so their coordinate space starts at the true top of the screen — a header positioned
     /// at the normal, safe-area-respecting spot therefore sits `topInset` points *below*

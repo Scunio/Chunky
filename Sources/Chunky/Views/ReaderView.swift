@@ -404,6 +404,12 @@ private struct ReaderContentView: View {
         // the system gesture (Dock/App Switcher). defersSystemGestures gives priority to
         // our page-change DragGesture as long as the touch is in progress on that edge.
         .defersSystemGestures(on: .bottom)
+        // The footer lives here, as a safe-area inset on the whole reader, rather than
+        // inside `controlsChrome`: this is the API built for a bar pinned to the true
+        // bottom edge — it extends the bar's background under the home indicator and
+        // pads its content above it automatically, unlike `.ignoresSafeArea` on an
+        // intrinsically-sized row (tried first; only shifted the row instead of growing it).
+        .safeAreaInset(edge: .bottom, spacing: 0) { footerSafeAreaInset }
         #endif
         .onAppear {
             loadComic()
@@ -707,9 +713,11 @@ private struct ReaderContentView: View {
             // positioned the normal, safe-area-respecting way sits `PlatformSafeArea.topInset`/
             // `bottomInset` points further in, not right at that origin. Without adding it
             // here, a tap in that gap (visually right on the header/footer) fell through to
-            // the ordinary page-turn zones underneath.
+            // the ordinary page-turn zones underneath. The footer doesn't need the same
+            // treatment: it's a `safeAreaInset` (see `readerContent`), so the measured
+            // `footerHeight` already includes the bottom safe-area padding the system adds.
             topInset: isControlsVisible ? headerHeight + PlatformSafeArea.topInset : 0,
-            bottomInset: isControlsVisible ? footerHeight + PlatformSafeArea.bottomInset : 0
+            bottomInset: isControlsVisible ? footerHeight : 0
         )
     }
 
@@ -787,7 +795,7 @@ private struct ReaderContentView: View {
             rightToLeft: comic.readingDirection == .rightToLeft,
             // See the identical comment on `tapZoneOptions`.
             topInset: isControlsVisible ? headerHeight + PlatformSafeArea.topInset : 0,
-            bottomInset: isControlsVisible ? footerHeight + PlatformSafeArea.bottomInset : 0,
+            bottomInset: isControlsVisible ? footerHeight : 0,
             isZoomed: isZoomed
         ) {
             // With "Tap-to-pan" the "back" zone also advances: handy if you can't
@@ -1020,17 +1028,17 @@ private struct ReaderContentView: View {
     private var controlsChrome: some View {
         VStack {
             #if os(iOS)
+            // The footer isn't here: it's attached to the outer `ZStack` as a
+            // `safeAreaInset` instead (see `readerContent`), so the system extends its
+            // background under the home indicator and pads its content above it for us —
+            // `.ignoresSafeArea` on an intrinsically-sized row only shifted the row down
+            // without growing it, leaving a gap uncovered by its background.
             header
                 .background(GeometryReader { proxy in
                     Color.clear.preference(key: ChromeHeightKey.self, value: proxy.size.height)
                 })
                 .onPreferenceChange(ChromeHeightKey.self) { headerHeight = $0 }
             Spacer()
-            footer
-                .background(GeometryReader { proxy in
-                    Color.clear.preference(key: ChromeFooterHeightKey.self, value: proxy.size.height)
-                })
-                .onPreferenceChange(ChromeFooterHeightKey.self) { footerHeight = $0 }
             #else
             header
             Spacer()
@@ -1038,6 +1046,19 @@ private struct ReaderContentView: View {
             #endif
         }
     }
+
+    #if os(iOS)
+    @ViewBuilder
+    private var footerSafeAreaInset: some View {
+        if isControlsVisible && !isPanelSelectionPresented && !isFindPresented {
+            footer
+                .background(GeometryReader { proxy in
+                    Color.clear.preference(key: ChromeFooterHeightKey.self, value: proxy.size.height)
+                })
+                .onPreferenceChange(ChromeFooterHeightKey.self) { footerHeight = $0 }
+        }
+    }
+    #endif
 
     /// Leading icon group, isolated so its width can be measured (see `header`).
     private var headerLeadingActions: some View {
@@ -1301,9 +1322,7 @@ private struct ReaderContentView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .frame(maxWidth: .infinity)
-                // See the identical comment on `header`'s background: reaches the home
-                // indicator area instead of stopping short of it.
-                .background(chromeBackground.ignoresSafeArea(edges: .bottom))
+                .background(chromeBackground)
                 .environment(\.colorScheme, isBackgroundDark ? .dark : .light)
                 .buttonStyle(PlainButtonStyle())
                 .transition(.move(edge: .bottom).combined(with: .opacity))
