@@ -4,6 +4,45 @@ import AppKit
 #endif
 
 #if os(iOS)
+import UIKit
+
+extension UIResponder {
+    /// Walks the responder chain up to the nearest enclosing `UIViewController`.
+    var owningViewController: UIViewController? {
+        var responder: UIResponder? = self
+        while let current = responder {
+            if let viewController = current as? UIViewController { return viewController }
+            responder = current.next
+        }
+        return nil
+    }
+}
+
+extension UIView {
+    /// True while a sheet, popover, full-screen cover or alert is presented *from* this
+    /// view's own hosting view controller. All the reader's gesture relays (`TapZoneRelay`,
+    /// `ZoomGestureRelayView`, `SpreadZoomGestureRelayView`, `WindowPanRelayView`) attach
+    /// their recognizers directly to the window — see the comment on `PageTapZones` —
+    /// specifically so they keep receiving touches regardless of what SwiftUI view currently
+    /// sits on top of the hit-test. That's also the problem: without this check they *also*
+    /// act on a touch meant to dismiss a presented sheet (tapping outside Settings, say),
+    /// turning the page or toggling controls underneath at the same time the sheet closes.
+    ///
+    /// Deliberately anchored to *this view's own* hosting view controller
+    /// (`owningViewController`), not the window's `rootViewController`: on iOS the reader
+    /// itself is shown via `.fullScreenCover` (see `LibraryView`), i.e. it IS a presented
+    /// view controller, so `rootViewController.presentedViewController` is non-nil for the
+    /// reader's entire lifetime — a check anchored there would have permanently disabled
+    /// every one of these gesture relays the moment the reader opened. Anchoring to the
+    /// view's own hosting controller instead asks only "is something presented *from the
+    /// reader*," which is the actual question.
+    var hasPresentationAbove: Bool {
+        owningViewController?.presentedViewController != nil
+    }
+}
+#endif
+
+#if os(iOS)
 /// Tap zones to change page: two side thirds (forward/back) and a central band to show/hide
 /// the controls, or — in "one-handed" mode — the whole left/right side (no central band, to
 /// stay comfortable with the thumb across the full screen).
@@ -45,6 +84,11 @@ struct PageTapZones: View {
     /// zone underneath and advanced or went back a page in the comic.
     var topInset: CGFloat = 0
     var bottomInset: CGFloat = 0
+    /// True while the page is zoomed in: previous/next taps are suspended while zoomed, the
+    /// same way swipe-to-turn-page already is (see `ReaderView.programmaticPager`'s
+    /// `isInteractiveSwipe`/`discreteSwipeCatcher`) — the turn zones sit over content the
+    /// user may be panning or double-tapping back out of, not over "the page" as such.
+    var isZoomed: Bool = false
     let onPrevious: () -> Void
     let onNext: () -> Void
     let onToggleControls: () -> Void
@@ -61,6 +105,7 @@ struct PageTapZones: View {
             rightToLeft: rightToLeft,
             hotCorners: hotCorners,
             zonesEnabled: zonesEnabled,
+            isZoomed: isZoomed,
             topInset: topInset,
             bottomInset: bottomInset,
             onPrevious: onPrevious,
@@ -142,7 +187,7 @@ struct PageTapZones: View {
 /// Zone geometry, shared between `TapZoneRelay` (which decides the action from a real touch)
 /// and `PageTapZones`'s accessibility overlay (which must position the same rectangles): a
 /// single source of truth, otherwise VoiceOver and the real touch risk getting out of sync.
-private enum PageTapZoneGeometry {
+enum PageTapZoneGeometry {
     static let cornerSize: CGFloat = 88
 
     /// "Back" zone: narrower, as in Kindle-style readers — you go back far less often than
@@ -243,6 +288,7 @@ private struct TapZoneRelay: UIViewRepresentable {
     let rightToLeft: Bool
     let hotCorners: Bool
     let zonesEnabled: Bool
+    let isZoomed: Bool
     let topInset: CGFloat
     let bottomInset: CGFloat
     let onPrevious: () -> Void
@@ -266,6 +312,7 @@ private struct TapZoneRelay: UIViewRepresentable {
         context.coordinator.rightToLeft = rightToLeft
         context.coordinator.hotCorners = hotCorners
         context.coordinator.zonesEnabled = zonesEnabled
+        context.coordinator.isZoomed = isZoomed
         context.coordinator.topInset = topInset
         context.coordinator.bottomInset = bottomInset
         context.coordinator.onPrevious = onPrevious
@@ -314,6 +361,7 @@ private struct TapZoneRelay: UIViewRepresentable {
         var rightToLeft = false
         var hotCorners = false
         var zonesEnabled = true
+        var isZoomed = false
         var topInset: CGFloat = 0
         var bottomInset: CGFloat = 0
         var onPrevious: () -> Void = {}
@@ -347,16 +395,56 @@ private struct TapZoneRelay: UIViewRepresentable {
         /// Bumped every time a pending action is dropped or fired, so the corresponding
         /// `asyncAfter` closure below can tell it's stale and no-op instead of double-firing.
         private var pendingToken = 0
-        private let doubleTapWindow: TimeInterval = 0.25
+        // A deliberate double-tap-to-zoom is normally well under this (people who mean to
+        // double-tap do it fast); a real navigation double-tap (two separate, unrelated taps
+        // that happen to land close together) tends to be slower. Tightened from an initial
+        // 0.25s, which still read as noticeably laggier than Photos.
+        private let doubleTapWindow: TimeInterval = 0.18
         /// Taps further apart than this can't be the two halves of one double tap (mirrors the
         /// system recognizer's own proximity requirement): treat the first as a genuine single
         /// tap right away instead of waiting the window out for nothing.
         private let doubleTapMaxDistance: CGFloat = 60
 
         @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
-            guard let relayView, relayView.window != nil else { return }
+            guard let relayView, relayView.window != nil, !relayView.hasPresentationAbove else { return }
             let point = recognizer.location(in: relayView)
             guard relayView.bounds.contains(point) else { return }
+
+            let zoneOptions = PageTapZoneGeometry.Options(
+                oneHanded: oneHanded,
+                oneHandedReversed: oneHandedReversed,
+                rightToLeft: rightToLeft,
+                hotCorners: hotCorners,
+                zonesEnabled: zonesEnabled,
+                topInset: topInset,
+                bottomInset: bottomInset
+            )
+            let action = PageTapZoneGeometry.action(at: point, in: relayView.bounds.size, options: zoneOptions)
+
+            // The page-turn zones are excluded from double-tap-to-zoom entirely (see the
+            // matching check in `ZoomableImageView.Coordinator.handleDoubleTap`): a tap
+            // landing there can never be the start of a real zoom gesture, so there's nothing
+            // to disambiguate and no reason to hold it back — it fires immediately, exactly
+            // as page-turning always did before double-tap-to-zoom existed.
+            //
+            // While already zoomed in, though, page-turn taps are suspended instead (see
+            // `PageTapZones.isZoomed`) rather than firing immediately: zoom-out is still
+            // reachable there via double tap (`handleDoubleTap`'s zoom-out branch isn't
+            // zone-restricted), and without this an accidental double-tap-to-zoom-out inside
+            // a turn zone would also fire two immediate page turns on top of the zoom-out —
+            // three effects from one gesture. Swipe-to-turn-page is suspended the same way
+            // while zoomed (`isInteractiveSwipe`/`discreteSwipeCatcher`); this keeps taps
+            // consistent with that.
+            if action == .previous || action == .next {
+                guard !isZoomed else { return }
+                let stale = pendingAction
+                pendingAction = nil
+                pendingTapPoint = nil
+                pendingToken += 1
+                stale?()
+                if action == .previous { onPrevious() } else { onNext() }
+                return
+            }
 
             if let pendingTapPoint, distance(point, pendingTapPoint) <= doubleTapMaxDistance {
                 // Second tap of what's turning into a double tap: let the zoom recognizer take
@@ -375,19 +463,6 @@ private struct TapZoneRelay: UIViewRepresentable {
             pendingToken += 1
             stale?()
 
-            let action = PageTapZoneGeometry.action(
-                at: point,
-                in: relayView.bounds.size,
-                options: PageTapZoneGeometry.Options(
-                    oneHanded: oneHanded,
-                    oneHandedReversed: oneHandedReversed,
-                    rightToLeft: rightToLeft,
-                    hotCorners: hotCorners,
-                    zonesEnabled: zonesEnabled,
-                    topInset: topInset,
-                    bottomInset: bottomInset
-                )
-            )
             guard let action else { return }
 
             let fire: () -> Void = { [weak self] in

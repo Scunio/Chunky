@@ -127,6 +127,12 @@ struct ZoomableImageView: UIViewRepresentable {
     /// True only in the double-page path (`pairedContent`), where the width must derive
     /// from the proposed height instead of from the width — see `sizeThatFits`.
     var widthFollowsHeight: Bool = false
+    /// Same zone map `PageTapZones` uses, so `handleDoubleTap` can refuse to zoom on a tap
+    /// that lands in a page-turn zone — see the comment there.
+    var tapZoneOptions = PageTapZoneGeometry.Options(
+        oneHanded: false, oneHandedReversed: false, rightToLeft: false,
+        hotCorners: false, zonesEnabled: false, topInset: 0, bottomInset: 0
+    )
 
     func makeCoordinator() -> Coordinator { Coordinator(isZoomed: isZoomed) }
 
@@ -159,6 +165,7 @@ struct ZoomableImageView: UIViewRepresentable {
 
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
         context.coordinator.isZoomed = isZoomed
+        context.coordinator.tapZoneOptions = tapZoneOptions
         // The pager keeps nearby pages alive for smooth swiping (see `isActive`'s doc
         // comment below): if a page goes from active to inactive while still zoomed in
         // (e.g. the user zooms, then taps/swipes to another page without zooming back out
@@ -227,6 +234,10 @@ struct ZoomableImageView: UIViewRepresentable {
         /// swiping, not just on the one that's really shown — verified live, three
         /// different `Coordinator`s received the same pinch.
         var isActive = true
+        var tapZoneOptions = PageTapZoneGeometry.Options(
+            oneHanded: false, oneHandedReversed: false, rightToLeft: false,
+            hotCorners: false, zonesEnabled: false, topInset: 0, bottomInset: 0
+        )
         weak var imageView: UIImageView?
         weak var scrollView: UIScrollView?
         private var pinchStartScale: CGFloat = 1
@@ -286,7 +297,10 @@ struct ZoomableImageView: UIViewRepresentable {
         ) -> Bool { true }
 
         private func location(of recognizer: UIGestureRecognizer, in scrollView: UIScrollView) -> CGPoint? {
-            guard scrollView.window != nil else { return nil }
+            // Also declines while a sheet/popover/alert is presented over the reader — see
+            // `UIView.hasPresentationAbove` — so pinch/pan/double-tap don't act on the page
+            // underneath a modal the user is interacting with.
+            guard scrollView.window != nil, !scrollView.hasPresentationAbove else { return nil }
             let point = recognizer.location(in: scrollView)
             return scrollView.bounds.contains(point) ? point : nil
         }
@@ -333,8 +347,17 @@ struct ZoomableImageView: UIViewRepresentable {
         @objc func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
             guard isActive, let scrollView, let point = location(of: recognizer, in: scrollView) else { return }
             if scrollView.zoomScale > 1.01 {
+                // Zooming back out: always allowed regardless of where the tap lands, the
+                // page-turn-zone exclusion below only matters for *starting* a zoom.
                 scrollView.setZoomScale(1, animated: true)
             } else {
+                // The page-turn zones (`PageTapZoneGeometry.action` returning `.previous`/
+                // `.next`) never start a zoom: `TapZoneRelay.Coordinator.handleTap` fires
+                // those immediately, with no wait to disambiguate from a double tap (see the
+                // comment there) — a tap landing there can never be read as the start of a
+                // zoom gesture, on either half of the tap.
+                let zoneAction = PageTapZoneGeometry.action(at: point, in: scrollView.bounds.size, options: tapZoneOptions)
+                guard zoneAction != .previous, zoneAction != .next else { return }
                 let targetScale: CGFloat = 2.5
                 let size = scrollView.bounds.size
                 let width = size.width / targetScale
@@ -355,6 +378,10 @@ struct SpreadZoomableImageView: UIViewRepresentable {
     let images: [UIImage]
     let isZoomed: Binding<Bool>
     var isActive: Bool = true
+    var tapZoneOptions = PageTapZoneGeometry.Options(
+        oneHanded: false, oneHandedReversed: false, rightToLeft: false,
+        hotCorners: false, zonesEnabled: false, topInset: 0, bottomInset: 0
+    )
 
     func makeCoordinator() -> Coordinator { Coordinator(isZoomed: isZoomed) }
 
@@ -394,6 +421,7 @@ struct SpreadZoomableImageView: UIViewRepresentable {
 
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
         context.coordinator.isZoomed = isZoomed
+        context.coordinator.tapZoneOptions = tapZoneOptions
         // See the identical guard in `ZoomableImageView.updateUIView`: same shared
         // `isZoomed` binding, same stuck-scroll risk if a zoomed spread deactivates
         // without zooming back out first.
@@ -431,6 +459,10 @@ struct SpreadZoomableImageView: UIViewRepresentable {
         /// See `ZoomableImageView.Coordinator.isActive`: same problem, same solution, for
         /// the two-page spread.
         var isActive = true
+        var tapZoneOptions = PageTapZoneGeometry.Options(
+            oneHanded: false, oneHandedReversed: false, rightToLeft: false,
+            hotCorners: false, zonesEnabled: false, topInset: 0, bottomInset: 0
+        )
         var images: [UIImage] = []
         weak var container: UIView?
         weak var leadingImageView: UIImageView?
@@ -497,7 +529,7 @@ struct SpreadZoomableImageView: UIViewRepresentable {
         ) -> Bool { true }
 
         private func location(of recognizer: UIGestureRecognizer, in scrollView: UIScrollView) -> CGPoint? {
-            guard scrollView.window != nil else { return nil }
+            guard scrollView.window != nil, !scrollView.hasPresentationAbove else { return nil }
             let point = recognizer.location(in: scrollView)
             return scrollView.bounds.contains(point) ? point : nil
         }
@@ -553,6 +585,10 @@ struct SpreadZoomableImageView: UIViewRepresentable {
             if scrollView.zoomScale > 1.01 {
                 scrollView.setZoomScale(1, animated: true)
             } else {
+                // See the identical check in `ZoomableImageView.Coordinator.handleDoubleTap`:
+                // the page-turn zones never start a zoom.
+                let zoneAction = PageTapZoneGeometry.action(at: point, in: scrollView.bounds.size, options: tapZoneOptions)
+                guard zoneAction != .previous, zoneAction != .next else { return }
                 let targetScale: CGFloat = 2.5
                 let size = scrollView.bounds.size
                 let width = size.width / targetScale
