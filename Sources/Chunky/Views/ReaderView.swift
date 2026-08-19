@@ -244,6 +244,22 @@ private struct ReaderContentView: View {
     }
 
     var body: some View {
+        #if os(iOS)
+        // Hosts `readerContent` in a UIViewController that drives `prefersStatusBarHidden`
+        // directly — see `StatusBarControllingHost` — instead of SwiftUI's own
+        // `.statusBar(hidden:)`, which doesn't coordinate its animation with the safe-area
+        // transition UIKit runs for the status bar, causing `.ignoresSafeArea()` content
+        // (the pager) to visibly jump on a real device when toggled inside an animated
+        // SwiftUI transaction (not reproducible in the simulator — found the hard way).
+        StatusBarControllingHost(isStatusBarHidden: !isControlsVisible) {
+            readerContent
+        }
+        #else
+        readerContent
+        #endif
+    }
+
+    private var readerContent: some View {
         ZStack {
             readerBackground.ignoresSafeArea()
 
@@ -378,7 +394,6 @@ private struct ReaderContentView: View {
         // the system gesture (Dock/App Switcher). defersSystemGestures gives priority to
         // our page-change DragGesture as long as the touch is in progress on that edge.
         .defersSystemGestures(on: .bottom)
-        .statusBar(hidden: !isControlsVisible)
         #endif
         .onAppear {
             loadComic()
@@ -677,8 +692,14 @@ private struct ReaderContentView: View {
             rightToLeft: comic.readingDirection == .rightToLeft,
             hotCorners: isHotCornersEnabled,
             zonesEnabled: tapPageTurnStyle != .disabled,
-            topInset: isControlsVisible ? headerHeight : 0,
-            bottomInset: isControlsVisible ? footerHeight : 0
+            // The pager these zones cover ignores the safe area (see `iOSPager`), so its
+            // coordinate space starts at the true top/bottom of the screen — a header/footer
+            // positioned the normal, safe-area-respecting way sits `PlatformSafeArea.topInset`/
+            // `bottomInset` points further in, not right at that origin. Without adding it
+            // here, a tap in that gap (visually right on the header/footer) fell through to
+            // the ordinary page-turn zones underneath.
+            topInset: isControlsVisible ? headerHeight + PlatformSafeArea.topInset : 0,
+            bottomInset: isControlsVisible ? footerHeight + PlatformSafeArea.bottomInset : 0
         )
     }
 
@@ -754,8 +775,9 @@ private struct ReaderContentView: View {
             hotCorners: isHotCornersEnabled,
             zonesEnabled: tapPageTurnStyle != .disabled,
             rightToLeft: comic.readingDirection == .rightToLeft,
-            topInset: isControlsVisible ? headerHeight : 0,
-            bottomInset: isControlsVisible ? footerHeight : 0,
+            // See the identical comment on `tapZoneOptions`.
+            topInset: isControlsVisible ? headerHeight + PlatformSafeArea.topInset : 0,
+            bottomInset: isControlsVisible ? footerHeight + PlatformSafeArea.bottomInset : 0,
             isZoomed: isZoomed
         ) {
             // With "Tap-to-pan" the "back" zone also advances: handy if you can't
@@ -1268,12 +1290,6 @@ private struct ReaderContentView: View {
                 .foregroundColor(chromeForeground)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                #if os(iOS)
-                // Matches, on top, the home indicator's height that the background alone
-                // extends into below (next modifier): without this the content stays
-                // pinned to the top of the now-taller bar instead of centered in it.
-                .padding(.top, PlatformSafeArea.bottomInset)
-                #endif
                 .frame(maxWidth: .infinity)
                 // See the identical comment on `header`'s background: reaches the home
                 // indicator area instead of stopping short of it.
