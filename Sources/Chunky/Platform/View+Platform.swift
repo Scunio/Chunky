@@ -9,6 +9,18 @@ extension UIScreen {
         (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.screen
     }
 }
+
+enum PlatformSafeArea {
+    /// Home indicator height, read straight from the key window rather than through a
+    /// `GeometryReader` in the view tree: the reader's header/footer already extend their
+    /// background under it (see `ReaderView.header`/`footer`), and centering their content
+    /// within that taller bar needs this value as plain padding, not a reactive layout pass.
+    static var bottomInset: CGFloat {
+        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
+            .windows.first(where: \.isKeyWindow)?
+            .safeAreaInsets.bottom ?? 0
+    }
+}
 #endif
 
 /// Boundary between the two platforms for presentations: content views stay
