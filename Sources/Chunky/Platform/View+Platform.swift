@@ -57,9 +57,15 @@ final class StatusBarControllingHostingController<Content: View>: UIHostingContr
     var isStatusBarHidden = true {
         didSet {
             guard isStatusBarHidden != oldValue else { return }
-            setNeedsStatusBarAppearanceUpdate()
+            // `setNeedsStatusBarAppearanceUpdate()` alone fades at iOS's own fixed duration,
+            // independent of the SwiftUI transaction driving the rest of the controls —
+            // wrapping it to match that duration is what actually keeps the two in sync.
+            UIView.animate(withDuration: animationDuration) { [weak self] in
+                self?.setNeedsStatusBarAppearanceUpdate()
+            }
         }
     }
+    var animationDuration: TimeInterval = 0.22
     override var prefersStatusBarHidden: Bool { isStatusBarHidden }
     override var preferredStatusBarUpdateAnimation: UIStatusBarAnimation { .fade }
 }
@@ -67,10 +73,12 @@ final class StatusBarControllingHostingController<Content: View>: UIHostingContr
 /// See `StatusBarControllingHostingController`.
 struct StatusBarControllingHost<Content: View>: UIViewControllerRepresentable {
     var isStatusBarHidden: Bool
+    var animationDuration: TimeInterval = 0.22
     @ViewBuilder var content: () -> Content
 
     func makeUIViewController(context: Context) -> StatusBarControllingHostingController<Content> {
         let controller = StatusBarControllingHostingController(rootView: content())
+        controller.animationDuration = animationDuration
         controller.isStatusBarHidden = isStatusBarHidden
         controller.view.backgroundColor = .clear
         return controller
@@ -78,6 +86,7 @@ struct StatusBarControllingHost<Content: View>: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: StatusBarControllingHostingController<Content>, context: Context) {
         controller.rootView = content()
+        controller.animationDuration = animationDuration
         controller.isStatusBarHidden = isStatusBarHidden
     }
 }

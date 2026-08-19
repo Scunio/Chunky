@@ -256,12 +256,9 @@ private struct ReaderContentView: View {
     var body: some View {
         #if os(iOS)
         // Hosts `readerContent` in a UIViewController that drives `prefersStatusBarHidden`
-        // directly — see `StatusBarControllingHost` — instead of SwiftUI's own
-        // `.statusBar(hidden:)`, which doesn't coordinate its animation with the safe-area
-        // transition UIKit runs for the status bar, causing `.ignoresSafeArea()` content
-        // (the pager) to visibly jump on a real device when toggled inside an animated
-        // SwiftUI transaction (not reproducible in the simulator — found the hard way).
-        StatusBarControllingHost(isStatusBarHidden: !isControlsVisible) {
+        // directly, its fade explicitly timed to match the controls' own animation — see
+        // `StatusBarControllingHost`. Real-device only: not reproducible in the simulator.
+        StatusBarControllingHost(isStatusBarHidden: !isControlsVisible, animationDuration: Self.controlsAnimationDuration) {
             readerContent
         }
         #else
@@ -903,9 +900,14 @@ private struct ReaderContentView: View {
         }
     }
 
+    /// Shared with `StatusBarControllingHost` so the status bar's own fade runs at the same
+    /// speed as the controls, instead of iOS's default duration for the two drifting apart
+    /// and visibly jumping the page mid-transition.
+    static let controlsAnimationDuration: TimeInterval = 0.22
+
     private func toggleControls() {
         resetIdleTimerIfNeeded()
-        withAnimation(.easeInOut(duration: 0.22)) {
+        withAnimation(.easeInOut(duration: Self.controlsAnimationDuration)) {
             isControlsVisible.toggle()
         }
     }
