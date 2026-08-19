@@ -30,6 +30,9 @@ struct PageCollectionPager<Content: View>: UIViewRepresentable {
     /// "Scroll", or because the page is zoomed in and dragging is used for panning.
     let interactiveSwipe: Bool
     let resetToken: PagerResetToken
+    /// Duration of the `.fade` style's cross-dissolve, user-adjustable — see
+    /// `Coordinator.crossFade`.
+    var fadeDuration: TimeInterval = 0.25
     let content: (Int) -> Content
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -193,13 +196,16 @@ struct PageCollectionPager<Content: View>: UIViewRepresentable {
             }
 
             guard parent.selection != currentIndex else { return }
+            let previousIndex = currentIndex
             currentIndex = parent.selection
             switch parent.turnStyle {
             case .slide:
                 scroll(toStart: parent.selection, animated: true)
             case .fade:
                 crossFade(on: view, toStart: parent.selection)
-            case .immediate, .disabled:
+            case .immediate:
+                lightSlide(on: view, from: previousIndex, toStart: parent.selection)
+            case .disabled:
                 scroll(toStart: parent.selection, animated: false)
             }
         }
@@ -233,8 +239,48 @@ struct PageCollectionPager<Content: View>: UIViewRepresentable {
             view.layoutIfNeeded()
             snapshot.frame = CGRect(origin: view.contentOffset, size: view.bounds.size)
 
-            UIView.animate(withDuration: 0.25, delay: 0, options: [.allowUserInteraction]) {
+            UIView.animate(withDuration: parent.fadeDuration, delay: 0, options: [.allowUserInteraction]) {
                 snapshot.alpha = 0
+            } completion: { _ in
+                snapshot.removeFromSuperview()
+            }
+        }
+
+        /// "Immediate" style: the jump itself stays instant (that's the point of the
+        /// style — no waiting for a slide/fade to finish before the next tap), but a bare
+        /// instant cut reads as a glitch, not a page turn (verified live). This adds a
+        /// small, quick embellishment on top without slowing anything down: the OLD page,
+        /// frozen as a snapshot, slides a short distance and fades out over the new one —
+        /// unlike `.slide`, which travels the full screen width and only starts once the
+        /// gesture says which spread is next, this is a fixed, brief flourish shown after
+        /// the jump has already happened underneath.
+        private func lightSlide(on view: PagingCollectionView, from previousIndex: Int, toStart start: Int) {
+            guard let snapshot = view.snapshotView(afterScreenUpdates: false) else {
+                scroll(toStart: start, animated: false)
+                return
+            }
+            snapshot.isUserInteractionEnabled = false
+            snapshot.frame = CGRect(origin: view.contentOffset, size: view.bounds.size)
+            view.addSubview(snapshot)
+
+            // Visual order already accounts for manga's mirrored layout (see
+            // `makeVisualOrder`), so a plain index comparison gives the right screen
+            // direction without a separate rightToLeft check here.
+            let previousItem = visualOrder.firstIndex(of: previousIndex) ?? 0
+            let newItem = visualOrder.firstIndex(of: start) ?? previousItem
+            let movingForwardOnScreen = newItem > previousItem
+
+            scroll(toStart: start, animated: false)
+            view.layoutIfNeeded()
+            snapshot.frame = CGRect(origin: view.contentOffset, size: view.bounds.size)
+
+            let distance: CGFloat = 28
+            UIView.animate(
+                withDuration: 0.16, delay: 0,
+                options: [.allowUserInteraction, .curveEaseOut]
+            ) {
+                snapshot.alpha = 0
+                snapshot.transform = CGAffineTransform(translationX: movingForwardOnScreen ? -distance : distance, y: 0)
             } completion: { _ in
                 snapshot.removeFromSuperview()
             }

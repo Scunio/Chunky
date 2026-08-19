@@ -115,6 +115,7 @@ struct SettingsView: View {
     @AppStorage("doublePageCoverAlone") private var isCoverAlone = true
     @AppStorage("tapPageTurnStyle") private var tapPageTurnStyle = TapPageTurnStyle.slide
     @AppStorage("swipePageTurnStyle") private var swipePageTurnStyle = TapPageTurnStyle.slide
+    @AppStorage("fadeTransitionDuration") private var fadeTransitionDuration = 0.25
     @AppStorage("tapToPanEnabled") private var isTapToPanEnabled = false
     @AppStorage("oneHandedMode") private var isOneHandedModeEnabled = false
     @AppStorage("hotCornersEnabled") private var isHotCornersEnabled = false
@@ -184,6 +185,22 @@ struct SettingsView: View {
                         Text(style.label).tag(style)
                     }
                 }
+                #if os(iOS)
+                // Only affects the iOS pager's cross-dissolve (`PageCollectionPager`):
+                // macOS's `.fade` still uses the plain SwiftUI `.opacity` transition, so
+                // the slider stays off there rather than sitting next to a control with no
+                // visible effect.
+                if tapPageTurnStyle == .fade || swipePageTurnStyle == .fade {
+                    VStack(alignment: .leading) {
+                        Text("Velocità dissolvenza")
+                        HStack {
+                            Text("Veloce").font(.caption).foregroundStyle(.secondary)
+                            Slider(value: $fadeTransitionDuration, in: 0.1...0.6)
+                            Text("Lenta").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                #endif
             }
 
             Section(header: Text("Aspetto")) {
