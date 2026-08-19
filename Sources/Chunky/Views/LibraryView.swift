@@ -21,6 +21,30 @@ private enum ReadStatus: CaseIterable, Identifiable {
         case .finished: "Terminato"
         }
     }
+
+    /// Sets this status by acting directly on `lastReadPage`, the only state the model
+    /// already tracks (no need for a dedicated field). Shared by the bulk-selection status
+    /// menu and the per-comic context menu.
+    func apply(to comic: ComicEntity) {
+        switch self {
+        case .unread:
+            comic.lastReadPage = 0
+            comic.dateLastOpened = nil
+        case .reading:
+            let count = comic.pageCount
+            comic.lastReadPage = count > 1 ? min(max(comic.lastReadPage, 1), count - 2) : 0
+            if comic.dateLastOpened == nil { comic.dateLastOpened = Date() }
+        case .finished:
+            comic.lastReadPage = max(comic.pageCount - 1, 0)
+            if comic.dateLastOpened == nil { comic.dateLastOpened = Date() }
+        }
+    }
+}
+
+private func readStatus(for comic: ComicEntity) -> ReadStatus {
+    if comic.lastReadPage <= 0 { return .unread }
+    if comic.isFinished { return .finished }
+    return .reading
 }
 
 struct LibraryView: View {
@@ -301,16 +325,10 @@ struct LibraryView: View {
         comics.filter { selectedIDs.contains($0.objectID) }
     }
 
-    private func status(for comic: ComicEntity) -> ReadStatus {
-        if comic.lastReadPage <= 0 { return .unread }
-        if comic.isFinished { return .finished }
-        return .reading
-    }
-
     private var statusBinding: Binding<ReadStatus> {
         Binding(
             get: {
-                let statuses = Set(selectedComics.map(status(for:)))
+                let statuses = Set(selectedComics.map(readStatus(for:)))
                 // Mixed (or empty) selection: the picker shows "Reading" without applying anything.
                 guard statuses.count == 1, let onlyStatus = statuses.first else { return .reading }
                 return onlyStatus
@@ -321,18 +339,7 @@ struct LibraryView: View {
 
     private func applyStatus(_ status: ReadStatus) {
         for comic in selectedComics {
-            switch status {
-            case .unread:
-                comic.lastReadPage = 0
-                comic.dateLastOpened = nil
-            case .reading:
-                let count = comic.pageCount
-                comic.lastReadPage = count > 1 ? min(max(comic.lastReadPage, 1), count - 2) : 0
-                if comic.dateLastOpened == nil { comic.dateLastOpened = Date() }
-            case .finished:
-                comic.lastReadPage = max(comic.pageCount - 1, 0)
-                if comic.dateLastOpened == nil { comic.dateLastOpened = Date() }
-            }
+            status.apply(to: comic)
         }
         try? context.save()
     }
@@ -686,6 +693,20 @@ private struct ComicCell: View {
                     Label(comic.isFavorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti",
                           systemImage: comic.isFavorite ? "star.slash" : "star")
                 }
+                // Same two states the bulk-selection status menu offers, but only the
+                // ones that make sense to jump to directly from a single comic: not
+                // already finished → mark read, not already untouched → mark unread.
+                // "Reading" (a specific mid-book page) isn't a one-tap action.
+                if readStatus(for: comic) != .finished {
+                    Button(action: { markStatus(.finished) }) {
+                        Label("Segna come letto", systemImage: "checkmark.circle")
+                    }
+                }
+                if readStatus(for: comic) != .unread {
+                    Button(action: { markStatus(.unread) }) {
+                        Label("Segna come non letto", systemImage: "circle")
+                    }
+                }
                 if isPendingDownload {
                     Button(action: downloadFromICloud) {
                         Label("Scarica da iCloud", systemImage: "icloud.and.arrow.down")
@@ -710,6 +731,11 @@ private struct ComicCell: View {
 
     private func toggleFavorite() {
         comic.isFavorite.toggle()
+        try? comic.managedObjectContext?.save()
+    }
+
+    private func markStatus(_ status: ReadStatus) {
+        status.apply(to: comic)
         try? comic.managedObjectContext?.save()
     }
 
