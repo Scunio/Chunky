@@ -49,6 +49,9 @@ private struct ReaderContentView: View {
     @AppStorage("doublePageCoverAlone") private var isCoverAlone = true
     @AppStorage("tapPageTurnStyle") private var tapPageTurnStyle = TapPageTurnStyle.slide
     @AppStorage("swipePageTurnStyle") private var swipePageTurnStyle = TapPageTurnStyle.slide
+    /// Duration of the "Dissolvenza" (`.fade`) page-turn style's cross-dissolve — see
+    /// `PageCollectionPager.fadeDuration`.
+    @AppStorage("fadeTransitionDuration") private var fadeTransitionDuration = 0.25
     @AppStorage("oneHandedMode") private var isOneHandedModeEnabled = false
     @AppStorage("oneHandedZonesReversed") private var isOneHandedZonesReversed = false
     @AppStorage("hotCornersEnabled") private var isHotCornersEnabled = false
@@ -113,6 +116,11 @@ private struct ReaderContentView: View {
     @State private var isInfoPresented = false
     @State private var isToolsPresented = false
     @State private var isAccountsPresented = false
+    /// Measured widths of the header's leading/trailing icon groups, so the title between
+    /// them can be reserved equal space on both sides and land on the bar's true center
+    /// regardless of which group has more icons — see `HeaderLeadingWidthKey`.
+    @State private var headerLeadingWidth: CGFloat = 0
+    @State private var headerTrailingWidth: CGFloat = 0
     #if os(iOS)
     /// Measured heights of the control bars: needed by the tap zones so they don't react
     /// to touches that fall on the bars (see `PageTapZones.topInset`). Measured rather than
@@ -370,10 +378,7 @@ private struct ReaderContentView: View {
         // the system gesture (Dock/App Switcher). defersSystemGestures gives priority to
         // our page-change DragGesture as long as the touch is in progress on that edge.
         .defersSystemGestures(on: .bottom)
-        // Always hidden, not tied to isControlsVisible: otherwise its appearance/disappearance
-        // animates the safe area right when the page (under .ignoresSafeArea()) should stay
-        // still, causing the visible vertical shift when the controls are shown/hidden.
-        .statusBar(hidden: true)
+        .statusBar(hidden: !isControlsVisible)
         #endif
         .onAppear {
             loadComic()
@@ -712,7 +717,8 @@ private struct ReaderContentView: View {
                     doublePage: effectiveDoublePage,
                     rightToLeft: comic.readingDirection == .rightToLeft,
                     pageCount: provider.pageCount
-                )
+                ),
+                fadeDuration: fadeTransitionDuration
             ) { start in
                 pageContent(provider: provider, start: start)
             }
@@ -838,7 +844,9 @@ private struct ReaderContentView: View {
 
     private func toggleControls() {
         resetIdleTimerIfNeeded()
-        isControlsVisible.toggle()
+        withAnimation(.easeInOut(duration: 0.22)) {
+            isControlsVisible.toggle()
+        }
     }
 
     /// "Showcase/kiosk" timer: if the reader stays inactive for the time chosen in
@@ -994,7 +1002,8 @@ private struct ReaderContentView: View {
         }
     }
 
-    private var header: some View {
+    /// Leading icon group, isolated so its width can be measured (see `header`).
+    private var headerLeadingActions: some View {
         HStack(spacing: 2) {
             Button(action: exitReader) {
                 HStack(spacing: 4) {
@@ -1022,6 +1031,19 @@ private struct ReaderContentView: View {
             #else
             findButton
             #endif
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 4) {
+            headerLeadingActions
+                .background(GeometryReader { proxy in
+                    Color.clear.preference(key: HeaderLeadingWidthKey.self, value: proxy.size.width)
+                })
+                // Reserves the wider group's width on both flanks (see
+                // `HeaderLeadingWidthKey`), so the title below lands on the bar's true
+                // center instead of the midpoint between two differently-sized groups.
+                .frame(minWidth: max(headerLeadingWidth, headerTrailingWidth), alignment: .leading)
             Spacer(minLength: 4)
             // Comic info (go-to-page/favorites/reading direction): long press on the
             // title, so as not to add another icon to the header. Dropdown Menus with
@@ -1032,17 +1054,28 @@ private struct ReaderContentView: View {
                 .onLongPressGesture { isInfoPresented = true }
             Spacer(minLength: 4)
             headerTrailingActions
+                .background(GeometryReader { proxy in
+                    Color.clear.preference(key: HeaderTrailingWidthKey.self, value: proxy.size.width)
+                })
+                .frame(minWidth: max(headerLeadingWidth, headerTrailingWidth), alignment: .trailing)
         }
+        .onPreferenceChange(HeaderLeadingWidthKey.self) { headerLeadingWidth = $0 }
+        .onPreferenceChange(HeaderTrailingWidthKey.self) { headerTrailingWidth = $0 }
         .foregroundColor(chromeForeground)
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity)
-        .background(chromeBackground)
+        // Extends the material into the status bar's area instead of stopping at the safe
+        // area, so the bar reaches the true top edge instead of leaving a gap of bare
+        // background above it — the content itself (buttons, title) still respects the
+        // safe area via normal layout, only the background reaches further.
+        .background(chromeBackground.ignoresSafeArea(edges: .top))
         // The system material follows the current scheme: here we force the one consistent
         // with "Page background" (black/white/auto), as chromeForeground already does for
         // text/icons.
         .environment(\.colorScheme, isBackgroundDark ? .dark : .light)
         .buttonStyle(PlainButtonStyle())
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     /// The header's 4 trailing icons when there's room to show them individually (iPad,
@@ -1219,9 +1252,12 @@ private struct ReaderContentView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .frame(maxWidth: .infinity)
-                .background(chromeBackground)
+                // See the identical comment on `header`'s background: reaches the home
+                // indicator area instead of stopping short of it.
+                .background(chromeBackground.ignoresSafeArea(edges: .bottom))
                 .environment(\.colorScheme, isBackgroundDark ? .dark : .light)
                 .buttonStyle(PlainButtonStyle())
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
     }
@@ -1388,6 +1424,25 @@ private struct ReaderContentView: View {
             }
         }
     }
+}
+
+/// Measured width of the header's leading button group (see `ReaderView.header`): the
+/// leading and trailing groups don't have the same number of icons (more on iPad/landscape,
+/// where they're not collapsed into a menu), so an ordinary `HStack` with a `Spacer` on
+/// each side of the title leaves it visibly off-center — verified live, exactly the "is the
+/// title centered?" report. Reserving the wider group's width on both sides (see `header`)
+/// keeps the title centered on the bar as a whole instead of centered between whatever
+/// the two groups happen to measure. Not gated to iOS: `header` is shared with macOS.
+struct HeaderLeadingWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// See `HeaderLeadingWidthKey`: separate key for the same reason `ChromeFooterHeightKey` is
+/// separate from `ChromeHeightKey`.
+struct HeaderTrailingWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
 #if os(iOS)
