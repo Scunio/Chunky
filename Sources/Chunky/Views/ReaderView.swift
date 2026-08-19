@@ -269,27 +269,36 @@ private struct ReaderContentView: View {
         #endif
     }
 
+    private func platformViewportSize(fallback: CGSize) -> CGSize {
+        #if os(iOS)
+        let windowSize = PlatformSafeArea.windowSize
+        return windowSize == .zero ? fallback : windowSize
+        #else
+        return fallback
+        #endif
+    }
+
     private var readerContent: some View {
         ZStack {
             readerBackground.ignoresSafeArea()
 
-            // Ignore the safe area here too: otherwise the measured size changes along
-            // with the status bar when the controls are shown/hidden, needlessly
-            // triggering effectiveDoublePage and moving/resizing the page.
+            // `.ignoresSafeArea()` doesn't stop `proxy.size` from still tracking the status
+            // bar's height, which needlessly re-triggered `effectiveDoublePage` on every
+            // controls toggle. `platformViewportSize` swaps in the stable window size instead.
             GeometryReader { proxy in
                 Color.clear
-                    .onAppear { viewportSize = proxy.size }
-                    .onChange(of: proxy.size) { viewportSize = proxy.size }
+                    .onAppear { viewportSize = platformViewportSize(fallback: proxy.size) }
+                    .onChange(of: proxy.size) { _, new in
+                        viewportSize = platformViewportSize(fallback: new)
+                    }
             }
             .ignoresSafeArea()
             .allowsHitTesting(false)
 
             if let provider = provider {
                 #if os(iOS)
-                // Ignore the safe area: otherwise, when the status bar appears/disappears
-                // as the controls are shown/hidden, the safe area changes and the page gets
-                // resized/moved instead of staying still underneath the controls.
-                iOSPager(provider: provider).ignoresSafeArea()
+                iOSPager(provider: provider)
+                    .ignoresSafeArea()
                 #else
                 macOSPager(provider: provider)
                 #endif

@@ -34,6 +34,14 @@ enum PlatformSafeArea {
             .windows.first(where: \.isKeyWindow)?
             .safeAreaInsets.bottom ?? 0
     }
+
+    /// True window size, unaffected by the status bar's own height changing — unlike
+    /// `GeometryReader`'s `.size`, which still tracks it despite `.ignoresSafeArea()`.
+    static var windowSize: CGSize {
+        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
+            .windows.first(where: \.isKeyWindow)?
+            .bounds.size ?? .zero
+    }
 }
 
 /// Hosts SwiftUI content in a `UIViewController` that drives its own status bar visibility,
