@@ -69,6 +69,9 @@ struct LibraryView: View {
     // On Mac the reader lives in its own window (see `openComic`); this state
     // exists only for iOS's `.fullScreenCover`.
     @State private var selectedComic: ComicEntity?
+    // Mac picks `.favorites` from the sidebar, which sets `selection` directly; iOS has no
+    // sidebar, so it gets a toolbar toggle instead, layered on top via `effectiveSelection`.
+    @State private var isFavoritesOnly = false
     #endif
     @State private var displayMode: LibraryDisplayMode = .grouped
     @State private var searchText = ""
@@ -91,9 +94,17 @@ struct LibraryView: View {
     /// drop itself is handled entirely inside `.dropDestination`.
     @State private var isDropTargeted = false
 
+    private var effectiveSelection: LibrarySelection {
+        #if os(iOS)
+        isFavoritesOnly ? .favorites : selection
+        #else
+        selection
+        #endif
+    }
+
     var body: some View {
         content
-            .navigationTitle(selection.groupTitle ?? "Chunky")
+            .navigationTitle(effectiveSelection == .favorites ? "Preferiti" : (effectiveSelection.groupTitle ?? "Chunky"))
             .toolbar {
                 #if os(iOS)
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -117,6 +128,7 @@ struct LibraryView: View {
                         addButton
                         newComicsButton
                         nowReadingButton
+                        favoritesFilterButton
                         if !isKioskModeEnabled {
                             accountsLink
                             toolsMenu
@@ -148,6 +160,11 @@ struct LibraryView: View {
             #if os(iOS)
             .fullScreenCover(item: $selectedComic) { comic in
                 ReaderView(comic: comic, libraryComics: filteredComics)
+            }
+            // Same fallback as the Mac sidebar: the last favorite unfavorited from under
+            // this filter would otherwise leave it stuck showing an empty grid.
+            .onChange(of: comics.contains(where: \.isFavorite)) { _, hasFavorites in
+                if isFavoritesOnly, !hasFavorites { isFavoritesOnly = false }
             }
             #endif
             .sheet(isPresented: $isToolsPresented) {
@@ -407,6 +424,19 @@ struct LibraryView: View {
         }
     }
 
+    #if os(iOS)
+    // Mac gets this for free from the sidebar's `.favorites` row; iOS has none, so this
+    // toggles the same `effectiveSelection` machinery directly from the toolbar.
+    @ViewBuilder
+    private var favoritesFilterButton: some View {
+        if isFavoritesOnly || comics.contains(where: \.isFavorite) {
+            Button(action: { isFavoritesOnly.toggle() }) {
+                Label("Preferiti", systemImage: isFavoritesOnly ? "star.fill" : "star")
+            }
+        }
+    }
+    #endif
+
     // MARK: - Content
 
     private var content: some View {
@@ -431,8 +461,10 @@ struct LibraryView: View {
 
     private var filteredComics: [ComicEntity] {
         var result = Array(comics)
-        if let group = selection.groupTitle {
+        if let group = effectiveSelection.groupTitle {
             result = result.filter { ($0.seriesName ?? LibraryGrouping.ungroupedTitle) == group }
+        } else if effectiveSelection == .favorites {
+            result = result.filter(\.isFavorite)
         }
         guard !searchText.isEmpty else { return result }
         return result.filter { comic in
