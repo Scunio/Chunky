@@ -1080,8 +1080,15 @@ private struct ReaderContentView: View {
 
     /// The header's 4 trailing icons when there's room to show them individually (iPad,
     /// Mac, iPhone in landscape) — shared by both branches of `headerTrailingActions`.
+    ///
+    /// An `HStack`, not a `Group`: `header` wraps this in `.frame(minWidth:alignment:)` to
+    /// reserve the wider of the two icon groups' width and keep the title centered (see
+    /// `HeaderLeadingWidthKey`) — a `Group`'s children are spliced directly into the parent
+    /// `HStack` instead of staying together as one view, so that `.frame` modifier ended up
+    /// applied to each icon *individually*, inflating each one to that width on its own and
+    /// spreading them apart with large gaps instead of keeping them clustered together.
     private var expandedTrailingActions: some View {
-        Group {
+        HStack(spacing: 2) {
             newComicsButton
             nowReadingButton
             Button(action: { isAccountsPresented = true }) {
@@ -1219,20 +1226,25 @@ private struct ReaderContentView: View {
                     // Fixed-width column: the page number's width varies (e.g. "1 / 20" vs
                     // "10–11 / 20") and without pre-allocating the space, the slider next to
                     // it would shift every time the page changes.
-                    VStack(spacing: 0) {
-                        Text(label)
-                            .font(.caption.monospacedDigit())
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                        // Swaps which half (top/bottom) advances/goes back in one-handed mode.
-                        Button(action: { isOneHandedZonesReversed.toggle() }) {
+                    //
+                    // The whole column is one tap target, not just the chevron: swaps which
+                    // half (top/bottom) advances/goes back in one-handed mode. A `Button`
+                    // wrapping both, not a separate one on just the small icon — the label
+                    // alone was an easy-to-miss target compared to the rest of the bar.
+                    Button(action: { isOneHandedZonesReversed.toggle() }) {
+                        VStack(spacing: 2) {
+                            Text(label)
+                                .font(.callout.monospacedDigit())
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                             Image(systemName: "chevron.right")
-                                .font(.caption2.weight(.bold))
+                                .font(.caption.weight(.bold))
                                 .rotationEffect(.degrees(isOneHandedZonesReversed ? 180 : 0))
-                                .frame(width: 20, height: 24)
                         }
+                        .frame(maxHeight: .infinity)
+                        .contentShape(Rectangle())
                     }
-                    .frame(width: labelWidth)
+                    .frame(width: labelWidth, height: 44)
                     pageSlider(provider: provider)
                     if isDoublePageAllowed {
                         // Cycles single → double → automatic page.
@@ -1251,6 +1263,12 @@ private struct ReaderContentView: View {
                 .foregroundColor(chromeForeground)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
+                #if os(iOS)
+                // Matches, on top, the home indicator's height that the background alone
+                // extends into below (next modifier): without this the content stays
+                // pinned to the top of the now-taller bar instead of centered in it.
+                .padding(.top, PlatformSafeArea.bottomInset)
+                #endif
                 .frame(maxWidth: .infinity)
                 // See the identical comment on `header`'s background: reaches the home
                 // indicator area instead of stopping short of it.
