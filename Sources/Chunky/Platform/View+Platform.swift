@@ -24,6 +24,21 @@ enum PlatformSafeArea {
             .windows.first(where: \.isKeyWindow)?
             .safeAreaInsets.top ?? 0
     }
+
+    /// Home indicator height, read the same way as `topInset`. Neither `.ignoresSafeArea()`
+    /// nor `.safeAreaInset` let the reader's footer reach the true bottom edge — verified
+    /// with a `GeometryReader` printing its global frame across several placements of both:
+    /// it stopped exactly this many points short every time, because `.fullScreenCover`
+    /// itself never proposes more than the safe-area-inset frame here, regardless of what
+    /// the content inside asks for. The footer instead adds this as extra bottom padding
+    /// (so its total height covers the gap) plus an equal `.offset` (so the taller view
+    /// actually gets pushed down into that space instead of the padding just being eaten by
+    /// the `Spacer` positioning it) — see `ReaderView.footer`.
+    static var bottomInset: CGFloat {
+        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
+            .windows.first(where: \.isKeyWindow)?
+            .safeAreaInsets.bottom ?? 0
+    }
 }
 
 /// Hosts SwiftUI content in a `UIViewController` that drives its own status bar visibility,

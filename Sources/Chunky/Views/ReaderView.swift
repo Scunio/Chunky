@@ -329,6 +329,26 @@ private struct ReaderContentView: View {
                 controlsChrome
                 .allowsHitTesting(true)
 
+                #if os(iOS)
+                // No `.ignoresSafeArea`/`.safeAreaInset` here: several placements of both
+                // measurably failed to reach the true bottom edge on iPad — a `GeometryReader`
+                // kept reporting the same `PlatformSafeArea.bottomInset`-sized shortfall no
+                // matter which one was used, with or without `StatusBarControllingHost` in
+                // the loop, so it's `.fullScreenCover` itself that never proposes more than
+                // the safe-area-inset frame here, regardless of what content asks for. This
+                // `VStack` positions `footer` the ordinary, safe-area-respecting way (its
+                // bottom edge lands exactly on the safe boundary); `footer`'s own `.offset`
+                // is what actually pushes it the rest of the way to the true edge — verified
+                // pixel-for-pixel with `xcrun simctl io screenshot` (the raw device image;
+                // the MCP screenshot tool's own processing pads a fixed strip at the bottom
+                // that looks identical to this bug but isn't it).
+                VStack(spacing: 0) {
+                    Spacer()
+                    footer
+                }
+                .allowsHitTesting(true)
+                #endif
+
                 // Hint at where the tap zones to change page are (otherwise completely
                 // invisible): they don't intercept touches, they're just a visual cue.
                 if tapPageTurnStyle != .disabled {
@@ -404,12 +424,6 @@ private struct ReaderContentView: View {
         // the system gesture (Dock/App Switcher). defersSystemGestures gives priority to
         // our page-change DragGesture as long as the touch is in progress on that edge.
         .defersSystemGestures(on: .bottom)
-        // The footer lives here, as a safe-area inset on the whole reader, rather than
-        // inside `controlsChrome`: this is the API built for a bar pinned to the true
-        // bottom edge — it extends the bar's background under the home indicator and
-        // pads its content above it automatically, unlike `.ignoresSafeArea` on an
-        // intrinsically-sized row (tried first; only shifted the row instead of growing it).
-        .safeAreaInset(edge: .bottom, spacing: 0) { footerSafeAreaInset }
         #endif
         .onAppear {
             loadComic()
@@ -714,8 +728,9 @@ private struct ReaderContentView: View {
             // `bottomInset` points further in, not right at that origin. Without adding it
             // here, a tap in that gap (visually right on the header/footer) fell through to
             // the ordinary page-turn zones underneath. The footer doesn't need the same
-            // treatment: it's a `safeAreaInset` (see `readerContent`), so the measured
-            // `footerHeight` already includes the bottom safe-area padding the system adds.
+            // treatment: it already extends its own frame down to that true edge (see
+            // `footer`'s `.offset`/`PlatformSafeArea.bottomInset` padding), so the measured
+            // `footerHeight` reaches it too.
             topInset: isControlsVisible ? headerHeight + PlatformSafeArea.topInset : 0,
             bottomInset: isControlsVisible ? footerHeight : 0
         )
@@ -1028,11 +1043,11 @@ private struct ReaderContentView: View {
     private var controlsChrome: some View {
         VStack {
             #if os(iOS)
-            // The footer isn't here: it's attached to the outer `ZStack` as a
-            // `safeAreaInset` instead (see `readerContent`), so the system extends its
-            // background under the home indicator and pads its content above it for us —
-            // `.ignoresSafeArea` on an intrinsically-sized row only shifted the row down
-            // without growing it, leaving a gap uncovered by its background.
+            // The footer isn't here: it's a direct sibling of `controlsChrome` in the
+            // outer `ZStack` instead (see `readerContent`), in its own `VStack`+`Spacer`
+            // positioned at the bottom — a `VStack` sibling of `header` inside *this* one
+            // wouldn't reach past the safe area no matter what's applied to it, since
+            // `Spacer` only ever pushes it up to the edge of the safe frame, not past it.
             header
                 .background(GeometryReader { proxy in
                     Color.clear.preference(key: ChromeHeightKey.self, value: proxy.size.height)
@@ -1046,19 +1061,6 @@ private struct ReaderContentView: View {
             #endif
         }
     }
-
-    #if os(iOS)
-    @ViewBuilder
-    private var footerSafeAreaInset: some View {
-        if isControlsVisible && !isPanelSelectionPresented && !isFindPresented {
-            footer
-                .background(GeometryReader { proxy in
-                    Color.clear.preference(key: ChromeFooterHeightKey.self, value: proxy.size.height)
-                })
-                .onPreferenceChange(ChromeFooterHeightKey.self) { footerHeight = $0 }
-        }
-    }
-    #endif
 
     /// Leading icon group, isolated so its width can be measured (see `header`).
     private var headerLeadingActions: some View {
@@ -1320,9 +1322,32 @@ private struct ReaderContentView: View {
                 }
                 .foregroundColor(chromeForeground)
                 .padding(.horizontal, 10)
-                .padding(.vertical, 4)
+                .padding(.top, 4)
+                #if os(iOS)
+                // Extra bottom padding equal to the home indicator's own height, so the
+                // row's total height covers it, plus an equal `.offset` to push the whole
+                // taller row down by that same amount. Neither `.ignoresSafeArea` nor
+                // `.safeAreaInset` reach the true bottom edge here — confirmed with a
+                // `GeometryReader` on every full-bleed view in `readerContent`, with and
+                // without `StatusBarControllingHost` in the loop: `.fullScreenCover` itself
+                // never proposes more than the safe-area-inset frame, on this iPad, no
+                // matter what the content asks for. `.offset` sidesteps that entirely: it
+                // moves the already-laid-out view, not a size/position *request* that layout
+                // gets to cap. The padding keeps the row's own content (buttons, slider)
+                // sitting where it always did — only the background grows to follow it down.
+                .padding(.bottom, 4 + PlatformSafeArea.bottomInset)
+                #else
+                .padding(.bottom, 4)
+                #endif
                 .frame(maxWidth: .infinity)
                 .background(chromeBackground)
+                #if os(iOS)
+                .background(GeometryReader { proxy in
+                    Color.clear.preference(key: ChromeFooterHeightKey.self, value: proxy.size.height)
+                })
+                .onPreferenceChange(ChromeFooterHeightKey.self) { footerHeight = $0 }
+                .offset(y: PlatformSafeArea.bottomInset)
+                #endif
                 .environment(\.colorScheme, isBackgroundDark ? .dark : .light)
                 .buttonStyle(PlainButtonStyle())
                 .transition(.move(edge: .bottom).combined(with: .opacity))
