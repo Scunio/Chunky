@@ -56,12 +56,16 @@ jobs:
           fi
           # Dal JSON e non dall'output testuale: i nomi dei modelli contengono parentesi
           # ("iPad Pro 13-inch (M5)") e troncherebbero qualunque parsing fermo alla prima.
-          # Basta un modello qualsiasi della famiglia: quello che conta è che esista davvero
-          # sull'immagine del runner.
+          # Ordinato sul numero di modello, non alfabeticamente: in ordine alfabetico
+          # "iPhone SE" batte "iPhone 17", e l'SE non ha il notch — cioè si perderebbe proprio
+          # il caso in cui l'inset superiore non va a zero nascondendo la status bar.
           name=$(xcrun simctl list devices available -j \
             | jq -r --arg f "$family" '[.devices | to_entries[]
                 | select(.key | test("iOS")) | .value[]
-                | select(.name | startswith($f)) | .name] | unique | last // empty')
+                | select(.name | startswith($f)) | .name]
+              | unique
+              | map({name: ., model: (try (capture("(?<d>[0-9]+)").d | tonumber) catch -1)})
+              | sort_by(.model, .name) | last | .name // empty')
           if [ -z "$name" ]; then
             echo "::error::Nessun simulatore disponibile per la famiglia '$family'"
             xcrun simctl list devices available
