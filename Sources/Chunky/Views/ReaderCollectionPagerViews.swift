@@ -357,6 +357,12 @@ final class PagingCollectionView: UICollectionView {
     var onBoundsSizeChange: (() -> Void)?
     private var lastBoundsSize: CGSize = .zero
 
+    /// The pages fill the screen and the controls float over them, so nothing in here wants an
+    /// inset. Reported as zero at the source because that's what every cell's
+    /// `UIHostingConfiguration` inherits from: `.ignoresSafeArea()` inside the cell can't undo
+    /// it, which is what shrank the page whenever the status bar appeared.
+    override var safeAreaInsets: UIEdgeInsets { .zero }
+
     override func layoutSubviews() {
         let sizeChanged = bounds.size != lastBoundsSize
         super.layoutSubviews()
