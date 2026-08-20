@@ -47,7 +47,7 @@ enum PlatformSafeArea {
 /// Hosts SwiftUI content in a `UIViewController` that drives its own status bar visibility,
 /// instead of through SwiftUI's `.statusBar(hidden:)` modifier layered on top of
 /// `.ignoresSafeArea()` content — see the comment on `ReaderView`'s use of this. That
-/// combination has a known, real-device-only glitch: changing `.statusBar(hidden:)` inside
+/// combination has a known glitch: changing `.statusBar(hidden:)` inside
 /// an animated SwiftUI transaction doesn't coordinate with the safe-area transition UIKit
 /// runs for the status bar itself, so `.ignoresSafeArea()` content visibly jumps for a
 /// frame. Apple's own apps (Photos, in full-screen browsing) hide/show the status bar

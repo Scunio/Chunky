@@ -259,8 +259,10 @@ private struct ReaderContentView: View {
         // directly — see `StatusBarControllingHost` — instead of SwiftUI's own
         // `.statusBar(hidden:)`, which doesn't coordinate its animation with the safe-area
         // transition UIKit runs for the status bar, causing `.ignoresSafeArea()` content
-        // (the pager) to visibly jump on a real device when toggled inside an animated
-        // SwiftUI transaction (not reproducible in the simulator — found the hard way).
+        // (the pager) to visibly jump when toggled inside an animated SwiftUI transaction.
+        // Reproducible in the simulator too, with a test page whose edges don't touch the
+        // screen edge — a solid-color page hides it, since "revealed" and "moved" look the
+        // same when the content already fills the screen.
         StatusBarControllingHost(isStatusBarHidden: !isControlsVisible) {
             readerContent
         }
