@@ -1122,8 +1122,10 @@ private struct ReaderContentView: View {
         // The host reports no safe area (see `StatusBarControllingHost`), so the inset that
         // keeps the buttons and title clear of the status bar has to be added here. Inside the
         // padding, so the background still reaches the true top edge instead of leaving a gap
-        // of bare page above it.
+        // of bare page above it. Mac has no status bar and no such host.
+        #if os(iOS)
         .padding(.top, PlatformSafeArea.statusBarHeight)
+        #endif
         .frame(maxWidth: .infinity)
         .background(chromeBackground)
         // The system material follows the current scheme: here we force the one consistent
