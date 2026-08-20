@@ -21,6 +21,12 @@ jobs:
           - name: iOS
             scheme: ChunkyUI_iOS
             destination: platform=iOS Simulator,name=iPhone 16,OS=latest
+          # L'iPad non è ridondante: senza notch, nascondere la status bar porta l'inset
+          # superiore a zero invece di lasciarlo all'altezza del notch, quindi i difetti di
+          # safe area nel reader si vedono qui e quasi non si vedono su iPhone.
+          - name: iPadOS
+            scheme: ChunkyUI_iOS
+            destination: platform=iOS Simulator,name=iPad Pro 13-inch (M4),OS=latest
 
     steps:
       - uses: actions/checkout@v4
