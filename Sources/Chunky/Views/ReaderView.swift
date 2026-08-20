@@ -255,17 +255,17 @@ private struct ReaderContentView: View {
 
     var body: some View {
         #if os(iOS)
-        // Hosts `readerContent` in a UIViewController that drives `prefersStatusBarHidden`
-        // directly — see `StatusBarControllingHost` — instead of SwiftUI's own
-        // `.statusBar(hidden:)`, which doesn't coordinate its animation with the safe-area
-        // transition UIKit runs for the status bar, causing `.ignoresSafeArea()` content
-        // (the pager) to visibly jump when toggled inside an animated SwiftUI transaction.
-        // Reproducible in the simulator too, with a test page whose edges don't touch the
-        // screen edge — a solid-color page hides it, since "revealed" and "moved" look the
-        // same when the content already fills the screen.
+        // The status bar follows the controls. That only holds because nothing in the reader
+        // is laid out against the safe area any more — it used to shrink the page by the
+        // status bar's height instead of just revealing the bars. See
+        // `StatusBarControllingHost` for why it's a view controller, not `.statusBar(hidden:)`.
         StatusBarControllingHost(isStatusBarHidden: !isControlsVisible) {
             readerContent
         }
+        // Two separate insets to defeat: `safeAreaRegions` stops the hosting controller from
+        // insetting its SwiftUI content, this stops SwiftUI from handing the representable a
+        // frame already reduced to the safe area. Either one alone leaves the reader short.
+        .ignoresSafeArea()
         #else
         readerContent
         #endif
@@ -724,16 +724,11 @@ private struct ReaderContentView: View {
             rightToLeft: comic.readingDirection == .rightToLeft,
             hotCorners: isHotCornersEnabled,
             zonesEnabled: tapPageTurnStyle != .disabled,
-            // The pager these zones cover ignores the safe area (see `iOSPager`), so its
-            // coordinate space starts at the true top/bottom of the screen — a header/footer
-            // positioned the normal, safe-area-respecting way sits `PlatformSafeArea.topInset`/
-            // `bottomInset` points further in, not right at that origin. Without adding it
-            // here, a tap in that gap (visually right on the header/footer) fell through to
-            // the ordinary page-turn zones underneath. The footer doesn't need the same
-            // treatment: it already extends its own frame down to that true edge (see
-            // `footer`'s `.offset`/`PlatformSafeArea.bottomInset` padding), so the measured
-            // `footerHeight` reaches it too.
-            topInset: isControlsVisible ? headerHeight + PlatformSafeArea.topInset : 0,
+            // Both bars span from the true screen edge inwards, and so does the pager these
+            // zones cover, so the measured heights are the exclusion bands as they are: the
+            // header's own status-bar padding is already part of `headerHeight` (see `header`),
+            // the footer's home-indicator padding part of `footerHeight`.
+            topInset: isControlsVisible ? headerHeight : 0,
             bottomInset: isControlsVisible ? footerHeight : 0
         )
     }
@@ -811,7 +806,7 @@ private struct ReaderContentView: View {
             zonesEnabled: tapPageTurnStyle != .disabled,
             rightToLeft: comic.readingDirection == .rightToLeft,
             // See the identical comment on `tapZoneOptions`.
-            topInset: isControlsVisible ? headerHeight + PlatformSafeArea.topInset : 0,
+            topInset: isControlsVisible ? headerHeight : 0,
             bottomInset: isControlsVisible ? footerHeight : 0,
             isZoomed: isZoomed
         ) {
@@ -1124,12 +1119,13 @@ private struct ReaderContentView: View {
         .foregroundColor(chromeForeground)
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
+        // The host reports no safe area (see `StatusBarControllingHost`), so the inset that
+        // keeps the buttons and title clear of the status bar has to be added here. Inside the
+        // padding, so the background still reaches the true top edge instead of leaving a gap
+        // of bare page above it.
+        .padding(.top, PlatformSafeArea.statusBarHeight)
         .frame(maxWidth: .infinity)
-        // Extends the material into the status bar's area instead of stopping at the safe
-        // area, so the bar reaches the true top edge instead of leaving a gap of bare
-        // background above it — the content itself (buttons, title) still respects the
-        // safe area via normal layout, only the background reaches further.
-        .background(chromeBackground.ignoresSafeArea(edges: .top))
+        .background(chromeBackground)
         // The system material follows the current scheme: here we force the one consistent
         // with "Page background" (black/white/auto), as chromeForeground already does for
         // text/icons.
@@ -1323,8 +1319,8 @@ private struct ReaderContentView: View {
                 .foregroundColor(chromeForeground)
                 .padding(.horizontal, 10)
                 #if os(iOS)
-                // Extra padding, equal to the home indicator's height, grows the row so its
-                // background reaches past it once offset below; split top/bottom on iPad,
+                // Extra padding, equal to the home indicator's height, keeps the content clear
+                // of it while the background reaches the true bottom edge; split top/bottom on iPad,
                 // where piling it all on the bottom left the content visibly off-center
                 // (iPhone's smaller inset didn't show that, so it keeps the old padding).
                 .padding(.top, 4 + (UIDevice.current.userInterfaceIdiom == .pad ? PlatformSafeArea.bottomInset / 2 : 0))
@@ -1339,7 +1335,6 @@ private struct ReaderContentView: View {
                     Color.clear.preference(key: ChromeFooterHeightKey.self, value: proxy.size.height)
                 })
                 .onPreferenceChange(ChromeFooterHeightKey.self) { footerHeight = $0 }
-                .offset(y: PlatformSafeArea.bottomInset)
                 #endif
                 .environment(\.colorScheme, isBackgroundDark ? .dark : .light)
                 .buttonStyle(PlainButtonStyle())

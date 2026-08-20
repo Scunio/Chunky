@@ -25,15 +25,27 @@ enum PlatformSafeArea {
             .safeAreaInsets.top ?? 0
     }
 
-    /// Home indicator height, read the same way as `topInset`. `.fullScreenCover` never
-    /// proposes more than the safe-area frame, so `.ignoresSafeArea`/`.safeAreaInset` can't
-    /// get the reader's footer past it — it uses this as manual padding plus offset instead
-    /// (see `ReaderView.footer`).
+    /// Home indicator height, read the same way as `topInset`. The reader's host reports no
+    /// safe area of its own (see `StatusBarControllingHost`), so the chrome can't get the
+    /// inset from the environment: the footer pads by this value instead to keep its content
+    /// clear of the indicator (see `ReaderView.footer`).
     static var bottomInset: CGFloat {
         (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
             .windows.first(where: \.isKeyWindow)?
             .safeAreaInsets.bottom ?? 0
     }
+
+    /// Last non-zero `topInset`, i.e. the height the status bar has when it's showing. The
+    /// reader's host reports no safe area of its own (see `StatusBarControllingHost`), so its
+    /// header has to pad by this to clear the status bar — and it can't read `topInset` live:
+    /// the body is re-evaluated the moment the controls appear, before UIKit has brought the
+    /// status bar back, so a live read would still be zero and the header would land under it.
+    @MainActor static var statusBarHeight: CGFloat {
+        let current = topInset
+        if current > 0 { lastStatusBarHeight = current }
+        return lastStatusBarHeight
+    }
+    @MainActor private static var lastStatusBarHeight: CGFloat = 0
 
     /// True window size, unaffected by the status bar's own height changing — unlike
     /// `GeometryReader`'s `.size`, which still tracks it despite `.ignoresSafeArea()`.
@@ -73,6 +85,11 @@ struct StatusBarControllingHost<Content: View>: UIViewControllerRepresentable {
         let controller = StatusBarControllingHostingController(rootView: content())
         controller.isStatusBarHidden = isStatusBarHidden
         controller.view.backgroundColor = .clear
+        // The content is a full-screen reader: without this it stops at the safe area, and
+        // `.ignoresSafeArea()` inside can't get past it — SwiftUI can't undo the inset UIKit
+        // imposes on a child hosting controller. The chrome positions itself with
+        // `PlatformSafeArea` instead (see `ReaderView.footer`).
+        controller.safeAreaRegions = []
         return controller
     }
 
