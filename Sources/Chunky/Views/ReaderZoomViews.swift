@@ -138,6 +138,9 @@ struct ZoomableImageView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UIScrollView {
         let scrollView = ZoomingScrollView()
+        // Lets `ReaderLayoutUITests` measure the page's own viewport: the collection view stays
+        // full-screen even when its cells don't, so the pager's frame hides the regression.
+        scrollView.accessibilityIdentifier = "reader.page"
         scrollView.coordinator = context.coordinator
         scrollView.delegate = context.coordinator
         scrollView.minimumZoomScale = 1
@@ -387,6 +390,7 @@ struct SpreadZoomableImageView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UIScrollView {
         let scrollView = SpreadZoomingScrollView()
+        scrollView.accessibilityIdentifier = "reader.page"
         scrollView.coordinator = context.coordinator
         scrollView.delegate = context.coordinator
         scrollView.minimumZoomScale = 1

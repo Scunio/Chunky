@@ -20,6 +20,7 @@ import UIKit
 /// The interface is deliberately identical to `PageTurnPager`'s, so swapping it in in
 /// `ReaderView` is just a name change and nothing else.
 struct PageCollectionPager<Content: View>: UIViewRepresentable {
+    static var accessibilityIdentifier: String { "reader.pager" }
     /// Spread start indices, in increasing order: these are the navigation's "steps".
     let starts: [Int]
     @Binding var selection: Int
@@ -40,6 +41,9 @@ struct PageCollectionPager<Content: View>: UIViewRepresentable {
     func makeUIView(context: Context) -> PagingCollectionView {
         let coordinator = context.coordinator
         let view = PagingCollectionView(frame: .zero, collectionViewLayout: Self.makeLayout())
+        // Lets `ReaderLayoutUITests` measure the pager's frame directly, instead of inferring
+        // the page's position from pixels.
+        view.accessibilityIdentifier = PageCollectionPager.accessibilityIdentifier
         view.backgroundColor = .clear
         view.isPagingEnabled = true
         view.showsHorizontalScrollIndicator = false

@@ -9,6 +9,7 @@ struct ChunkyApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        UITestSeed.seedIfRequested()
         let includeInBackup = UserDefaults.standard.object(forKey: "includeInBackup") as? Bool ?? false
         LibraryStorage.setExcludedFromBackup(!includeInBackup)
         CrashReportManager.configure()
