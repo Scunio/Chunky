@@ -18,15 +18,18 @@ jobs:
           - name: macOS
             scheme: ChunkyUI_macOS
             destination: platform=macOS,arch=arm64
+            simulatorFamily: ""
           - name: iOS
             scheme: ChunkyUI_iOS
-            destination: platform=iOS Simulator,name=iPhone 16,OS=latest
+            destination: ""
+            simulatorFamily: iPhone
           # L'iPad non è ridondante: senza notch, nascondere la status bar porta l'inset
           # superiore a zero invece di lasciarlo all'altezza del notch, quindi i difetti di
           # safe area nel reader si vedono qui e quasi non si vedono su iPhone.
           - name: iPadOS
             scheme: ChunkyUI_iOS
-            destination: platform=iOS Simulator,name=iPad Pro 13-inch (M4),OS=latest
+            destination: ""
+            simulatorFamily: iPad Pro
 
     steps:
       - uses: actions/checkout@v4
@@ -40,13 +43,40 @@ jobs:
       - name: Genera il progetto
         run: xcodegen generate
 
+      # I nomi dei simulatori cambiano tra le immagini dei runner, quindi fissarne uno rende
+      # il job rosso per l'immagine e non per il codice. Qui si sceglie il modello più recente
+      # della famiglia richiesta, e se non ce n'è nessuno si fallisce dicendo cosa c'era.
+      - name: Risolvi la destinazione
+        run: |
+          set -euo pipefail
+          family="${{ matrix.simulatorFamily }}"
+          if [ -z "$family" ]; then
+            echo "DESTINATION=${{ matrix.destination }}" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          # Dal JSON e non dall'output testuale: i nomi dei modelli contengono parentesi
+          # ("iPad Pro 13-inch (M5)") e troncherebbero qualunque parsing fermo alla prima.
+          # Basta un modello qualsiasi della famiglia: quello che conta è che esista davvero
+          # sull'immagine del runner.
+          name=$(xcrun simctl list devices available -j \
+            | jq -r --arg f "$family" '[.devices | to_entries[]
+                | select(.key | test("iOS")) | .value[]
+                | select(.name | startswith($f)) | .name] | unique | last // empty')
+          if [ -z "$name" ]; then
+            echo "::error::Nessun simulatore disponibile per la famiglia '$family'"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "Simulatore scelto: $name"
+          echo "DESTINATION=platform=iOS Simulator,name=$name,OS=latest" >> "$GITHUB_ENV"
+
       - name: UI test
         run: |
           set -o pipefail
           xcodebuild test \
             -project Chunky.xcodeproj \
             -scheme "${{ matrix.scheme }}" \
-            -destination "${{ matrix.destination }}" \
+            -destination "$DESTINATION" \
             -derivedDataPath build/DerivedData \
             -resultBundlePath "build/ui-${{ matrix.name }}.xcresult" \
             CODE_SIGN_IDENTITY="-" CODE_SIGN_ENTITLEMENTS="" \
