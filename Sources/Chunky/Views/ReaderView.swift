@@ -297,10 +297,12 @@ private struct ReaderContentView: View {
 
             if let provider = provider {
                 #if os(iOS)
-                // `.ignoresSafeArea()` doesn't keep this view's proposed height stable when the
-                // status bar appears — an explicit height does. The fixed height then lands
-                // half a topInset low while the status bar shows; the offset cancels it.
-                // Measured against pixel landmarks, both states.
+                // `.ignoresSafeArea()` alone doesn't stop this view's proposed height from
+                // shrinking when the status bar appears — an explicit height override does.
+                // But a fixed height taller than the (safe-area-reduced) proposal gets
+                // centered within that smaller proposal, so it bleeds out by half the
+                // difference on each side; the offset cancels that when the status bar is
+                // showing. Verified pixel-stable both ways on device simulator screenshots.
                 iOSPager(provider: provider)
                     .ignoresSafeArea()
                     .frame(height: viewportSize.height)
