@@ -1545,3 +1545,21 @@ struct ChromeFooterHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 #endif
+
+// No real comic file backs this, so the pager shows its "couldn't load" state rather than
+// actual pages — still useful for iterating on the chrome (header/footer/controls) live.
+// The controls-toggle bug this file is being debugged for won't reproduce here: Preview
+// doesn't run through `StatusBarControllingHost`'s real UIKit status bar the way a full
+// simulator/device run does.
+#Preview {
+    let controller = PersistenceController(inMemory: true)
+    let context = controller.container.viewContext
+    let comic = ComicEntity.create(
+        title: "Anteprima",
+        relativePath: "preview.cbz",
+        format: .cbz,
+        in: context
+    )
+    return ReaderView(comic: comic)
+        .environment(\.managedObjectContext, context)
+}
