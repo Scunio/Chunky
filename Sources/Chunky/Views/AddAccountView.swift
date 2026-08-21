@@ -17,72 +17,108 @@ struct AddAccountView: View {
     }
 
     var body: some View {
+        #if os(tvOS)
+        tvOSPanel
+            .sheetSized()
+        #else
         NavigationStack {
-            Form {
-                Section(header: Text("Tipo di account")) {
-                    Picker("Tipo", selection: $kind) {
-                        ForEach(RemoteAccountKind.allCases) { kind in
-                            Text(kind.label).tag(kind)
-                        }
-                    }
+            formContent
+                .navigationTitle("Nuovo account")
+                .toolbar {
                     #if os(iOS)
-                    .pickerStyle(.segmented)
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Annulla") { dismiss() }
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Salva", action: save)
+                    }
+                    #else
+                    ToolbarItem {
+                        Button("Annulla") { dismiss() }
+                    }
+                    ToolbarItem {
+                        Button("Salva", action: save)
+                    }
                     #endif
                 }
-
-                Section(
-                    header: Text("Server"),
-                    footer: Text(kind == .opds
-                        ? "L'indirizzo del catalogo OPDS, es. http://192.168.1.10:8080/opds"
-                        : "L'indirizzo del server WebDAV, es. https://miocloud.example.com/remote.php/dav/files/utente/")
-                ) {
-                    TextField("Nome account", text: $name)
-                    TextField("URL del server", text: $serverURLString)
-                        #if os(iOS)
-                        .keyboardType(.URL)
-                        .autocapitalization(.none)
-                        #endif
-                        .disableAutocorrection(true)
-                }
-
-                Section(header: Text("Credenziali (opzionali)")) {
-                    TextField("Nome utente", text: $username)
-                        #if os(iOS)
-                        .autocapitalization(.none)
-                        #endif
-                        .disableAutocorrection(true)
-                    SecureField("Password", text: $password)
-                }
-
-                if let validationError = validationError {
-                    Section {
-                        Text(validationError)
-                            .foregroundColor(.red)
-                            .font(.footnote)
-                    }
-                }
-            }
-            .navigationTitle("Nuovo account")
-            .toolbar {
-                #if os(iOS)
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Annulla") { dismiss() }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Salva", action: save)
-                }
-                #else
-                ToolbarItem {
-                    Button("Annulla") { dismiss() }
-                }
-                ToolbarItem {
-                    Button("Salva", action: save)
-                }
-                #endif
-            }
         }
         .sheetSized()
+        #endif
     }
+
+    private var formContent: some View {
+        Form {
+            Section(header: Text("Tipo di account")) {
+                Picker("Tipo", selection: $kind) {
+                    ForEach(RemoteAccountKind.allCases) { kind in
+                        Text(kind.label).tag(kind)
+                    }
+                }
+                #if os(iOS)
+                .pickerStyle(.segmented)
+                #endif
+            }
+
+            Section(
+                header: Text("Server"),
+                footer: Text(kind == .opds
+                    ? "L'indirizzo del catalogo OPDS, es. http://192.168.1.10:8080/opds"
+                    : "L'indirizzo del server WebDAV, es. https://miocloud.example.com/remote.php/dav/files/utente/")
+            ) {
+                TextField("Nome account", text: $name)
+                TextField("URL del server", text: $serverURLString)
+                    #if os(iOS)
+                    .keyboardType(.URL)
+                    .autocapitalization(.none)
+                    #endif
+                    .disableAutocorrection(true)
+            }
+
+            Section(header: Text("Credenziali (opzionali)")) {
+                TextField("Nome utente", text: $username)
+                    #if os(iOS)
+                    .autocapitalization(.none)
+                    #endif
+                    .disableAutocorrection(true)
+                SecureField("Password", text: $password)
+            }
+
+            if let validationError = validationError {
+                Section {
+                    Text(validationError)
+                        .foregroundColor(.red)
+                        .font(.footnote)
+                }
+            }
+        }
+    }
+
+    /// Same rationale as `AccountsView.tvOSPanel`: in a compact sheet the platform
+    /// navigation bar truncates the title and crams "Annulla"/"Salva" on top of it. Unlike
+    /// AccountsView this keeps its own NavigationStack — the sheet is presented bare (no
+    /// wrapping stack at the call sites), and the "Tipo" Picker needs one to push its
+    /// selection screen on tvOS.
+    #if os(tvOS)
+    private var tvOSPanel: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                HStack(spacing: 32) {
+                    Text("Nuovo account")
+                        .font(.title2.bold())
+                    Spacer()
+                    Button("Annulla") { dismiss() }
+                    Button("Salva", action: save)
+                }
+                .padding(.horizontal, 48)
+                .padding(.top, 24)
+                .padding(.bottom, 12)
+
+                formContent
+                    .padding(.horizontal, 48)
+            }
+        }
+    }
+    #endif
 
     private func save() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
