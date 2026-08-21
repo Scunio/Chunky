@@ -23,7 +23,9 @@ struct NewComicsView: View {
             Divider()
 
             if comics.isEmpty {
+                Spacer(minLength: 0)
                 emptyState
+                Spacer(minLength: 0)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 12) {
@@ -41,7 +43,15 @@ struct NewComicsView: View {
                 }
             }
         }
+        #if os(tvOS)
+        // tvOS's default type is much larger than iOS/macOS (10-foot readability), so the
+        // iOS/macOS popover size is too narrow here and wraps "Nuovi"/"Cancella" letter by letter.
+        // The empty state also needs less height than the scrollable cover list: at the
+        // list's height it was mostly dead black space around one small icon and a line of text.
+        .frame(width: 520, height: comics.isEmpty ? 320 : 620)
+        #else
         .frame(width: 280, height: 420)
+        #endif
     }
 
     private var emptyState: some View {
