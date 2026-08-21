@@ -21,6 +21,9 @@ packages:
   Unrar:
     url: https://github.com/mtgto/Unrar.swift.git
     from: 0.3.15
+  AMSMB2:
+    url: https://github.com/amosavian/AMSMB2.git
+    from: 4.0.0
 
 # ---------------------------------------------------------------------------
 # Due target espliciti invece di un unico target multipiattaforma: è l'unico modo
@@ -49,6 +52,7 @@ targetTemplates:
     dependencies:
       - package: ZIPFoundation
       - package: Unrar
+      - package: AMSMB2
     settings:
       base:
         SWIFT_VERSION: "5.0"
@@ -70,6 +74,7 @@ targetTemplates:
     dependencies:
       - package: ZIPFoundation
       - package: Unrar
+      - package: AMSMB2
     settings:
       base:
         PRODUCT_NAME: Chunky
@@ -123,6 +128,8 @@ targets:
         UIFileSharingEnabled: true
         NSFaceIDUsageDescription: "Usa Face ID per sbloccare Chunky quando il blocco genitori è attivo."
         NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
+        NSBonjourServices:
+          - _smb._tcp
         NSUbiquitousContainers:
           iCloud.com.scunio.Chunky:
             NSUbiquitousContainerIsDocumentScopePublic: true
@@ -179,6 +186,8 @@ targets:
         LSApplicationCategoryType: public.app-category.entertainment
         NSHumanReadableCopyright: "MIT License"
         NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
+        NSBonjourServices:
+          - _smb._tcp
         NSUbiquitousContainers:
           iCloud.com.scunio.Chunky:
             NSUbiquitousContainerIsDocumentScopePublic: true
@@ -231,6 +240,8 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         ITSAppUsesNonExemptEncryption: false
         NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
+        NSBonjourServices:
+          - _smb._tcp
         # Niente NSUbiquitousContainers qui: è la chiave che rende il container visibile in
         # Files, e tvOS non ha un Files app né supporta l'entitlement CloudDocuments che la
         # renderebbe operativa (il profilo di provisioning lo scarta silenziosamente — vedi

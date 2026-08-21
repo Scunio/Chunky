@@ -4,6 +4,7 @@ import CoreData
 enum RemoteAccountKind: String, CaseIterable, Identifiable {
     case opds
     case webdav
+    case smb
 
     var id: String { rawValue }
 
@@ -11,6 +12,7 @@ enum RemoteAccountKind: String, CaseIterable, Identifiable {
         switch self {
         case .opds: "OPDS (Calibre, Ubooquity...)"
         case .webdav: "WebDAV"
+        case .smb: "SMB (NAS)"
         }
     }
 
@@ -18,6 +20,7 @@ enum RemoteAccountKind: String, CaseIterable, Identifiable {
         switch self {
         case .opds: "books.vertical"
         case .webdav: "externaldrive.connected.to.line.below"
+        case .smb: "server.rack"
         }
     }
 }
@@ -55,6 +58,14 @@ extension RemoteAccountEntity {
         serverURLString: String,
         username: String?,
         password: String?,
+        portNumber: Int32 = 445,
+        shareName: String? = nil,
+        domainOrWorkgroup: String? = nil,
+        resolvedAddressOverride: String? = nil,
+        autoScanEnabled: Bool = true,
+        smartFoldersEnabled: Bool = true,
+        preCacheDetailsEnabled: Bool = true,
+        preCacheCoversEnabled: Bool = true,
         in context: NSManagedObjectContext
     ) -> RemoteAccountEntity {
         let account = RemoteAccountEntity(context: context)
@@ -65,6 +76,14 @@ extension RemoteAccountEntity {
         account.serverURLString = serverURLString
         account.username = username
         account.dateAdded = Date()
+        account.portNumber = portNumber
+        account.shareName = shareName
+        account.domainOrWorkgroup = domainOrWorkgroup
+        account.resolvedAddressOverride = resolvedAddressOverride
+        account.autoScanEnabled = autoScanEnabled
+        account.smartFoldersEnabled = smartFoldersEnabled
+        account.preCacheDetailsEnabled = preCacheDetailsEnabled
+        account.preCacheCoversEnabled = preCacheCoversEnabled
         if let password = password, !password.isEmpty {
             KeychainStore.savePassword(password, forAccount: newID)
         }

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23231" systemVersion="24A335" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithSwiftData="false" userDefinedModelVersionIdentifier="">
+    <entity name="ComicEntity" representedClassName="ComicEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" attributeType="UUID" optional="YES" usesScalarValueType="NO"/>
+        <attribute name="title" attributeType="String" optional="NO" defaultValueString=""/>
+        <attribute name="seriesName" optional="YES" attributeType="String"/>
+        <attribute name="relativePath" attributeType="String" optional="NO" defaultValueString=""/>
+        <attribute name="formatRawValue" attributeType="String" optional="NO" defaultValueString="cbz"/>
+        <attribute name="pageCount" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="lastReadPage" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="readingDirectionRawValue" attributeType="String" optional="NO" defaultValueString="leftToRight"/>
+        <attribute name="dateAdded" attributeType="Date" optional="NO" usesScalarValueType="NO" defaultValueString="0"/>
+        <attribute name="dateLastOpened" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="coverImageData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="isFavorite" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isRemotePlaceholder" attributeType="Boolean" optional="NO" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="sourceAccountID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="sourceRelativePath" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="RemoteAccountEntity" representedClassName="RemoteAccountEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" attributeType="UUID" optional="YES" usesScalarValueType="NO"/>
+        <attribute name="kindRawValue" attributeType="String" optional="NO" defaultValueString="opds"/>
+        <attribute name="name" attributeType="String" optional="NO" defaultValueString=""/>
+        <attribute name="serverURLString" attributeType="String" optional="NO" defaultValueString=""/>
+        <attribute name="username" optional="YES" attributeType="String"/>
+        <attribute name="dateAdded" attributeType="Date" optional="NO" usesScalarValueType="NO" defaultValueString="0"/>
+        <attribute name="portNumber" attributeType="Integer 32" optional="NO" defaultValueString="445" usesScalarValueType="YES"/>
+        <attribute name="shareName" optional="YES" attributeType="String"/>
+        <attribute name="domainOrWorkgroup" optional="YES" attributeType="String"/>
+        <attribute name="resolvedAddressOverride" optional="YES" attributeType="String"/>
+        <attribute name="autoScanEnabled" attributeType="Boolean" optional="NO" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="lastScanDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="smartFoldersEnabled" attributeType="Boolean" optional="NO" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="preCacheDetailsEnabled" attributeType="Boolean" optional="NO" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="preCacheCoversEnabled" attributeType="Boolean" optional="NO" defaultValueString="YES" usesScalarValueType="YES"/>
+    </entity>
+    <!--
+      Splits ComicEntity across two persistent stores (see PersistenceController): a comic that
+      came from a remote-account auto-scan (isRemotePlaceholder or sourceAccountID set) is
+      explicitly assigned, at creation, to a second store that is never mirrored to CloudKit —
+      so a not-yet-downloaded (or even already-downloaded) remote-account placeholder never syncs
+      to another device that may not have that NAS/WebDAV account configured. Everything else
+      (regular imports/iCloud comics, RemoteAccountEntity) is unaffected: it stays in the
+      implicit default configuration, exactly as before this configuration existed.
+    -->
+    <configuration name="Local">
+        <memberEntity name="ComicEntity"/>
+    </configuration>
+</model>

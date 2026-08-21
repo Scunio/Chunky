@@ -414,6 +414,20 @@ final class LibraryViewModel: ObservableObject {
             let request = ComicEntity.fetchRequest()
             guard let comics = try? context.fetch(request) else { return }
             for comic in comics {
+                // A remote-account placeholder has no local file yet by design (it downloads on
+                // first open, see `RemoteAccountScanner`/`ComicDownloadService`) — the missing-file
+                // check below would otherwise delete every placeholder on the very next rescan.
+                if comic.isRemotePlaceholder {
+                    // `ComicDownloadService.downloadRemotePlaceholder` writes the file to disk
+                    // before it flips this flag off and saves — a rescan landing in that window
+                    // would otherwise see a placeholder whose file already exists, skip it here,
+                    // and then have phase two below "discover" that same file as unregistered and
+                    // import it a second time. Registering its path regardless of the flag closes
+                    // that window without having to make the flag flip and the file write atomic.
+                    let path = comic.relativePath ?? ""
+                    if !path.isEmpty { knownPaths.insert(path) }
+                    continue
+                }
                 let path = comic.relativePath ?? ""
                 let url = LibraryStorage.fileURL(forRelativePath: path)
                 if path.isEmpty || !FileManager.default.fileExists(atPath: url.path) {
