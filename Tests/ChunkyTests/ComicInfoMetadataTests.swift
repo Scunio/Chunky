@@ -59,7 +59,10 @@ struct SeriesNameDerivationTests {
         ("Topolino 3653 (Panini 2025-11-26) [c2c CPPT Edition] 1.1 (corrette pagine doppie)", "Topolino"),
         ("Topolino 3636 + Cover Abbonati", "Topolino"),
         ("Topolino 3654 (Panini) + Cover Abbonati", "Topolino"),
-        ("Topolino 3655 {HD}", "Topolino")
+        ("Topolino 3655 {HD}", "Topolino"),
+        // Scanned release with a bare (unbracketed) date after the publisher: "(Panini)" is
+        // stripped first, leaving a trailing date that isn't inside any bracket.
+        ("Topolino 3661 (Panini) 2026-01-21 [c2c CPPT Edition]", "Topolino")
     ])
     func derivesSeries(title: String, expected: String) {
         #expect(LibraryViewModel.deriveSeriesName(fromFallbackTitle: title) == expected)
