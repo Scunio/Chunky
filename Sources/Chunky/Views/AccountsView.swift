@@ -35,6 +35,9 @@ struct AccountsView: View {
     /// "+" doesn't open another screen: it reveals the "Add account" section at the end of the
     /// same list and turns into "Done" to close it again.
     @State private var isAddingAccount = false
+    /// Closes the sheet from the tvOS header's "Chiudi" (the call sites' `toolbarDoneButton`
+    /// is a no-op there — see `View+ToolbarDoneButton.swift`).
+    @Environment(\.dismiss) private var dismiss
 
     /// No system file picker on tvOS, so folder-based import has nothing to open there.
     private var folderConversionAvailable: Bool {
@@ -59,16 +62,75 @@ struct AccountsView: View {
     ]
 
     var body: some View {
+        panel
+            .sheet(isPresented: $isShowingAddAccount) {
+                AddAccountView(initialKind: addAccountKind)
+            }
+        // No system file picker on tvOS: the buttons that set `activeImporter` are hidden
+        // there too (see below), so this never needs to present.
+        #if !os(tvOS)
+        .fileImporter(
+            isPresented: Binding(
+                get: { activeImporter != nil },
+                set: { if !$0 { activeImporter = nil } }
+            ),
+            allowedContentTypes: activeImporter == .folder ? [.folder] : [.cbz, .cbr, .pdf],
+            allowsMultipleSelection: activeImporter != .folder
+        ) { result in
+            switch (activeImporter, result) {
+            case (.folder, .success(let urls)):
+                if let folderURL = urls.first { convertFolder(folderURL) }
+            case (.folder, .failure(let error)):
+                folderConversionError = error.localizedDescription
+            case (_, .success(let urls)):
+                viewModel.importFiles(urls, into: context)
+            case (_, .failure):
+                break
+            }
+        }
+        #endif
+    }
+
+    /// iOS/macOS keep the system navigation bar; tvOS replaces it with a custom header —
+    /// see `tvOSPanel`.
+    @ViewBuilder
+    private var panel: some View {
+        #if os(tvOS)
+        tvOSPanel
+        #else
+        accountList
+            .navigationTitle("Account")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                // Different placement per platform: on iOS `.primaryAction` lands on the same
+                // side (trailing) as the "Close" of `toolbarDoneButton()` when this view is
+                // presented as a sheet — the two end up crammed together.
+                #if os(iOS)
+                ToolbarItem(placement: .navigationBarLeading) {
+                    addAccountToggleButton
+                }
+                #else
+                ToolbarItem(placement: .primaryAction) {
+                    addAccountToggleButton
+                }
+                #endif
+            }
+        #endif
+    }
+
+    private var accountList: some View {
         List {
             Section(footer: Text("Server web spento")) {
                 NavigationLink(destination: DownloadsView()) {
-                    Label("Downloads", systemImage: "arrow.down.circle")
+                    rowLabel("Downloads", systemImage: "arrow.down.circle")
                 }
                 NavigationLink(destination: LocalUploadView()) {
-                    Label("Web", systemImage: "globe")
+                    rowLabel("Web", systemImage: "globe")
                 }
                 NavigationLink(destination: ICloudSyncFolderView()) {
-                    Label("iCloud Drive", systemImage: "icloud")
+                    rowLabel("iCloud Drive", systemImage: "icloud")
                 }
             }
 
@@ -76,7 +138,7 @@ struct AccountsView: View {
                 Section(header: Text("I tuoi account")) {
                     ForEach(accounts) { account in
                         NavigationLink(destination: RemoteBrowserView(account: account)) {
-                            Label(account.name ?? "Account", systemImage: account.kind.systemImage)
+                            rowLabel(account.name ?? "Account", systemImage: account.kind.systemImage)
                         }
                     }
                     .onDelete(perform: deleteAccounts)
@@ -86,7 +148,7 @@ struct AccountsView: View {
             if isAddingAccount {
                 Section(header: Text("Add account")) {
                     Button(action: { addAccountKind = .opds; isShowingAddAccount = true }) {
-                        Label("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
+                        rowLabel("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
                     }
                     .foregroundColor(.primary)
 
@@ -106,7 +168,7 @@ struct AccountsView: View {
                     #endif
 
                     Button(action: { addAccountKind = .webdav; isShowingAddAccount = true }) {
-                        Label("Nuovo account WebDAV", systemImage: "plus.circle")
+                        rowLabel("Nuovo account WebDAV", systemImage: "plus.circle")
                     }
                     .foregroundColor(.primary)
                 }
@@ -143,48 +205,50 @@ struct AccountsView: View {
                 }
             }
         }
-        .navigationTitle("Account")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar {
-            // Different placement per platform: on iOS `.primaryAction` lands on the same
-            // side (trailing) as the "Close" of `toolbarDoneButton()` when this view is
-            // presented as a sheet — the two end up crammed together.
-            #if os(iOS)
-            ToolbarItem(placement: .navigationBarLeading) {
+    }
+
+    /// tvOS doesn't use the shared navigation-bar layout: in a compact sheet the platform
+    /// bar crams its toolbar buttons against the centered title, and the focused row's
+    /// highlight spans the List edge-to-edge, clipping through the card's rounded corners.
+    /// A plain header row plus an inset List keeps both under its own control. No
+    /// NavigationStack here: both call sites already wrap this view in one, and nesting a
+    /// second inside it leaves push/pop behavior undefined.
+    #if os(tvOS)
+    private var tvOSPanel: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 32) {
+                Text("Account")
+                    .font(.title2.bold())
+                Spacer()
                 addAccountToggleButton
+                Button("Chiudi") { dismiss() }
             }
-            #else
-            ToolbarItem(placement: .primaryAction) {
-                addAccountToggleButton
-            }
-            #endif
+            .padding(.horizontal, 48)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
+
+            accountList
+                .padding(.horizontal, 48)
         }
-        .sheet(isPresented: $isShowingAddAccount) {
-            AddAccountView(initialKind: addAccountKind)
+    }
+    #endif
+
+    /// tvOS renders `Label`'s icon and title with zero gap between them in list rows
+    /// ("↓Downloads"); an explicit layout keeps a readable spacing there while iOS/macOS
+    /// keep the system label with its own metrics.
+    private func rowLabel(_ title: String, systemImage: String, tint: Color = .primary) -> some View {
+        #if os(tvOS)
+        HStack(spacing: 24) {
+            Image(systemName: systemImage)
+                .foregroundColor(tint)
+                .frame(width: 44)
+            Text(title)
         }
-        // No system file picker on tvOS: the buttons that set `activeImporter` are hidden
-        // there too (see below), so this never needs to present.
-        #if !os(tvOS)
-        .fileImporter(
-            isPresented: Binding(
-                get: { activeImporter != nil },
-                set: { if !$0 { activeImporter = nil } }
-            ),
-            allowedContentTypes: activeImporter == .folder ? [.folder] : [.cbz, .cbr, .pdf],
-            allowsMultipleSelection: activeImporter != .folder
-        ) { result in
-            switch (activeImporter, result) {
-            case (.folder, .success(let urls)):
-                if let folderURL = urls.first { convertFolder(folderURL) }
-            case (.folder, .failure(let error)):
-                folderConversionError = error.localizedDescription
-            case (_, .success(let urls)):
-                viewModel.importFiles(urls, into: context)
-            case (_, .failure):
-                break
-            }
+        #else
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: systemImage).foregroundColor(tint)
         }
         #endif
     }
