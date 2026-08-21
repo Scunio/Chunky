@@ -57,8 +57,6 @@ private final class WebDAVMultistatusDelegate: NSObject, XMLParserDelegate {
     let baseURL: URL
     private(set) var entries: [RemoteEntry] = []
 
-    private static let comicExtensions: Set<String> = ["cbz", "cbr", "pdf"]
-
     private var currentElement = ""
     private var currentText = ""
     private var currentHref: String?
@@ -110,7 +108,7 @@ private final class WebDAVMultistatusDelegate: NSObject, XMLParserDelegate {
                 entries.append(RemoteEntry(title: name, isContainer: true, url: url.absoluteURL))
             } else {
                 let ext = (name as NSString).pathExtension.lowercased()
-                if Self.comicExtensions.contains(ext) {
+                if remoteComicExtensions.contains(ext) {
                     entries.append(RemoteEntry(title: name, isContainer: false, url: url.absoluteURL))
                 }
             }

@@ -139,6 +139,13 @@ enum LibraryStorage {
         return destinationURL.lastPathComponent
     }
 
+    /// Reserves a library-relative path for a file that doesn't exist locally yet (a remote
+    /// placeholder, downloaded only when the comic is first opened) — same collision-avoidance
+    /// as `importFile`, just without copying anything.
+    static func uniqueRelativePath(suggestedName: String) -> String {
+        availableDestination(forFileNamed: suggestedName, in: rootFolderURL()).lastPathComponent
+    }
+
     static func removeFile(relativePath: String) {
         let url = fileURL(forRelativePath: relativePath)
         try? FileManager.default.removeItem(at: url)

@@ -49,7 +49,6 @@ struct AccountsView: View {
     }
 
     private static let openServices: [OpenRemoteService] = [
-        OpenRemoteService(name: "Windows / Mac Shared Folder", systemImage: "folder", tintColor: .primary),
         OpenRemoteService(name: "FTP / SFTP", systemImage: "network", tintColor: .primary),
         OpenRemoteService(name: "AFP", systemImage: "folder", tintColor: .primary),
         OpenRemoteService(name: "ComicStreamer", systemImage: "server.rack", tintColor: .primary),
@@ -169,6 +168,11 @@ struct AccountsView: View {
 
                     Button(action: { addAccountKind = .webdav; isShowingAddAccount = true }) {
                         rowLabel("Nuovo account WebDAV", systemImage: "plus.circle")
+                    }
+                    .foregroundColor(.primary)
+
+                    Button(action: { addAccountKind = .smb; isShowingAddAccount = true }) {
+                        rowLabel("Nuovo account SMB", systemImage: RemoteAccountKind.smb.systemImage)
                     }
                     .foregroundColor(.primary)
                 }

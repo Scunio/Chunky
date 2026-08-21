@@ -9,6 +9,10 @@ struct RemoteEntry: Identifiable, Hashable {
     let url: URL
 }
 
+/// File extensions recognized as comics when browsing a remote account, shared by every
+/// `RemoteBrowsing` implementation (WebDAV, SMB, ...).
+let remoteComicExtensions: Set<String> = ["cbz", "cbr", "pdf"]
+
 /// Wraps the continuation for `downloadFile`, connected to the task's completion handler only
 /// after the task is created (the completion handler must be passed when the task is created,
 /// before the continuation exists). @unchecked Sendable: it's written exactly once before
@@ -111,6 +115,7 @@ enum RemoteBrowsingFactory {
         switch kind {
         case .opds: return OPDSClient()
         case .webdav: return WebDAVClient()
+        case .smb: return SMBClient()
         }
     }
 }

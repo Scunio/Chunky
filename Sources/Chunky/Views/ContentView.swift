@@ -144,6 +144,10 @@ struct ContentView: View {
                 // copying them: without this, staying in the foreground during a long transfer
                 // would leave them out of the library until the app restarts.
                 adoptFilesDroppedInDocuments()
+                // No true background execution on any platform this app ships on: remote
+                // accounts (SMB/WebDAV/OPDS) only get scanned while the app is open and in the
+                // foreground, same limitation as the rest of this loop.
+                await RemoteAccountScanner.scanAllEnabledAccounts(context: context)
             }
         }
     }
