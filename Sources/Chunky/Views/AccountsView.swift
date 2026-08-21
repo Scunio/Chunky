@@ -36,6 +36,15 @@ struct AccountsView: View {
     /// same list and turns into "Done" to close it again.
     @State private var isAddingAccount = false
 
+    /// No system file picker on tvOS, so folder-based import has nothing to open there.
+    private var folderConversionAvailable: Bool {
+        #if os(tvOS)
+        false
+        #else
+        true
+        #endif
+    }
+
     private static let openServices: [OpenRemoteService] = [
         OpenRemoteService(name: "Windows / Mac Shared Folder", systemImage: "folder", tintColor: .primary),
         OpenRemoteService(name: "FTP / SFTP", systemImage: "network", tintColor: .primary),
@@ -51,7 +60,7 @@ struct AccountsView: View {
 
     var body: some View {
         List {
-            Section {
+            Section(footer: Text("Server web spento")) {
                 NavigationLink(destination: DownloadsView()) {
                     Label("Downloads", systemImage: "arrow.down.circle")
                 }
@@ -101,12 +110,18 @@ struct AccountsView: View {
                     }
                     .foregroundColor(.primary)
                 }
-            } else {
+            // On tvOS, the folder-import feature this section exists for needs a system file
+            // picker tvOS doesn't have (hidden below), so without a real import error to show
+            // there'd be nothing left but an orphaned header/footer floating with no button.
+            } else if viewModel.importError != nil || folderConversionAvailable {
                 Section(
-                    header: Text("Strumenti"),
-                    footer: Text("Utile per una serie di pagine scansionate come immagini separate: verranno unite in un unico fumetto CBZ.")
+                    header: Group { if folderConversionAvailable { Text("Strumenti") } },
+                    footer: Group {
+                        if folderConversionAvailable {
+                            Text("Utile per una serie di pagine scansionate come immagini separate: verranno unite in un unico fumetto CBZ.")
+                        }
+                    }
                 ) {
-                    // No system file picker on tvOS: this opens one (see the `.fileImporter` above).
                     #if !os(tvOS)
                     Button(action: { activeImporter = .folder }) {
                         Label("Crea fumetto da cartella di immagini", systemImage: "photo.stack")
@@ -126,10 +141,6 @@ struct AccountsView: View {
                             .font(.footnote)
                     }
                 }
-            }
-
-            Section(footer: Text("Server web spento")) {
-                EmptyView()
             }
         }
         .navigationTitle("Account")
