@@ -58,7 +58,10 @@ final class LibraryViewModel: ObservableObject {
                 if urls.count > 1 {
                     self.updateStatus("Importazione di \(index + 1) di \(urls.count)…", token: statusToken)
                 }
-                self.importSingleFile(url, into: backgroundContext)
+                self.importSingleFile(url, into: backgroundContext, saveImmediately: urls.count == 1)
+            }
+            if urls.count > 1 {
+                backgroundContext.performAndWait { try? backgroundContext.save() }
             }
             self.deduplicateComics(in: backgroundContext)
             self.backfillSeriesNames(in: backgroundContext)
@@ -88,7 +91,7 @@ final class LibraryViewModel: ObservableObject {
 
     /// Copies `url` into the library folder, then registers it. Used for external files
     /// (system picker, download from a remote account, "open with").
-    private func importSingleFile(_ url: URL, into context: NSManagedObjectContext) {
+    private func importSingleFile(_ url: URL, into context: NSManagedObjectContext, saveImmediately: Bool = true) {
         let ext = url.pathExtension
         guard let format = ComicFormat(fileExtension: ext) else {
             reportError("Formato non supportato: .\(ext)")
@@ -97,7 +100,7 @@ final class LibraryViewModel: ObservableObject {
 
         do {
             let relativePath = try LibraryStorage.importFile(from: url)
-            registerComic(relativePath: relativePath, format: format, into: context)
+            registerComic(relativePath: relativePath, format: format, into: context, saveImmediately: saveImmediately)
         } catch {
             reportError(error.localizedDescription)
         }
@@ -153,7 +156,12 @@ final class LibraryViewModel: ObservableObject {
     /// Does nothing if that `relativePath` is already in the library: a file is a single comic,
     /// and the check comes before opening the archive because that's also what prevents
     /// regenerating the thumbnails of half the library on every pass.
-    func registerComic(relativePath: String, format: ComicFormat, into context: NSManagedObjectContext) {
+    /// `saveImmediately` is `false` when the caller is registering a whole batch: saving after
+    /// every single comic serializes the main thread behind one Core Data change-notification
+    /// (and, on a `@FetchRequest`-backed list, one re-fetch) per item — with a hundred comics
+    /// that pegs the main thread for seconds, freezing the progress overlay's spinner and label
+    /// until the batch finishes instead of counting up. Batch callers save once after the loop.
+    func registerComic(relativePath: String, format: ComicFormat, into context: NSManagedObjectContext, saveImmediately: Bool = true) {
         guard !isRegistered(relativePath: relativePath, in: context) else { return }
 
         let destinationURL = LibraryStorage.fileURL(forRelativePath: relativePath)
@@ -191,7 +199,9 @@ final class LibraryViewModel: ObservableObject {
             )
             comic.pageCount = Int32(pageCount)
             comic.coverImageData = coverData
-            try? context.save()
+            if saveImmediately {
+                try? context.save()
+            }
             if isPlaceholder {
                 DiagnosticLog.log("Registrato \"\(title)\" (\(format.rawValue), da scaricare da iCloud)")
             } else {
@@ -377,7 +387,10 @@ final class LibraryViewModel: ObservableObject {
                 updateStatus("Aggiungo \(index + 1) di \(newPaths.count)…", token: statusToken)
             }
             guard let format = ComicFormat(fileExtension: (relativePath as NSString).pathExtension) else { continue }
-            registerComic(relativePath: relativePath, format: format, into: context)
+            registerComic(relativePath: relativePath, format: format, into: context, saveImmediately: newPaths.count == 1)
+        }
+        if newPaths.count > 1 {
+            context.performAndWait { try? context.save() }
         }
         DiagnosticLog.log("File Sharing: aggiunti \(newPaths.count) fumetti dalla cartella Documents in \(Self.formatted(duration: Date().timeIntervalSince(startedAt)))")
         deduplicateComics(in: context)
@@ -435,7 +448,10 @@ final class LibraryViewModel: ObservableObject {
                 updateStatus("Aggiungo \(index + 1) di \(unknownComicFiles.count)…", token: statusToken)
             }
             guard let format = ComicFormat(fileExtension: url.pathExtension) else { continue }
-            registerComic(relativePath: url.lastPathComponent, format: format, into: context)
+            registerComic(relativePath: url.lastPathComponent, format: format, into: context, saveImmediately: unknownComicFiles.count == 1)
+        }
+        if unknownComicFiles.count > 1 {
+            context.performAndWait { try? context.save() }
         }
 
         if removedCount > 0 || !unknownComicFiles.isEmpty {
