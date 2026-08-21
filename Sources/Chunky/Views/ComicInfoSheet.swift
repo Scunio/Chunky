@@ -20,68 +20,118 @@ struct ComicInfoSheet: View {
     }()
 
     var body: some View {
+        #if os(tvOS)
+        tvOSPanel
+            .sheetSized()
+        #else
         NavigationStack {
-            List {
-                Section {
-                    row("Titolo", comic.title ?? "")
-                    if let series = comic.seriesName, !series.isEmpty {
-                        row("Serie", series)
-                    }
-                    row("Formato", comic.format.rawValue.uppercased())
-                }
-                Section {
-                    let pageCount = loadedPageCount ?? Int(comic.pageCount)
-                    row("Pagine", "\(pageCount)")
-                    row("Pagina corrente", "\(min(Int(comic.lastReadPage) + 1, max(pageCount, 1)))")
-                    row("Progresso", "\(Int(comic.progress * 100))%")
-                }
-                Section {
-                    row("Aggiunto il", Self.dateFormatter.string(from: comic.dateAdded ?? Date()))
-                    if let lastOpened = comic.dateLastOpened {
-                        row("Ultima lettura", Self.dateFormatter.string(from: lastOpened))
+            listContent
+                .navigationTitle("Info fumetto")
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Chiudi") { dismiss() }
                     }
                 }
-                if onJumpToPage != nil || onToggleFavorite != nil || onToggleReadingDirection != nil {
-                    Section {
-                        if let onJumpToPage {
-                            Button(action: {
-                                dismiss()
-                                onJumpToPage()
-                            }) {
-                                Label("Vai a pagina...", systemImage: "number")
-                            }
-                        }
-                        if let onToggleFavorite {
-                            Button(action: onToggleFavorite) {
-                                Label(
-                                    comic.isFavorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti",
-                                    systemImage: comic.isFavorite ? "star.fill" : "star"
-                                )
-                            }
-                        }
-                        if let onToggleReadingDirection {
-                            Button(action: onToggleReadingDirection) {
-                                Label(
-                                    comic.readingDirection == .rightToLeft ? "Direzione: occidentale" : "Direzione: manga",
-                                    systemImage: comic.readingDirection == .rightToLeft ? "arrow.right" : "arrow.left"
-                                )
-                            }
-                        }
-                    }
-                    .foregroundColor(.primary)
-                }
-            }
-            .navigationTitle("Info fumetto")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Chiudi") { dismiss() }
-                }
-            }
         }
         .sheetSized()
+        #endif
+    }
+
+    private var listContent: some View {
+        List {
+            Section {
+                row("Titolo", comic.title ?? "")
+                if let series = comic.seriesName, !series.isEmpty {
+                    row("Serie", series)
+                }
+                row("Formato", comic.format.rawValue.uppercased())
+            }
+            Section {
+                let pageCount = loadedPageCount ?? Int(comic.pageCount)
+                row("Pagine", "\(pageCount)")
+                row("Pagina corrente", "\(min(Int(comic.lastReadPage) + 1, max(pageCount, 1)))")
+                row("Progresso", "\(Int(comic.progress * 100))%")
+            }
+            Section {
+                row("Aggiunto il", Self.dateFormatter.string(from: comic.dateAdded ?? Date()))
+                if let lastOpened = comic.dateLastOpened {
+                    row("Ultima lettura", Self.dateFormatter.string(from: lastOpened))
+                }
+            }
+            if onJumpToPage != nil || onToggleFavorite != nil || onToggleReadingDirection != nil {
+                Section {
+                    if let onJumpToPage {
+                        Button(action: {
+                            dismiss()
+                            onJumpToPage()
+                        }) {
+                            actionLabel("Vai a pagina...", systemImage: "number")
+                        }
+                    }
+                    if let onToggleFavorite {
+                        Button(action: onToggleFavorite) {
+                            actionLabel(
+                                comic.isFavorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti",
+                                systemImage: comic.isFavorite ? "star.fill" : "star"
+                            )
+                        }
+                    }
+                    if let onToggleReadingDirection {
+                        Button(action: onToggleReadingDirection) {
+                            actionLabel(
+                                comic.readingDirection == .rightToLeft ? "Direzione: occidentale" : "Direzione: manga",
+                                systemImage: comic.readingDirection == .rightToLeft ? "arrow.right" : "arrow.left"
+                            )
+                        }
+                    }
+                }
+                .foregroundColor(.primary)
+            }
+        }
+    }
+
+    /// Same rationale as `AccountsView.tvOSPanel`: in a compact sheet the platform
+    /// navigation bar truncates the title and crams "Chiudi" against it. No NavigationStack
+    /// here — this sheet never pushes anything.
+    #if os(tvOS)
+    private var tvOSPanel: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 32) {
+                Text("Info fumetto")
+                    .font(.title2.bold())
+                Spacer()
+                Button("Chiudi") { dismiss() }
+            }
+            .padding(.horizontal, 48)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
+
+            listContent
+                .padding(.horizontal, 48)
+        }
+    }
+    #endif
+
+    /// tvOS renders `Label`'s icon and title with zero gap between them in list rows;
+    /// an explicit layout keeps a readable spacing there while iOS/macOS keep the
+    /// system label with its own metrics.
+    private func actionLabel(_ title: String, systemImage: String) -> some View {
+        #if os(tvOS)
+        HStack(spacing: 24) {
+            Image(systemName: systemImage)
+                .frame(width: 44)
+            Text(title)
+        }
+        #else
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: systemImage)
+        }
+        #endif
     }
 
     private func row(_ label: String, _ value: String) -> some View {
