@@ -43,7 +43,8 @@ struct LibraryGroupingTests {
     @Test("Il numero dell'albo si legge anche sotto le decorazioni", arguments: [
         ("Topolino 3652 (Panini 2025-11-19) [c2c CPPT Edition] 1.0", 3652),
         ("Topolino 3636 + Cover Abbonati", 3636),
-        ("Topolino 3651", 3651)
+        ("Topolino 3651", 3651),
+        ("Topolino 3654 (Panini) 2025-12-03 [c2c CPPT Edition]", 3654)
     ])
     func readsIssueNumber(title: String, expected: Int) {
         #expect(LibraryGrouping.issueNumber(fromTitle: title) == expected)

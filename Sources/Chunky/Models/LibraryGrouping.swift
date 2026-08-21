@@ -63,7 +63,8 @@ enum LibraryGrouping {
             #"\s*\[[^\[\]]*\]\s*$"#,
             #"\s*\{[^{}]*\}\s*$"#,
             #"\s+\+\s+.*$"#,
-            #"\s+v?\d+(?:\.\d+)+\s*$"#
+            #"\s+v?\d+(?:\.\d+)+\s*$"#,
+            #"\s+\d{4}-\d{2}-\d{2}\s*$"#
         ]
         var result = title.trimmingCharacters(in: .whitespaces)
         var keepGoing = true
