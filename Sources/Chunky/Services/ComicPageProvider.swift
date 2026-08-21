@@ -6,6 +6,7 @@ enum ComicReadError: LocalizedError {
     case pageOutOfRange
     case notDownloaded
     case downloadCancelled
+    case notAvailableOnThisDevice
 
     var errorDescription: String? {
         switch self {
@@ -19,6 +20,8 @@ enum ComicReadError: LocalizedError {
             return "Il fumetto non è ancora stato scaricato da iCloud. Controlla la connessione e riprova."
         case .downloadCancelled:
             return "Download annullato."
+        case .notAvailableOnThisDevice:
+            return "Non disponibile su questo Apple TV. Caricalo da \"Account\"."
         }
     }
 }
@@ -53,7 +56,12 @@ enum ComicPageProviderFactory {
         case .cbz:
             return try CBZPageProvider(fileURL: url)
         case .pdf:
+            #if os(tvOS)
+            // PDFKit doesn't exist on tvOS devices (only appears to resolve on the Simulator SDK).
+            throw ComicReadError.unsupportedFormat
+            #else
             return try PDFPageProvider(fileURL: url)
+            #endif
         case .cbr:
             return try CBRPageProvider(fileURL: url)
         }

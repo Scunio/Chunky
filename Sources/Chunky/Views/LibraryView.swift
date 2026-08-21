@@ -65,12 +65,12 @@ struct LibraryView: View {
     @ObservedObject private var theme = AppTheme.shared
     @AppStorage("kioskModeEnabled") private var isKioskModeEnabled = false
     @State private var isShowingFileImporter = false
-    #if os(iOS)
+    #if os(iOS) || os(tvOS)
     // On Mac the reader lives in its own window (see `openComic`); this state
-    // exists only for iOS's `.fullScreenCover`.
+    // exists on iOS and tvOS for their shared `.fullScreenCover`.
     @State private var selectedComic: ComicEntity?
-    // Mac picks `.favorites` from the sidebar, which sets `selection` directly; iOS has no
-    // sidebar, so it gets a toolbar toggle instead, layered on top via `effectiveSelection`.
+    // Mac picks `.favorites` from the sidebar, which sets `selection` directly; iOS/tvOS have no
+    // sidebar, so they get a toolbar toggle instead, layered on top via `effectiveSelection`.
     @State private var isFavoritesOnly = false
     #endif
     @State private var displayMode: LibraryDisplayMode = .grouped
@@ -95,7 +95,7 @@ struct LibraryView: View {
     @State private var isDropTargeted = false
 
     private var effectiveSelection: LibrarySelection {
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         isFavoritesOnly ? .favorites : selection
         #else
         selection
@@ -137,10 +137,16 @@ struct LibraryView: View {
                         }
                     }
                 }
-                #else
+                #elseif os(macOS)
                 macOSToolbarContent
+                #else
+                tvOSToolbarContent
                 #endif
             }
+            // No system file picker on tvOS: `isShowingFileImporter` never becomes true there
+            // (the toolbar's `addButton` and the empty state's import button are both
+            // iOS/macOS-only — see below), so this never needs to present.
+            #if !os(tvOS)
             .fileImporter(
                 isPresented: $isShowingFileImporter,
                 allowedContentTypes: [.cbz, .cbr, .pdf],
@@ -150,6 +156,7 @@ struct LibraryView: View {
                     viewModel.importFiles(urls, into: context)
                 }
             }
+            #endif
             .alert("Errore", isPresented: isErrorPresented) {
             } message: {
                 Text(viewModel.importError ?? "")
@@ -157,7 +164,7 @@ struct LibraryView: View {
             // .sheet would leave a card with rounded corners that doesn't cover the whole screen.
             // On Mac the reader lives in its own window (see openComic), so there's
             // nothing to present here.
-            #if os(iOS)
+            #if os(iOS) || os(tvOS)
             .fullScreenCover(item: $selectedComic) { comic in
                 ReaderView(comic: comic, libraryComics: filteredComics)
             }
@@ -174,14 +181,46 @@ struct LibraryView: View {
                 NavigationStack { AccountsView().toolbarDoneButton { isAccountsPresented = false } }
                     .sheetSized()
             }
+            #if os(tvOS)
+            // Attached here, not on the toolbar button itself: a `.sheet`/`.platformPopover`
+            // directly on a `ToolbarItemGroup` button's content silently blocks Select from
+            // reaching the button at all (verified: the button's action never fires). Moving
+            // the presentation to the main content, same as `isAccountsPresented` above —
+            // which was never attached to its button and works — fixes it.
+            .sheet(isPresented: $isNewComicsPresented) {
+                NewComicsView(comics: recentComics) {
+                    openComic($0)
+                    isNewComicsPresented = false
+                } onClear: {
+                    newTrayClearedAtTimestamp = Date().timeIntervalSince1970
+                    isNewComicsPresented = false
+                }
+                .presentationBackground(.clear)
+            }
+            .sheet(isPresented: $isNowReadingPresented) {
+                if let comic = lastReadComic {
+                    NowReadingView(comic: comic) {
+                        isNowReadingPresented = false
+                        openComic(comic)
+                    }
+                    .presentationBackground(.clear)
+                }
+            }
+            #endif
             #if os(macOS)
             .searchable(text: $searchText, placement: .toolbar, prompt: "Cerca per titolo o serie")
+            #elseif os(tvOS)
+            // tvOS's .searchable field has no cancel/collapse affordance in the remote-driven
+            // focus model — it renders as a permanently pinned field the user can't dismiss.
             #else
             .searchable(text: $searchText, prompt: "Cerca per titolo o serie")
             #endif
             // Holds on both platforms: on iPad you can drag from Files, on Mac from the
             // Finder. `URL` is already a system `Transferable` (it represents itself as a file URL),
             // so nothing more is needed than filtering the supported extensions.
+            // No drag-and-drop source on tvOS (no Files/Finder equivalent), so `dropDestination`
+            // itself is unavailable there.
+            #if !os(tvOS)
             .dropDestination(for: URL.self) { urls, _ in
                 let supported = urls.filter { ComicFormat(fileExtension: $0.pathExtension) != nil }
                 guard !supported.isEmpty else { return false }
@@ -196,6 +235,7 @@ struct LibraryView: View {
                         .allowsHitTesting(false)
                 }
             }
+            #endif
             .modifier(NewGroupPromptModifier(isPresented: $isNewGroupPromptPresented, name: $newGroupName, onCreate: applyGroup))
             #if os(macOS)
             // `nil` while the parental lock is active: otherwise a keyboard command
@@ -279,6 +319,70 @@ struct LibraryView: View {
             } else {
                 ToolbarItem { settingsLink }
             }
+        }
+    }
+    #endif
+
+    #if os(tvOS)
+    // Minimal v1 toolbar: no file importer (no picker on tvOS), no Tools/Settings
+    // (no dedicated tvOS settings screen yet) — import happens only through
+    // `accountsLink` (LocalUploadServer / iCloud), per the tvOS scoping plan.
+    //
+    // Bare `Image` buttons, not `Label`: a `Label`'s title inside `ToolbarItemGroup` gets
+    // clipped mid-word by the system chrome regardless of `.labelStyle`, so there's nothing
+    // here for that to clip — same icon-only pattern tvOS's own apps use for top-bar
+    // utility buttons (search, settings, profile). The name is still there for VoiceOver.
+    @ToolbarContentBuilder
+    private var tvOSToolbarContent: some ToolbarContent {
+        ToolbarItemGroup {
+            tvOSNewComicsButton
+            tvOSNowReadingButton
+            tvOSFavoritesFilterButton
+            tvOSAccountsLink
+        }
+    }
+
+    /// tvOS's `ToolbarItemGroup` always renders bar-button content with its own fixed
+    /// circular chrome and icon size — `.buttonStyle`, `.buttonBorderShape`, `.frame`, and
+    /// `.font` here are all silently ignored (verified individually). System default,
+    /// unstyleable through this API — same as every other tvOS app's toolbar.
+    private func tvOSIconButton(systemImage: String, accessibilityLabel: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+        }
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var tvOSNewComicsButton: some View {
+        tvOSIconButton(systemImage: "envelope", accessibilityLabel: "Novità") {
+            isNewComicsPresented = true
+        }
+    }
+
+    @ViewBuilder
+    private var tvOSNowReadingButton: some View {
+        if lastReadComic != nil {
+            tvOSIconButton(systemImage: "book", accessibilityLabel: "Ora in lettura") {
+                isNowReadingPresented = true
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tvOSFavoritesFilterButton: some View {
+        if isFavoritesOnly || comics.contains(where: \.isFavorite) {
+            tvOSIconButton(
+                systemImage: isFavoritesOnly ? "star.fill" : "star",
+                accessibilityLabel: "Preferiti"
+            ) {
+                isFavoritesOnly.toggle()
+            }
+        }
+    }
+
+    private var tvOSAccountsLink: some View {
+        tvOSIconButton(systemImage: "cloud", accessibilityLabel: "Account") {
+            isAccountsPresented = true
         }
     }
     #endif
@@ -415,7 +519,7 @@ struct LibraryView: View {
             Button(action: { isNowReadingPresented = true }) {
                 Label("Ora in lettura", systemImage: "book")
             }
-            .popover(isPresented: $isNowReadingPresented) {
+            .platformPopover(isPresented: $isNowReadingPresented) {
                 NowReadingView(comic: comic) {
                     isNowReadingPresented = false
                     openComic(comic)
@@ -424,8 +528,8 @@ struct LibraryView: View {
         }
     }
 
-    #if os(iOS)
-    // Mac gets this for free from the sidebar's `.favorites` row; iOS has none, so this
+    #if os(iOS) || os(tvOS)
+    // Mac gets this for free from the sidebar's `.favorites` row; iOS/tvOS have none, so this
     // toggles the same `effectiveSelection` machinery directly from the toolbar.
     @ViewBuilder
     private var favoritesFilterButton: some View {
@@ -518,7 +622,7 @@ struct LibraryView: View {
         Button(action: { isNewComicsPresented = true }) {
             Label("Novità", systemImage: "envelope")
         }
-        .popover(isPresented: $isNewComicsPresented) {
+        .platformPopover(isPresented: $isNewComicsPresented) {
             NewComicsView(comics: recentComics) {
                 openComic($0)
                 isNewComicsPresented = false
@@ -533,8 +637,35 @@ struct LibraryView: View {
         [GridItem(.adaptive(minimum: 130, maximum: 180), spacing: 16)]
     }
 
+    private func sectionHeaderContent(title: String, comics: [ComicEntity]) -> some View {
+        HStack {
+            #if !os(tvOS)
+            Image(systemName: collapsedGroups.contains(title) ? "chevron.right" : "chevron.down")
+                .font(.caption.bold())
+            #endif
+            Text(LibraryGrouping.headerText(title: title, comics: comics))
+                .font(.subheadline.bold())
+            Spacer()
+            if comics.contains(where: { $0.progress > 0 }) {
+                Text("INIZIATA")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            Text("\(comics.count)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .foregroundColor(.primary)
+        .padding(.horizontal)
+    }
+
     private func sectionView(title: String, comics: [ComicEntity]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            #if os(tvOS)
+            // No collapsible-section pattern on tvOS (a full-width focusable header bar
+            // is jarring on a TV) — the header is just a static label, always expanded.
+            sectionHeaderContent(title: title, comics: comics)
+            #else
             Button {
                 withAnimation {
                     if collapsedGroups.contains(title) {
@@ -544,25 +675,10 @@ struct LibraryView: View {
                     }
                 }
             } label: {
-                HStack {
-                    Image(systemName: collapsedGroups.contains(title) ? "chevron.right" : "chevron.down")
-                        .font(.caption.bold())
-                    Text(LibraryGrouping.headerText(title: title, comics: comics))
-                        .font(.subheadline.bold())
-                    Spacer()
-                    if comics.contains(where: { $0.progress > 0 }) {
-                        Text("INIZIATA")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    Text("\(comics.count)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .foregroundColor(.primary)
-                .padding(.horizontal)
+                sectionHeaderContent(title: title, comics: comics)
             }
             .buttonStyle(PlainButtonStyle())
+            #endif
 
             if !collapsedGroups.contains(title) {
                 LazyVGrid(columns: gridColumns, spacing: 20) {
@@ -675,12 +791,20 @@ struct LibraryView: View {
         ContentUnavailableView {
             Label("La tua libreria è vuota", systemImage: "books.vertical")
         } description: {
+            #if os(tvOS)
+            Text("Se hai già una libreria su iPhone o Mac con lo stesso Apple ID, comparirà qui automaticamente. Altrimenti apri \"Account\" per caricare fumetti da un browser sulla stessa rete.")
+            #else
             Text("Importa fumetti in formato CBZ, CBR o PDF per iniziare a leggere.")
+            #endif
         } actions: {
+            // No system file picker on tvOS: import there only happens via `accountsLink`
+            // (LocalUploadServer / iCloud), already in the tvOS toolbar.
+            #if !os(tvOS)
             Button(action: { isShowingFileImporter = true }) {
                 Label("Importa fumetti", systemImage: "plus.circle.fill")
             }
             .buttonStyle(.borderedProminent)
+            #endif
         }
     }
 
@@ -708,14 +832,23 @@ private struct ComicCell: View {
         return downloadTracker.pendingRelativePaths.contains(relativePath)
     }
 
-    var body: some View {
+    @ViewBuilder
+    private var cellButton: some View {
         Button(action: onSelect) {
             ComicGridItemView(comic: comic)
                 .overlay(selectionBadge, alignment: .topLeading)
                 .contentShape(Rectangle())
         }
+        #if os(tvOS)
+        .buttonStyle(.card)
+        #else
         .buttonStyle(.plain)
+        #endif
         .accessibilityLabel(comic.title ?? "Fumetto")
+    }
+
+    var body: some View {
+        cellButton
         .contextMenu {
             if !isEditing {
                 Button(action: onSelect) {

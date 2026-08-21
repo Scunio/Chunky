@@ -10,11 +10,15 @@ struct DownloadsView: View {
         VStack(spacing: 0) {
             List(downloadManager.activeDownloads) { item in
                 DownloadRow(item: item)
+                    // No swipe-to-reveal on tvOS's remote: `DownloadRow` shows its own
+                    // always-visible cancel button there instead.
+                    #if !os(tvOS)
                     .swipeActions {
                         Button(role: .destructive, action: item.cancel) {
                             Label("Annulla", systemImage: "xmark")
                         }
                     }
+                    #endif
             }
             .listStyle(.plain)
 
@@ -45,6 +49,11 @@ private struct DownloadRow: View {
                 Text("\(Int(item.fractionCompleted * 100))%")
                     .font(.caption.monospacedDigit())
                     .foregroundColor(.secondary)
+                #if os(tvOS)
+                Button(action: item.cancel) {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                #endif
             }
             ProgressView(value: item.fractionCompleted)
         }

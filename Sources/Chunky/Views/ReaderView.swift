@@ -100,6 +100,13 @@ private struct ReaderContentView: View {
     /// A load is in progress (iCloud download and/or opening the archive): see
     /// `loadComic`.
     @State private var isLoadingComic = false
+    #if os(tvOS)
+    // Without an explicit focus target, tvOS defaults focus to some header button (the
+    // system requires *something* focused) and the page never receives .onMoveCommand —
+    // the remote's directional pad just moves focus between chrome buttons instead of
+    // turning pages.
+    @FocusState private var isPagerFocused: Bool
+    #endif
     @State private var isControlsVisible = true
     @State private var isSharePresented = false
     @State private var shareImage: PlatformImage?
@@ -301,6 +308,8 @@ private struct ReaderContentView: View {
                 #if os(iOS)
                 iOSPager(provider: provider)
                     .ignoresSafeArea()
+                #elseif os(tvOS)
+                tvOSPager(provider: provider)
                 #else
                 macOSPager(provider: provider)
                 #endif
@@ -313,7 +322,15 @@ private struct ReaderContentView: View {
                         .foregroundColor(chromeForeground)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
+                    #if os(tvOS)
+                    // tvOSPager isn't mounted in this state, so its .onExitCommand never attaches.
+                    Button("Libreria") { exitReader() }
+                        .padding(.top, 8)
+                    #endif
                 }
+                #if os(tvOS)
+                .onExitCommand { exitReader() }
+                #endif
             } else if let downloadProgress = downloadProgress {
                 downloadOverlay(progress: downloadProgress)
             } else {
@@ -521,11 +538,26 @@ private struct ReaderContentView: View {
                 .font(.headline)
                 .foregroundColor(.white)
 
+            // `Stepper` doesn't exist on tvOS: two plain buttons do the same job there.
+            #if os(tvOS)
+            HStack(spacing: 20) {
+                Button(action: { jumpPageNumber = max(1, jumpPageNumber - 1) }) {
+                    Image(systemName: "minus.circle")
+                }
+                Text("Pagina \(jumpPageNumber) di \(provider.pageCount)")
+                    .foregroundColor(.white)
+                Button(action: { jumpPageNumber = min(max(provider.pageCount, 1), jumpPageNumber + 1) }) {
+                    Image(systemName: "plus.circle")
+                }
+            }
+            .padding(.horizontal, 8)
+            #else
             Stepper(value: $jumpPageNumber, in: 1...max(provider.pageCount, 1)) {
                 Text("Pagina \(jumpPageNumber) di \(provider.pageCount)")
                     .foregroundColor(.white)
             }
             .padding(.horizontal, 8)
+            #endif
 
             HStack(spacing: 12) {
                 Button(action: { isPageJumpPresented = false }) {
@@ -619,7 +651,7 @@ private struct ReaderContentView: View {
         await pageCache.prefetch(around: currentPage, radius: 3, pageCount: provider.pageCount, options: options)
     }
 
-    #if os(macOS)
+    #if os(macOS) || os(tvOS)
     /// The current page (or spread), with the last page change's transition.
     ///
     /// The order of the two `.environment` calls is deliberate: the outer one applies to
@@ -829,6 +861,29 @@ private struct ReaderContentView: View {
         } onToggleDoublePage: {
             if isDoublePageAllowed { isDoublePageEnabled.toggle() }
         }
+    }
+    #elseif os(tvOS)
+    /// Deliberately not a port of the macOS tap-zone/scroll-monitor machinery: the Siri Remote
+    /// has no pointer or trackpad-scroll equivalent, so page turning is driven by the
+    /// directional pad via `.onMoveCommand`, and the Menu button exits via `.onExitCommand`.
+    private func tvOSPager(provider: ComicPageProvider) -> some View {
+        pagerContent(provider: provider)
+            .contentShape(Rectangle())
+            .focusable(true)
+            .focused($isPagerFocused)
+            .onAppear { isPagerFocused = true }
+            .onTapGesture { toggleControls() }
+            .onMoveCommand { direction in
+                switch direction {
+                case .left:
+                    step(-1, provider: provider, style: tapPageTurnStyle)
+                case .right:
+                    step(1, provider: provider, style: tapPageTurnStyle)
+                default:
+                    break
+                }
+            }
+            .onExitCommand { exitReader() }
     }
     #else
     private func macOSPager(provider: ComicPageProvider) -> some View {
@@ -1070,10 +1125,13 @@ private struct ReaderContentView: View {
                 .frame(minHeight: 44)
             }
             // Crop: opens the panel selection (an area is always selected, there's no
-            // separate "share the whole page" button).
+            // separate "share the whole page" button). Not on tvOS: the selection is
+            // adjusted by dragging, and there's no drag gesture there (no touch/trackpad).
+            #if !os(tvOS)
             Button(action: { isPanelSelectionPresented = true }) {
                 Image(systemName: "ellipsis.bubble").frame(width: 44, height: 44)
             }
+            #endif
             // Search the pages' text (OCR, or the text layer if the file is a native PDF).
             // On iPhone in compact width the icon doesn't appear here: a third icon on the
             // left would leave the title very little room, so it lives in the "..." menu
@@ -1152,9 +1210,12 @@ private struct ReaderContentView: View {
             Button(action: { isAccountsPresented = true }) {
                 Image(systemName: "cloud").frame(width: 44, height: 44)
             }
+            // Tools opens Settings/Parental Lock/Colors, none of which exist on tvOS in v1.
+            #if !os(tvOS)
             Button(action: { isToolsPresented = true }) {
                 Image(systemName: "wrench.and.screwdriver").frame(width: 44, height: 44)
             }
+            #endif
         }
     }
 
@@ -1188,7 +1249,7 @@ private struct ReaderContentView: View {
             } label: {
                 Image(systemName: "ellipsis.circle").frame(width: 44, height: 44)
             }
-            .popover(isPresented: $isNewComicsPresented) {
+            .platformPopover(isPresented: $isNewComicsPresented) {
                 NewComicsView(comics: recentComics) {
                     isNewComicsPresented = false
                     if $0 != comic { onSwitchComic($0) }
@@ -1197,7 +1258,7 @@ private struct ReaderContentView: View {
                     isNewComicsPresented = false
                 }
             }
-            .popover(isPresented: $isNowReadingPresented) {
+            .platformPopover(isPresented: $isNowReadingPresented) {
                 if let lastRead = lastReadComic {
                     NowReadingView(comic: lastRead) {
                         isNowReadingPresented = false
@@ -1228,7 +1289,7 @@ private struct ReaderContentView: View {
         Button(action: { isNewComicsPresented = true }) {
             Image(systemName: "envelope").frame(width: 44, height: 44)
         }
-        .popover(isPresented: $isNewComicsPresented) {
+        .platformPopover(isPresented: $isNewComicsPresented) {
             NewComicsView(comics: recentComics) {
                 isNewComicsPresented = false
                 if $0 != comic { onSwitchComic($0) }
@@ -1252,7 +1313,7 @@ private struct ReaderContentView: View {
             Button(action: { isNowReadingPresented = true }) {
                 Image(systemName: "book").frame(width: 44, height: 44)
             }
-            .popover(isPresented: $isNowReadingPresented) {
+            .platformPopover(isPresented: $isNowReadingPresented) {
                 NowReadingView(comic: lastRead) {
                     isNowReadingPresented = false
                     if lastRead != comic { onSwitchComic(lastRead) }
@@ -1388,6 +1449,10 @@ private struct ReaderContentView: View {
                 .position(x: thumbX, y: proxy.size.height / 2)
                 .allowsHitTesting(false)
 
+            // `DragGesture` doesn't exist on tvOS (no direct-touch scrubbing with the Siri
+            // Remote): the slider there is a plain progress indicator, and page navigation
+            // happens via `.onMoveCommand` in `tvOSPager` instead.
+            #if !os(tvOS)
             Color.clear
                 .contentShape(Rectangle())
                 .highPriorityGesture(
@@ -1403,6 +1468,7 @@ private struct ReaderContentView: View {
                             currentPage = starts.min(by: { abs($0 - target) < abs($1 - target) }) ?? 0
                         }
                 )
+            #endif
         }
         .frame(height: 24)
         .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
@@ -1473,6 +1539,14 @@ private struct ReaderContentView: View {
                 loadError = error.localizedDescription
                 return
             }
+            #if os(tvOS)
+            // No ubiquity container on tvOS: a missing file here is never "corrupt", just unsynced.
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                isLoadingComic = false
+                loadError = ComicReadError.notAvailableOnThisDevice.localizedDescription
+                return
+            }
+            #endif
             openProvider(at: url, format: format, startingPage: startingPage)
         }
     }

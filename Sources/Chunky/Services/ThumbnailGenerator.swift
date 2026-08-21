@@ -33,7 +33,7 @@ enum ThumbnailGenerator {
     }
 
     private static func encode(_ cgImage: CGImage) -> Data? {
-        #if os(iOS) || os(visionOS)
+        #if os(iOS) || os(visionOS) || os(tvOS)
         let thumbnail = PlatformImage(cgImage: cgImage)
         #elseif os(macOS)
         let thumbnail = PlatformImage(cgImage: cgImage, size: .zero)

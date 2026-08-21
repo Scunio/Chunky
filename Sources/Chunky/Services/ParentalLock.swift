@@ -1,5 +1,10 @@
 import Foundation
+// Not just unusable on tvOS device builds (`unlockWithBiometrics` already no-ops there):
+// the module itself doesn't exist for tvOS on a physical device (only appears to resolve
+// on the Simulator SDK), so even the bare `import` fails to link when archiving for device.
+#if !os(tvOS)
 import LocalAuthentication
+#endif
 import Combine
 
 /// Manages the parental lock passcode: the passcode is never stored in plain text, only its
@@ -64,6 +69,12 @@ final class ParentalLock: ObservableObject {
     }
 
     func unlockWithBiometrics(completion: @escaping (Bool) -> Void) {
+        // No Face ID/Touch ID (or any LAContext biometrics API) on tvOS: `isBiometricsEnabled`
+        // has no UI to turn it on there anyway (`ParentalLockSettingsView` isn't reachable),
+        // so this is unreachable in practice, but still needs a body that compiles.
+        #if os(tvOS)
+        completion(false)
+        #else
         let context = LAContext()
         var error: NSError?
         guard isBiometricsEnabled, context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
@@ -76,6 +87,7 @@ final class ParentalLock: ObservableObject {
                 completion(success)
             }
         }
+        #endif
     }
 
     /// Fixed, stable UUID used as the "account" in the shared Keychain: the passcode isn't

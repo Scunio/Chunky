@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Archivia Chunky_iOS o Chunky_macOS, incrementa il build number e carica su App Store
-# Connect (TestFlight per iOS, Mac App Store per macOS) tramite l'API di App Store Connect.
-# Va lanciato dalla root del repo: ./Scripts/release-appstore.sh ios|macos
+# Archivia Chunky_iOS, Chunky_macOS o Chunky_tvOS, incrementa il build number e carica su App
+# Store Connect (TestFlight per iOS/tvOS, Mac App Store per macOS) tramite l'API di App Store
+# Connect. Va lanciato dalla root del repo: ./Scripts/release-appstore.sh ios|macos|tvos
 #
 # Credenziali richieste (mai committate — vedi Config/appstoreconnect.env.example):
 #   ASC_KEY_ID          Key ID della chiave API (App Store Connect > Users and Access >
@@ -26,8 +26,12 @@ case "$PLATFORM" in
     SCHEME="Chunky_macOS"
     DESTINATION="generic/platform=macOS"
     ;;
+  tvos)
+    SCHEME="Chunky_tvOS"
+    DESTINATION="generic/platform=tvOS"
+    ;;
   *)
-    echo "uso: $0 ios|macos" >&2
+    echo "uso: $0 ios|macos|tvos" >&2
     exit 1
     ;;
 esac
@@ -81,6 +85,7 @@ xcodebuild -exportArchive \
   -archivePath "$ARCHIVE_PATH" \
   -exportPath "$EXPORT_PATH" \
   -exportOptionsPlist "$EXPORT_OPTIONS_PLIST" \
+  -allowProvisioningUpdates \
   -authenticationKeyPath "$ASC_KEY_PATH" \
   -authenticationKeyID "$ASC_KEY_ID" \
   -authenticationKeyIssuerID "$ASC_ISSUER_ID"

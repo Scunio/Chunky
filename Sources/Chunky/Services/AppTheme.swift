@@ -1,5 +1,5 @@
 import SwiftUI
-#if os(iOS)
+#if os(iOS) || os(tvOS)
 import UIKit
 #elseif os(macOS)
 import AppKit
@@ -75,7 +75,7 @@ extension Color {
 
     /// Approximate hex representation, used to save the color chosen from a ColorPicker.
     var hexString: String {
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         let components = UIColor(self).cgColor.components ?? [0, 0, 0]
         #elseif os(macOS)
         let components = NSColor(self).usingColorSpace(.deviceRGB)?.cgColor.components ?? [0, 0, 0]

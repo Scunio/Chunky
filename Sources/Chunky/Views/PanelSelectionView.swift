@@ -29,7 +29,11 @@ struct PanelSelectionView: View {
                 Color.clear
                     .contentShape(Rectangle())
                     .overlay(selectionOverlay)
+                    // No direct-touch drag on tvOS (no `DragGesture` there, and no reachable
+                    // entry point to this screen from the tvOS reader in v1).
+                    #if !os(tvOS)
                     .gesture(dragGesture(in: proxy.size))
+                    #endif
                     .onAppear { displaySize = proxy.size }
                     .onChange(of: proxy.size) { _, newSize in
                         // After a rotation the old selection (in screen coordinates)
@@ -99,6 +103,7 @@ struct PanelSelectionView: View {
         }
     }
 
+    #if !os(tvOS)
     private func dragGesture(in size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { value in
@@ -114,6 +119,7 @@ struct PanelSelectionView: View {
             }
             .onEnded { _ in dragStart = nil }
     }
+    #endif
 
     /// Converts the selected rectangle (screen coordinates, image displayed with
     /// scaledToFit) into pixel coordinates of the original image, then crops and shares it.

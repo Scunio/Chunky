@@ -1,6 +1,6 @@
 import SwiftUI
 
-#if os(iOS) || os(visionOS)
+#if os(iOS) || os(visionOS) || os(tvOS)
 import UIKit
 typealias PlatformImage = UIImage
 typealias PlatformColor = UIColor
@@ -12,7 +12,7 @@ typealias PlatformColor = NSColor
 
 extension PlatformImage {
     var asSwiftUIImage: Image {
-        #if os(iOS) || os(visionOS)
+        #if os(iOS) || os(visionOS) || os(tvOS)
         Image(uiImage: self)
         #elseif os(macOS)
         Image(nsImage: self)
@@ -24,7 +24,7 @@ extension PlatformImage {
     }
 
     var pngData: Data? {
-        #if os(iOS) || os(visionOS)
+        #if os(iOS) || os(visionOS) || os(tvOS)
         return self.pngData()
         #elseif os(macOS)
         guard let tiff = self.tiffRepresentation,
@@ -34,7 +34,7 @@ extension PlatformImage {
     }
 
     var cgImageRepresentation: CGImage? {
-        #if os(iOS) || os(visionOS)
+        #if os(iOS) || os(visionOS) || os(tvOS)
         return self.cgImage
         #elseif os(macOS)
         return self.cgImage(forProposedRect: nil, context: nil, hints: nil)
@@ -42,7 +42,7 @@ extension PlatformImage {
     }
 
     static func from(cgImage: CGImage) -> PlatformImage {
-        #if os(iOS) || os(visionOS)
+        #if os(iOS) || os(visionOS) || os(tvOS)
         return PlatformImage(cgImage: cgImage)
         #elseif os(macOS)
         return PlatformImage(cgImage: cgImage, size: .zero)

@@ -303,6 +303,14 @@ private struct PageView: View {
                             ZoomableImageView(image: image, isZoomed: isZoomed, isActive: isActive, tapZoneOptions: tapZoneOptions)
                                 .frame(width: proxy.size.width, height: proxy.size.height)
                                 .overlay(tintOverlay)
+                            #elseif os(tvOS)
+                            // No pinch/drag zoom on tvOS (no `MagnificationGesture`/`DragGesture`,
+                            // no touch anyway): just the page, scaled to fit.
+                            image.asSwiftUIImage
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: proxy.size.width, height: proxy.size.height)
+                                .overlay(tintOverlay)
                             #else
                             image.asSwiftUIImage
                                 .resizable()
@@ -354,6 +362,12 @@ private struct PageView: View {
                 // pages was specifically about this path, and therefore remains open only on
                 // macOS, where `pairedContent` is still in use (see the `#else` branch).
                 ZoomableImageView(image: image, isZoomed: isZoomed, isActive: isActive, widthFollowsHeight: true)
+                    .frame(height: height)
+                    .overlay(tintOverlay)
+                #elseif os(tvOS)
+                image.asSwiftUIImage
+                    .resizable()
+                    .scaledToFit()
                     .frame(height: height)
                     .overlay(tintOverlay)
                 #else
@@ -465,6 +479,7 @@ private struct PageView: View {
         }
     }
 
+    #if os(macOS)
     private var magnifyGesture: some Gesture {
         MagnificationGesture()
             .onChanged { value in
@@ -477,11 +492,13 @@ private struct PageView: View {
                 syncZoomedState()
             }
     }
+    #endif
 
     private func syncZoomedState() {
         isZoomed.wrappedValue = scale > 1.01
     }
 
+    #if os(macOS)
     private var dragGesture: some Gesture {
         DragGesture()
             .onChanged { value in
@@ -503,6 +520,7 @@ private struct PageView: View {
                 withAnimation(.easeOut(duration: 0.15)) { motionBlurRadius = 0 }
             }
     }
+    #endif
 
     private func toggleZoom() {
         withAnimation(.easeInOut(duration: 0.2)) {

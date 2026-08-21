@@ -81,6 +81,8 @@ struct AccountsView: View {
                     }
                     .foregroundColor(.primary)
 
+                    // No system file picker on tvOS: these open one (see the `.fileImporter` above).
+                    #if !os(tvOS)
                     ForEach(Self.openServices, id: \.name) { service in
                         Button(action: { activeImporter = .comics }) {
                             Label {
@@ -92,6 +94,7 @@ struct AccountsView: View {
                         }
                         .foregroundColor(.primary)
                     }
+                    #endif
 
                     Button(action: { addAccountKind = .webdav; isShowingAddAccount = true }) {
                         Label("Nuovo account WebDAV", systemImage: "plus.circle")
@@ -103,6 +106,8 @@ struct AccountsView: View {
                     header: Text("Strumenti"),
                     footer: Text("Utile per una serie di pagine scansionate come immagini separate: verranno unite in un unico fumetto CBZ.")
                 ) {
+                    // No system file picker on tvOS: this opens one (see the `.fileImporter` above).
+                    #if !os(tvOS)
                     Button(action: { activeImporter = .folder }) {
                         Label("Crea fumetto da cartella di immagini", systemImage: "photo.stack")
                     }
@@ -111,6 +116,7 @@ struct AccountsView: View {
                             .foregroundColor(.red)
                             .font(.footnote)
                     }
+                    #endif
                     // Also shown here (not just in LibraryView's alert) because that alert,
                     // tied to the view presenting this sheet, can stay invisible until
                     // the Accounts panel is closed.
@@ -126,7 +132,7 @@ struct AccountsView: View {
                 EmptyView()
             }
         }
-        .navigationTitle("Accounts")
+        .navigationTitle("Account")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -147,6 +153,9 @@ struct AccountsView: View {
         .sheet(isPresented: $isShowingAddAccount) {
             AddAccountView(initialKind: addAccountKind)
         }
+        // No system file picker on tvOS: the buttons that set `activeImporter` are hidden
+        // there too (see below), so this never needs to present.
+        #if !os(tvOS)
         .fileImporter(
             isPresented: Binding(
                 get: { activeImporter != nil },
@@ -166,6 +175,7 @@ struct AccountsView: View {
                 break
             }
         }
+        #endif
     }
 
     private var addAccountToggleButton: some View {
