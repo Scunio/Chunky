@@ -4,6 +4,7 @@ options:
   deploymentTarget:
     iOS: "17.0"
     macOS: "14.0"
+    tvOS: "17.0"
   createIntermediateGroups: true
 
 # Impostazioni di firma a livello di progetto: i target le ereditano tutti. Il file committato
@@ -216,12 +217,78 @@ targets:
           - CloudKit
         com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)com.scunio.Chunky"
 
+  Chunky_tvOS:
+    platform: tvOS
+    templates: [ChunkyApp]
+    info:
+      path: Support/Info-tvOS.plist
+      properties:
+        CFBundleDisplayName: Chunky
+        # Vedi il commento gemello in Chunky_iOS/Chunky_macOS: senza queste due righe
+        # XcodeGen scriverebbe CFBundleVersion 1 fisso, e Scripts/release-appstore.sh
+        # non riuscirebbe a far arrivare il numero di build nel bundle.
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        ITSAppUsesNonExemptEncryption: false
+        NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
+        # Niente NSUbiquitousContainers qui: è la chiave che rende il container visibile in
+        # Files, e tvOS non ha un Files app né supporta l'entitlement CloudDocuments che la
+        # renderebbe operativa (il profilo di provisioning lo scarta silenziosamente — vedi
+        # icloud-services sotto). Su tvOS iCloud sincronizza solo i metadati via CloudKit.
+        UIBackgroundModes:
+          - remote-notification
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Comic Archive
+            LSItemContentTypes:
+              - com.scunio.chunky.cbz
+              - com.scunio.chunky.cbr
+              - com.adobe.pdf
+            LSHandlerRank: Owner
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.scunio.chunky.cbz
+            UTTypeDescription: Comic Book Zip Archive
+            UTTypeConformsTo: [public.zip-archive]
+            UTTypeTagSpecification:
+              public.filename-extension: [cbz]
+          - UTTypeIdentifier: com.scunio.chunky.cbr
+            UTTypeDescription: Comic Book RAR Archive
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [cbr]
+    entitlements:
+      path: Support/Chunky-tvOS.entitlements
+      properties:
+        # Niente app-sandbox/network.client/network.server: sono chiavi macOS-only (il
+        # sandboxing su tvOS non passa da un entitlement esplicito), Xcode le scarta in
+        # fase di firma — verificato: restavano fuori dal binario firmato comunque.
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.com.scunio.Chunky
+        # Solo CloudKit: CloudDocuments (iCloud Drive/ubiquity container) non è supportato
+        # su tvOS, il profilo di provisioning lo scarta silenziosamente anche se dichiarato.
+        com.apple.developer.icloud-services:
+          - CloudKit
+        com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)com.scunio.Chunky"
+        # App Store Connect rifiuta un binario tvOS con icloud-services ma senza questa
+        # chiave (errore 90575). Chiave nuda "aps-environment", non "com.apple.developer.…":
+        # quel prefisso è lo spelling macOS, su iOS/tvOS il profilo di provisioning concede
+        # (ed Xcode confronta) la chiave senza prefisso.
+        aps-environment: development
+    settings:
+      base:
+        # tvOS usa il catalogo a icona-a-strati + Top Shelf, non il semplice "AppIcon"
+        # di iOS/macOS (che non ha senso su tvOS: niente icona quadrata singola).
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
+
   ChunkyTests_iOS:
     platform: iOS
     templates: [ChunkyUnitTest]
 
   ChunkyTests_macOS:
     platform: macOS
+    templates: [ChunkyUnitTest]
+
+  ChunkyTests_tvOS:
+    platform: tvOS
     templates: [ChunkyUnitTest]
 
   ChunkyUITests_iOS:
@@ -262,6 +329,17 @@ schemes:
     test:
       gatherCoverageData: true
       targets: [ChunkyTests_macOS]
+    run:
+      config: Debug
+
+  Chunky_tvOS:
+    build:
+      targets:
+        Chunky_tvOS: [run, archive, profile, analyze]
+        ChunkyTests_tvOS: [test]
+    test:
+      gatherCoverageData: true
+      targets: [ChunkyTests_tvOS]
     run:
       config: Debug
 

@@ -22,6 +22,15 @@ struct NowReadingView: View {
         }
         .padding()
         .frame(width: 220)
+        #if os(tvOS)
+        // On iOS/macOS this sits inside a `.popover`, whose own material already gives it
+        // one seamless rounded card. `platformPopover` uses a plain `.sheet` on tvOS instead,
+        // which has no such shared background — without this, the sheet drew a separate
+        // white rounded-top shape around the text that didn't line up with the cover image's
+        // own corner radius below it, plus it was jarringly light against the app's dark UI.
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .environment(\.colorScheme, .dark)
+        #endif
     }
 
     private var pageBadge: some View {

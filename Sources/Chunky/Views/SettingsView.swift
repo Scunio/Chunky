@@ -80,7 +80,7 @@ struct InfoButton: View {
                 .foregroundColor(.secondary)
         }
         .buttonStyle(.plain)
-        .popover(isPresented: $isPresented) {
+        .platformPopover(isPresented: $isPresented) {
             infoText.presentationCompactAdaptation(.popover)
         }
     }

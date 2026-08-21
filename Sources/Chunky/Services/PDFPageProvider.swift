@@ -1,5 +1,9 @@
 import Foundation
 import CoreGraphics
+
+// PDFKit doesn't exist on tvOS devices (only appears to resolve on the Simulator SDK), so even
+// the bare `import` crashes an archived/device build at launch with a dyld load failure.
+#if !os(tvOS)
 import PDFKit
 
 final class PDFPageProvider: ComicPageProvider {
@@ -85,3 +89,4 @@ final class PDFPageProvider: ComicPageProvider {
         return PlatformImage.from(cgImage: cgImage)
     }
 }
+#endif

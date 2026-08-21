@@ -15,7 +15,9 @@ struct ParentalLockGateView: View {
                 .font(.title3.bold())
 
             SecureField("Codice", text: $enteredPasscode)
+                #if !os(tvOS)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
+                #endif
                 .frame(maxWidth: 220)
                 .focused($isPasscodeFocused)
                 .onSubmit(attemptUnlock)

@@ -113,6 +113,11 @@ extension View {
     func sheetSized() -> some View {
         #if os(macOS)
         self.frame(minWidth: 640, idealWidth: 760, minHeight: 480, idealHeight: 680)
+        #elseif os(tvOS)
+        // tvOS's default sheet width is too narrow for a `.navigationTitle` at that
+        // platform's larger title font size together with the toolbar's "+"/"Chiudi"
+        // buttons on the same line — the title got clipped mid-word ("Acc...").
+        self.frame(minWidth: 900, minHeight: 700)
         #else
         self
         #endif
@@ -125,5 +130,19 @@ extension View {
     /// material would let the content it's supposed to hide show through.
     func lockScreenBackground() -> some View {
         self.background(.background, ignoresSafeAreaEdges: .all)
+    }
+}
+
+extension View {
+    /// `popover` doesn't exist at all on tvOS (no anchored-popup paradigm on a TV); a `sheet`
+    /// is the closest cross-platform equivalent for the small "Now Reading"/"New comics"
+    /// panels that use this elsewhere.
+    @ViewBuilder
+    func platformPopover<Content: View>(isPresented: Binding<Bool>, @ViewBuilder content: @escaping () -> Content) -> some View {
+        #if os(tvOS)
+        self.sheet(isPresented: isPresented, content: content)
+        #else
+        self.popover(isPresented: isPresented, content: content)
+        #endif
     }
 }

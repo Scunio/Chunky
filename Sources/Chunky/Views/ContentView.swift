@@ -124,8 +124,13 @@ struct ContentView: View {
     }
 
     private func syncSyncFolderIfNeeded() {
+        #if os(tvOS)
+        // No ubiquity container on tvOS, so synced-but-fileless comics would linger forever.
+        viewModel.rebuildLibrary(context: context)
+        #else
         guard isSyncFolderEnabled, LibraryStorage.isICloudAvailable else { return }
         viewModel.rebuildLibrary(context: context)
+        #endif
     }
 
     private func startPeriodicRescan() {

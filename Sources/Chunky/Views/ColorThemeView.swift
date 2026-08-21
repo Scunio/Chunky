@@ -1,5 +1,5 @@
 import SwiftUI
-#if os(iOS)
+#if os(iOS) || os(tvOS)
 import UIKit
 #elseif os(macOS)
 import AppKit
@@ -49,6 +49,9 @@ struct ColorThemeView: View {
                 .pickerStyle(.segmented)
             }
 
+            // `ColorPicker`/`Slider` don't exist on tvOS, and this screen isn't reachable there
+            // anyway (no tvOS Settings entry point in v1) — these two sections are iOS/macOS only.
+            #if !os(tvOS)
             Section(footer: Text("Personalizza i colori della libreria. Lascia \"Automatico\" per seguire la modalità chiara/scura di sistema.")) {
                 // Each row has a different fallback color when it hasn't been customized yet
                 // (empty hex = "Automatic"): showing them all as .primary made them identical
@@ -57,6 +60,7 @@ struct ColorThemeView: View {
                 colorRow(title: "Testo", hex: $theme.textHex, defaultColor: .primary)
                 colorRow(title: "Colore evidenziazione", hex: $theme.accentHex, defaultColor: .accentColor)
             }
+            #endif
 
             Section(
                 header: Text("Lettura"),
@@ -73,6 +77,7 @@ struct ColorThemeView: View {
                 header: Text("Tint pagina (lettore)"),
                 footer: Text("Sovrappone una leggera tinta alle pagine mentre leggi: utile per correggere pagine ingiallite o per una modalità notte più riposante.")
             ) {
+                #if !os(tvOS)
                 colorRow(title: "Colore", hex: $theme.pageTintHex, defaultColor: .white)
                 if !theme.pageTintHex.isEmpty {
                     HStack {
@@ -80,6 +85,7 @@ struct ColorThemeView: View {
                         Slider(value: $theme.pageTintOpacity, in: 0...0.6)
                     }
                 }
+                #endif
                 HStack(spacing: 12) {
                     tintPresetButton(name: "Nessuno", hex: "")
                     tintPresetButton(name: "Seppia", hex: "#704214", opacity: 0.18)
@@ -112,6 +118,7 @@ struct ColorThemeView: View {
         .buttonStyle(PlainButtonStyle())
     }
 
+    #if !os(tvOS)
     private func colorRow(title: String, hex: Binding<String>, defaultColor: Color) -> some View {
         let binding = Binding<Color>(
             get: { Color(hex: hex.wrappedValue) ?? defaultColor },
@@ -139,4 +146,5 @@ struct ColorThemeView: View {
         Color(NSColor.windowBackgroundColor)
         #endif
     }
+    #endif
 }
