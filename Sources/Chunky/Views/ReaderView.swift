@@ -1216,6 +1216,15 @@ private struct ReaderContentView: View {
             Button(action: { isAccountsPresented = true }) {
                 Image(systemName: "cloud").frame(width: 44, height: 44)
             }
+            // Moved up from the footer on tvOS (see `footer`): the footer there has no
+            // interactive controls left, only an informational page label and progress bar.
+            #if os(tvOS)
+            if isDoublePageAllowed {
+                Button(action: cyclePageLayoutMode) {
+                    Image(systemName: pageLayoutModeIconName).frame(width: 44, height: 44)
+                }
+            }
+            #endif
             // Tools opens Settings/Parental Lock/Colors, none of which exist on tvOS in v1.
             #if !os(tvOS)
             Button(action: { isToolsPresented = true }) {
@@ -1348,6 +1357,19 @@ private struct ReaderContentView: View {
                 let labelChars = effectiveDoublePage ? digits * 3 + 4 : digits * 2 + 3
                 let labelWidth = max(70, CGFloat(labelChars) * 7 + 8)
                 HStack(spacing: 4) {
+                    #if os(tvOS)
+                    // No one-handed mode on tvOS (it's a tap-zone concept, and tvOS has no tap
+                    // surface — see `PageTapZones`, macOS/iOS only), so this column is a plain
+                    // label here, not a focusable button. The page-layout button that used to
+                    // sit at the end of this bar moved up to the header's trailing actions: with
+                    // this label non-focusable and `pageSlider` never focusable either (no drag
+                    // gesture on tvOS), the footer has nothing left to receive focus at all.
+                    Text(label)
+                        .font(.callout.monospacedDigit())
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(width: labelWidth, height: 44)
+                    #else
                     // Fixed-width column: the page number's width varies (e.g. "1 / 20" vs
                     // "10–11 / 20") and without pre-allocating the space, the slider next to
                     // it would shift every time the page changes.
@@ -1370,7 +1392,9 @@ private struct ReaderContentView: View {
                         .contentShape(Rectangle())
                     }
                     .frame(width: labelWidth, height: 44)
+                    #endif
                     pageSlider(provider: provider)
+                    #if !os(tvOS)
                     if isDoublePageAllowed {
                         // Cycles single → double → automatic page.
                         Button(action: cyclePageLayoutMode) {
@@ -1384,6 +1408,7 @@ private struct ReaderContentView: View {
                                 )
                         }
                     }
+                    #endif
                 }
                 .foregroundColor(chromeForeground)
                 .padding(.horizontal, 10)
