@@ -30,6 +30,11 @@ struct LibraryView: View {
     // exists on iOS and tvOS for their shared `.fullScreenCover`.
     @State private var selectedComic: ComicEntity?
     #endif
+    #if os(tvOS)
+    // tvOS opens a detail screen (cover, metadata, "Leggi") before the reader — a cover tap
+    // pushes here first; `TVComicDetailView`'s own button is what sets `selectedComic`.
+    @State private var detailComic: ComicEntity?
+    #endif
     #if os(iOS)
     // Mac picks `.favorites` from the sidebar, which sets `selection` directly; tvOS has its own
     // "Preferiti" tab that passes `selection: .favorites` in the same way (see `TVRootTabView`).
@@ -131,6 +136,11 @@ struct LibraryView: View {
             #if os(iOS) || os(tvOS)
             .fullScreenCover(item: $selectedComic) { comic in
                 ReaderView(comic: comic, libraryComics: filteredComics)
+            }
+            #endif
+            #if os(tvOS)
+            .navigationDestination(item: $detailComic) { comic in
+                TVComicDetailView(comic: comic) { selectedComic = comic }
             }
             #endif
             #if os(iOS)
@@ -624,6 +634,8 @@ struct LibraryView: View {
             return
         }
         openWindow(value: id)
+        #elseif os(tvOS)
+        detailComic = comic
         #else
         selectedComic = comic
         #endif
