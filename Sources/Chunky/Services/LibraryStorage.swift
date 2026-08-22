@@ -9,6 +9,12 @@ enum LibraryStorage {
     private static let comicsFolderName = "Comics"
 
     nonisolated(unsafe) private static var cachedRootURL: URL?
+    /// Guards `cachedRootURL`'s check-and-set below: without it, two callers racing on the
+    /// first-ever call (e.g. a batch import overlapping the periodic rescan right after launch)
+    /// could both run `migrateLegacyComicsSubfolderIfNeeded` concurrently — one thread moving a
+    /// file while another removes the now-empty legacy folder underneath it, surfacing as a
+    /// spurious "you don't have permission" `copyItem` failure on an unrelated import.
+    private static let rootFolderLock = NSLock()
 
     /// True if the user has iCloud Drive active and the app's ubiquity container is reachable:
     /// in that case imported comics automatically sync across all devices.
@@ -24,6 +30,9 @@ enum LibraryStorage {
     }
 
     static func rootFolderURL() -> URL {
+        rootFolderLock.lock()
+        defer { rootFolderLock.unlock() }
+
         if let cached = cachedRootURL {
             return cached
         }
