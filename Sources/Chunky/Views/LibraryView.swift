@@ -603,9 +603,18 @@ struct LibraryView: View {
             isEditing: isEditing,
             isSelected: selectedIDs.contains(comic.objectID),
             allowsDeletion: !isKioskModeEnabled,
+            existingGroupNames: existingGroupNames,
             onSelect: { handleTap(on: comic) },
-            onDelete: { viewModel.delete(comic, from: context) }
+            onDelete: { viewModel.delete(comic, from: context) },
+            onAssignGroup: { assignGroup($0, to: comic) }
         )
+    }
+
+    /// Same effect as `applyGroup`, for a single comic instead of the current bulk selection —
+    /// used by `ComicCell`'s own context menu, the only per-comic entry point to grouping.
+    private func assignGroup(_ name: String?, to comic: ComicEntity) {
+        comic.seriesName = name ?? LibraryViewModel.deriveSeriesName(fromFallbackTitle: comic.title ?? "")
+        try? context.save()
     }
 
     private func handleTap(on comic: ComicEntity) {
@@ -729,8 +738,10 @@ private struct ComicCell: View {
     let isEditing: Bool
     let isSelected: Bool
     let allowsDeletion: Bool
+    let existingGroupNames: [String]
     let onSelect: () -> Void
     let onDelete: () -> Void
+    let onAssignGroup: (String?) -> Void
     /// Same source as the cover badge: the download command must appear and disappear
     /// together with the badge, not depending on when the cell was last redrawn.
     @ObservedObject private var downloadTracker = ICloudDownloadTracker.shared
@@ -800,6 +811,16 @@ private struct ComicCell: View {
                 if isPendingDownload {
                     Button(action: downloadFromICloud) {
                         Label("Scarica da iCloud", systemImage: "icloud.and.arrow.down")
+                    }
+                }
+                // Per-comic equivalent of the bulk-selection group menu (`LibraryView.groupMenu`,
+                // iOS/macOS only, needs a multi-select mode tvOS doesn't have): no "new group"
+                // text entry here, just auto-derive or an existing name, reachable from any
+                // single comic's own context menu regardless of platform.
+                Menu("Assegna a gruppo") {
+                    Button("Automatico") { onAssignGroup(nil) }
+                    ForEach(existingGroupNames, id: \.self) { name in
+                        Button(name) { onAssignGroup(name) }
                     }
                 }
                 #if os(macOS)
