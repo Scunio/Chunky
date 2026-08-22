@@ -245,6 +245,8 @@ struct AccountsView: View {
     }
 
     private var tvOSCategoryList: some View {
+        // `.plain`, not the default: `NavigationSplitView`'s primary column defaults to a
+        // sidebar-style list that ignores `.tvOSRowBackground()` — this is the one that respects it.
         List(selection: $selectedCategory) {
             Section {
                 rowLabel("Downloads", systemImage: "arrow.down.circle")
@@ -277,6 +279,7 @@ struct AccountsView: View {
                     .tvOSRowBackground()
             }
         }
+        .listStyle(.plain)
     }
 
     @ViewBuilder

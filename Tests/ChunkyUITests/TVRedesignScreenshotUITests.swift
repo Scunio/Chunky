@@ -27,12 +27,21 @@ final class TVRedesignScreenshotUITests: XCTestCase {
 
         let remote = XCUIRemote.shared
 
-        // Give the initial rescan/library load a moment before the first capture. tvOS
-        // sometimes shows its own user-profile-picker interstitial before handing focus to the
-        // app at all — the wait varies run to run, so this polls for the tab bar's own text
-        // instead of a fixed sleep.
+        // tvOS sometimes shows its own user-profile-picker interstitial before handing focus
+        // to the app at all (observed intermittently across runs, timing varies) — if it's up,
+        // select the default-focused profile and keep polling for the tab bar's own text rather
+        // than assuming a fixed wait gets past it.
         _ = app.wait(for: .runningForeground, timeout: 20)
-        _ = app.staticTexts["Libreria"].waitForExistence(timeout: 15)
+        var sawLibreria = false
+        for _ in 0..<15 {
+            if app.buttons["Libreria"].waitForExistence(timeout: 2) {
+                sawLibreria = true
+                break
+            }
+            remote.press(.select)
+            Thread.sleep(forTimeInterval: 1)
+        }
+        XCTAssertTrue(sawLibreria, "La tab bar di Chunky non è comparsa: probabilmente bloccati sulla schermata profilo di sistema.")
         Thread.sleep(forTimeInterval: 1)
         attach(app, name: "01-library-tab")
 
