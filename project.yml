@@ -315,6 +315,12 @@ targets:
     dependencies:
       - target: Chunky_macOS
 
+  ChunkyUITests_tvOS:
+    platform: tvOS
+    templates: [ChunkyUITest]
+    dependencies:
+      - target: Chunky_tvOS
+
 # Gli schemi sono dichiarati qui invece di lasciarli autocreare da Xcode: gli schemi
 # autocreati vivono in xcuserdata e non sono deterministici, mentre la CI deve poter
 # contare sul fatto che `-scheme Chunky_macOS` includa davvero i target di test.
@@ -372,3 +378,11 @@ schemes:
         ChunkyUITests_macOS: [test]
     test:
       targets: [ChunkyUITests_macOS]
+
+  ChunkyUI_tvOS:
+    build:
+      targets:
+        Chunky_tvOS: all
+        ChunkyUITests_tvOS: [test]
+    test:
+      targets: [ChunkyUITests_tvOS]

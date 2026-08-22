@@ -725,11 +725,18 @@ struct LibraryView: View {
         }
     }
 
+    @ViewBuilder
     private var noResultsState: some View {
-        ContentUnavailableView(
-            "Nessun risultato per \"\(searchText)\"",
-            systemImage: "magnifyingglass"
-        )
+        // A search-phrased message is wrong when there was no search at all — e.g. the
+        // "Preferiti" tab/filter with a non-empty library that just has nothing favorited yet.
+        if searchText.isEmpty && effectiveSelection == .favorites {
+            ContentUnavailableView("Nessun preferito", systemImage: "star")
+        } else {
+            ContentUnavailableView(
+                "Nessun risultato per \"\(searchText)\"",
+                systemImage: "magnifyingglass"
+            )
+        }
     }
 }
 
