@@ -212,11 +212,9 @@ struct AccountsView: View {
     }
 
     /// tvOS doesn't use the shared navigation-bar layout: in a compact sheet the platform
-    /// bar crams its toolbar buttons against the centered title, and the focused row's
-    /// highlight spans the List edge-to-edge, clipping through the card's rounded corners.
-    /// A plain header row plus an inset List keeps both under its own control. No
-    /// NavigationStack here: both call sites already wrap this view in one, and nesting a
-    /// second inside it leaves push/pop behavior undefined.
+    /// bar crams its toolbar buttons against the centered title. A plain header row keeps
+    /// that under its own control. No NavigationStack here: both call sites already wrap
+    /// this view in one, and nesting a second inside it leaves push/pop behavior undefined.
     #if os(tvOS)
     private var tvOSPanel: some View {
         VStack(spacing: 0) {
@@ -232,6 +230,10 @@ struct AccountsView: View {
             .padding(.bottom, 12)
 
             accountList
+                // tvOS 17 clips List content to its bounds by default, cutting off the
+                // rounded-corner focus highlight once padding is applied below — see
+                // https://developer.apple.com/forums/thread/740996.
+                .scrollClipDisabled(true)
                 .padding(.horizontal, 48)
         }
     }

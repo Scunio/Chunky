@@ -1190,7 +1190,13 @@ private struct ReaderContentView: View {
         // with "Page background" (black/white/auto), as chromeForeground already does for
         // text/icons.
         .environment(\.colorScheme, isBackgroundDark ? .dark : .light)
+        // Plain gives no focus indicator at all on tvOS; .automatic keeps the native
+        // scale/ring without the opaque platter .card would add to a bare icon.
+        #if os(tvOS)
+        .buttonStyle(.automatic)
+        #else
         .buttonStyle(PlainButtonStyle())
+        #endif
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
@@ -1400,7 +1406,12 @@ private struct ReaderContentView: View {
                 .onPreferenceChange(ChromeFooterHeightKey.self) { footerHeight = $0 }
                 #endif
                 .environment(\.colorScheme, isBackgroundDark ? .dark : .light)
+                // See `header`'s equivalent modifier above for why tvOS gets .automatic.
+                #if os(tvOS)
+                .buttonStyle(.automatic)
+                #else
                 .buttonStyle(PlainButtonStyle())
+                #endif
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }

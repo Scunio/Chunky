@@ -110,6 +110,8 @@ struct ComicInfoSheet: View {
             .padding(.bottom, 12)
 
             listContent
+                // See `AccountsView.tvOSPanel` for why this is needed on tvOS 17.
+                .scrollClipDisabled(true)
                 .padding(.horizontal, 48)
         }
     }
