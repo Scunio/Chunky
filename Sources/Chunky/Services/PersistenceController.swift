@@ -11,6 +11,10 @@ struct PersistenceController {
     /// never mirrored to CloudKit — see the comment on the "Local" `<configuration>` in the model.
     static let localOnlyConfigurationName = "Local"
 
+    /// Bounds `loadPersistentStores`'s CloudKit round trip: unbounded, a stalled network hung
+    /// the whole app on a physical Apple TV before any UI existed.
+    private static let loadTimeout: DispatchTimeInterval = .seconds(20)
+
     init(inMemory: Bool = false) {
         container = NSPersistentCloudKitContainer(name: "Chunky")
 
@@ -55,14 +59,23 @@ struct PersistenceController {
     private static func loadStores(in container: NSPersistentCloudKitContainer) -> Error? {
         let allDescriptions = container.persistentStoreDescriptions
         var failures: [(NSPersistentStoreDescription, Error)] = []
+        // `loadPersistentStores` can invoke its completion for different store descriptions
+        // concurrently on different queues — this serializes the appends into `failures`.
+        let failuresLock = NSLock()
 
         let group = DispatchGroup()
         allDescriptions.forEach { _ in group.enter() }
         container.loadPersistentStores { description, error in
-            if let error { failures.append((description, error)) }
+            if let error {
+                failuresLock.lock()
+                failures.append((description, error))
+                failuresLock.unlock()
+            }
             group.leave()
         }
-        group.wait()
+        if group.wait(timeout: .now() + loadTimeout) == .timedOut {
+            return PersistenceLoadError.timedOut
+        }
 
         guard !failures.isEmpty else { return nil }
 
@@ -87,7 +100,10 @@ struct PersistenceController {
                 retryError = error
                 retryGroup.leave()
             }
-            retryGroup.wait()
+            if retryGroup.wait(timeout: .now() + loadTimeout) == .timedOut {
+                if firstError == nil { firstError = PersistenceLoadError.timedOut }
+                continue
+            }
 
             if let retryError {
                 DiagnosticLog.log("Retry after deleting store also failed: \((retryError as NSError).localizedDescription)")
@@ -97,5 +113,13 @@ struct PersistenceController {
         container.persistentStoreDescriptions = allDescriptions
 
         return firstError
+    }
+}
+
+enum PersistenceLoadError: LocalizedError {
+    case timedOut
+
+    var errorDescription: String? {
+        "Il caricamento della libreria ha impiegato troppo tempo, probabilmente per un problema di rete con iCloud. Riprova."
     }
 }

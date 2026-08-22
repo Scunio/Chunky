@@ -12,8 +12,15 @@ enum LibraryStorage {
 
     /// True if the user has iCloud Drive active and the app's ubiquity container is reachable:
     /// in that case imported comics automatically sync across all devices.
+    ///
+    /// Always false on tvOS: no Files app/iCloud Drive there, and the entitlements lack
+    /// `CloudDocuments` — querying the container hung the main thread at launch on a real Apple TV.
     static var isICloudAvailable: Bool {
+        #if os(tvOS)
+        false
+        #else
         FileManager.default.url(forUbiquityContainerIdentifier: ubiquityContainerID) != nil
+        #endif
     }
 
     static func rootFolderURL() -> URL {
@@ -21,6 +28,9 @@ enum LibraryStorage {
             return cached
         }
         let root: URL
+        #if os(tvOS)
+        root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        #else
         if let ubiquityURL = FileManager.default.url(forUbiquityContainerIdentifier: ubiquityContainerID) {
             // The root folder must be "Documents" (not one level below, e.g.
             // "Documents/Comics"): the message shown to the user in ICloudSyncFolderView says
@@ -30,6 +40,7 @@ enum LibraryStorage {
         } else {
             root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         }
+        #endif
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         migrateLegacyComicsSubfolderIfNeeded(newRoot: root)
         cachedRootURL = root
