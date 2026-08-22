@@ -49,9 +49,16 @@ struct ColorThemeView: View {
                 .pickerStyle(.segmented)
             }
 
-            // `ColorPicker`/`Slider` don't exist on tvOS, and this screen isn't reachable there
-            // anyway (no tvOS Settings entry point in v1) — these two sections are iOS/macOS only.
-            #if !os(tvOS)
+            // `ColorPicker`/`Slider` don't exist on tvOS — free-form colors there are a fixed
+            // list of presets instead (selectable with the remote), continuous pickers stay
+            // iOS/macOS only.
+            #if os(tvOS)
+            Section(footer: Text("Personalizza i colori della libreria. \"Predefinito\" segue la modalità chiara/scura di sistema.")) {
+                themePresetButton(name: "Predefinito", backgroundHex: "", textHex: "", accentHex: "")
+                themePresetButton(name: "Seppia", backgroundHex: "#F4ECD8", textHex: "#3B2F1E", accentHex: "#8B5E34")
+                themePresetButton(name: "Notte", backgroundHex: "#0A1A2F", textHex: "#E8EEF7", accentHex: "#4C8DFF")
+            }
+            #else
             Section(footer: Text("Personalizza i colori della libreria. Lascia \"Automatico\" per seguire la modalità chiara/scura di sistema.")) {
                 // Each row has a different fallback color when it hasn't been customized yet
                 // (empty hex = "Automatic"): showing them all as .primary made them identical
@@ -102,6 +109,16 @@ struct ColorThemeView: View {
         #endif
         .navigationTitle("Colori")
     }
+
+    #if os(tvOS)
+    private func themePresetButton(name: String, backgroundHex: String, textHex: String, accentHex: String) -> some View {
+        Button(name) {
+            theme.backgroundHex = backgroundHex
+            theme.textHex = textHex
+            theme.accentHex = accentHex
+        }
+    }
+    #endif
 
     private func tintPresetButton(name: String, hex: String, opacity: Double = 0.25) -> some View {
         Button(action: {

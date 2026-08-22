@@ -29,8 +29,12 @@ struct LibraryView: View {
     // On Mac the reader lives in its own window (see `openComic`); this state
     // exists on iOS and tvOS for their shared `.fullScreenCover`.
     @State private var selectedComic: ComicEntity?
-    // Mac picks `.favorites` from the sidebar, which sets `selection` directly; iOS/tvOS have no
-    // sidebar, so they get a toolbar toggle instead, layered on top via `effectiveSelection`.
+    #endif
+    #if os(iOS)
+    // Mac picks `.favorites` from the sidebar, which sets `selection` directly; tvOS has its own
+    // "Preferiti" tab that passes `selection: .favorites` in the same way (see `TVRootTabView`).
+    // Only iOS has neither a sidebar nor a tab for it, so it gets a toolbar toggle instead,
+    // layered on top via `effectiveSelection`.
     @State private var isFavoritesOnly = false
     #endif
     @State private var displayMode: LibraryDisplayMode = .grouped
@@ -55,7 +59,7 @@ struct LibraryView: View {
     @State private var isDropTargeted = false
 
     private var effectiveSelection: LibrarySelection {
-        #if os(iOS) || os(tvOS)
+        #if os(iOS)
         isFavoritesOnly ? .favorites : selection
         #else
         selection
@@ -65,6 +69,7 @@ struct LibraryView: View {
     var body: some View {
         content
             .navigationTitle(effectiveSelection == .favorites ? "Preferiti" : (effectiveSelection.groupTitle ?? "Chunky"))
+            #if !os(tvOS)
             .toolbar {
                 #if os(iOS)
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -97,12 +102,11 @@ struct LibraryView: View {
                         }
                     }
                 }
-                #elseif os(macOS)
-                macOSToolbarContent
                 #else
-                tvOSToolbarContent
+                macOSToolbarContent
                 #endif
             }
+            #endif
             // No system file picker on tvOS: `isShowingFileImporter` never becomes true there
             // (the toolbar's `addButton` and the empty state's import button are both
             // iOS/macOS-only — see below), so this never needs to present.
@@ -128,6 +132,8 @@ struct LibraryView: View {
             .fullScreenCover(item: $selectedComic) { comic in
                 ReaderView(comic: comic, libraryComics: filteredComics)
             }
+            #endif
+            #if os(iOS)
             // Same fallback as the Mac sidebar: the last favorite unfavorited from under
             // this filter would otherwise leave it stuck showing an empty grid.
             .onChange(of: comics.contains(where: \.isFavorite)) { _, hasFavorites in
@@ -137,34 +143,14 @@ struct LibraryView: View {
             .sheet(isPresented: $isToolsPresented) {
                 ToolsPanelView()
             }
+            #if !os(tvOS)
+            // On tvOS "Novità" is a section inline in the grid (see `newComicsSection`) and
+            // "Ora in lettura" is its own root tab (`TVRootTabView`) — neither needs a sheet
+            // here. Account is a tab too, but its own sheet above stays shared: `AccountsView`
+            // is still reached this way from `ReaderView`'s header.
             .sheet(isPresented: $isAccountsPresented) {
                 NavigationStack { AccountsView().toolbarDoneButton { isAccountsPresented = false } }
                     .sheetSized()
-            }
-            #if os(tvOS)
-            // Attached here, not on the toolbar button itself: a `.sheet`/`.platformPopover`
-            // directly on a `ToolbarItemGroup` button's content silently blocks Select from
-            // reaching the button at all (verified: the button's action never fires). Moving
-            // the presentation to the main content, same as `isAccountsPresented` above —
-            // which was never attached to its button and works — fixes it.
-            .sheet(isPresented: $isNewComicsPresented) {
-                NewComicsView(comics: recentComics) {
-                    openComic($0)
-                    isNewComicsPresented = false
-                } onClear: {
-                    newTrayClearedAtTimestamp = Date().timeIntervalSince1970
-                    isNewComicsPresented = false
-                }
-                .presentationBackground(.clear)
-            }
-            .sheet(isPresented: $isNowReadingPresented) {
-                if let comic = lastReadComic {
-                    NowReadingView(comic: comic) {
-                        isNowReadingPresented = false
-                        openComic(comic)
-                    }
-                    .presentationBackground(.clear)
-                }
             }
             #endif
             #if os(macOS)
@@ -279,70 +265,6 @@ struct LibraryView: View {
             } else {
                 ToolbarItem { settingsLink }
             }
-        }
-    }
-    #endif
-
-    #if os(tvOS)
-    // Minimal v1 toolbar: no file importer (no picker on tvOS), no Tools/Settings
-    // (no dedicated tvOS settings screen yet) — import happens only through
-    // `accountsLink` (LocalUploadServer / iCloud), per the tvOS scoping plan.
-    //
-    // Bare `Image` buttons, not `Label`: a `Label`'s title inside `ToolbarItemGroup` gets
-    // clipped mid-word by the system chrome regardless of `.labelStyle`, so there's nothing
-    // here for that to clip — same icon-only pattern tvOS's own apps use for top-bar
-    // utility buttons (search, settings, profile). The name is still there for VoiceOver.
-    @ToolbarContentBuilder
-    private var tvOSToolbarContent: some ToolbarContent {
-        ToolbarItemGroup {
-            tvOSNewComicsButton
-            tvOSNowReadingButton
-            tvOSFavoritesFilterButton
-            tvOSAccountsLink
-        }
-    }
-
-    /// tvOS's `ToolbarItemGroup` always renders bar-button content with its own fixed
-    /// circular chrome and icon size — `.buttonStyle`, `.buttonBorderShape`, `.frame`, and
-    /// `.font` here are all silently ignored (verified individually). System default,
-    /// unstyleable through this API — same as every other tvOS app's toolbar.
-    private func tvOSIconButton(systemImage: String, accessibilityLabel: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-        }
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    private var tvOSNewComicsButton: some View {
-        tvOSIconButton(systemImage: "envelope", accessibilityLabel: "Novità") {
-            isNewComicsPresented = true
-        }
-    }
-
-    @ViewBuilder
-    private var tvOSNowReadingButton: some View {
-        if lastReadComic != nil {
-            tvOSIconButton(systemImage: "book", accessibilityLabel: "Ora in lettura") {
-                isNowReadingPresented = true
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var tvOSFavoritesFilterButton: some View {
-        if isFavoritesOnly || comics.contains(where: \.isFavorite) {
-            tvOSIconButton(
-                systemImage: isFavoritesOnly ? "star.fill" : "star",
-                accessibilityLabel: "Preferiti"
-            ) {
-                isFavoritesOnly.toggle()
-            }
-        }
-    }
-
-    private var tvOSAccountsLink: some View {
-        tvOSIconButton(systemImage: "cloud", accessibilityLabel: "Account") {
-            isAccountsPresented = true
         }
     }
     #endif
@@ -488,9 +410,10 @@ struct LibraryView: View {
         }
     }
 
-    #if os(iOS) || os(tvOS)
-    // Mac gets this for free from the sidebar's `.favorites` row; iOS/tvOS have none, so this
-    // toggles the same `effectiveSelection` machinery directly from the toolbar.
+    #if os(iOS)
+    // Mac gets this for free from the sidebar's `.favorites` row; tvOS gets its own "Preferiti"
+    // tab (`TVRootTabView`) passing `selection: .favorites` directly. Only iOS has neither, so
+    // this toggles the same `effectiveSelection` machinery directly from the toolbar.
     @ViewBuilder
     private var favoritesFilterButton: some View {
         if isFavoritesOnly || comics.contains(where: \.isFavorite) {
@@ -549,6 +472,14 @@ struct LibraryView: View {
     private var libraryGrid: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 8) {
+                #if os(tvOS)
+                // No separate "Novità" tab/popover on tvOS (see `TVRootTabView`): recently
+                // added comics get their own section at the top of the grid instead, same
+                // `sectionView` used for every other group.
+                if !recentComics.isEmpty {
+                    sectionView(title: "Novità", comics: recentComics)
+                }
+                #endif
                 switch displayMode {
                 case .grouped:
                     ForEach(groupedSections) { section in

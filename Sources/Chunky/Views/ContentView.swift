@@ -164,6 +164,8 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 520, ideal: 900)
         }
         .navigationSplitViewStyle(.balanced)
+        #elseif os(tvOS)
+        TVRootTabView()
         #else
         NavigationStack {
             LibraryView()
