@@ -75,6 +75,7 @@ targetTemplates:
       - package: ZIPFoundation
       - package: Unrar
       - package: AMSMB2
+        embed: true
     settings:
       base:
         PRODUCT_NAME: Chunky
