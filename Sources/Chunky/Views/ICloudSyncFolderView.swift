@@ -53,6 +53,10 @@ struct ICloudSyncFolderView: View {
                 }
             }
         }
+        // See `AccountsView.tvOSPanel` for why this is needed on tvOS 17.
+        #if os(tvOS)
+        .scrollClipDisabled(true)
+        #endif
         .navigationTitle("iCloud Drive")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

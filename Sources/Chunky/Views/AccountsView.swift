@@ -128,9 +128,13 @@ struct AccountsView: View {
                 NavigationLink(destination: LocalUploadView()) {
                     rowLabel("Web", systemImage: "globe")
                 }
+                // No ubiquity container on tvOS (see `LibraryStorage.isICloudAvailable`), so
+                // this screen would always show as permanently unavailable there.
+                #if !os(tvOS)
                 NavigationLink(destination: ICloudSyncFolderView()) {
                     rowLabel("iCloud Drive", systemImage: "icloud")
                 }
+                #endif
             }
 
             if !accounts.isEmpty {
