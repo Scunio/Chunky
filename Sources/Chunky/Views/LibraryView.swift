@@ -499,16 +499,23 @@ struct LibraryView: View {
                     Text("TUTTI I FUMETTI (\(filteredComics.count))")
                         .font(.subheadline.bold())
                         .foregroundColor(.secondary)
-                        .padding(.horizontal)
+                        .padding(.horizontal, gridHorizontalPadding)
                     LazyVGrid(columns: gridColumns, spacing: 20) {
                         ForEach(filteredComics) { comic in
                             cell(for: comic)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, gridHorizontalPadding)
                 }
             }
             .padding(.vertical)
+            #if os(tvOS)
+            // Extra top/bottom padding on the scroll container so `.card`'s focus-scale
+            // doesn't get clipped at the very top/bottom of the grid — same idiom Apple's own
+            // "Destination Video" sample uses ("In tvOS, add vertical padding to accommodate
+            // card resizing").
+            .padding(.vertical, 60)
+            #endif
         }
     }
 
@@ -540,7 +547,24 @@ struct LibraryView: View {
     }
 
     private var gridColumns: [GridItem] {
+        #if os(tvOS)
+        // Fixed-size columns, not `.adaptive` (phone/tablet/Mac's sizing): tvOS's focus engine
+        // and `.card` button style behave more predictably with fixed geometry, per Apple's own
+        // "Destination Video" sample. 6 columns of 260×390pt (2:3 covers) fill the HIG-recommended
+        // 1760pt safe-area width (1920 − 80pt each side) with 40pt gaps between them.
+        Array(repeating: GridItem(.fixed(260), spacing: 40), count: 6)
+        #else
         [GridItem(.adaptive(minimum: 130, maximum: 180), spacing: 16)]
+        #endif
+    }
+
+    /// HIG side margin on tvOS (80pt); the default small inset everywhere else.
+    private var gridHorizontalPadding: CGFloat {
+        #if os(tvOS)
+        80
+        #else
+        16
+        #endif
     }
 
     private func sectionHeaderContent(title: String, comics: [ComicEntity]) -> some View {
@@ -562,7 +586,7 @@ struct LibraryView: View {
                 .foregroundColor(.secondary)
         }
         .foregroundColor(.primary)
-        .padding(.horizontal)
+        .padding(.horizontal, gridHorizontalPadding)
     }
 
     private func sectionView(title: String, comics: [ComicEntity]) -> some View {
@@ -592,7 +616,7 @@ struct LibraryView: View {
                         cell(for: comic)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, gridHorizontalPadding)
             }
         }
     }

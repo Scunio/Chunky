@@ -22,7 +22,7 @@ final class TVRedesignScreenshotUITests: XCTestCase {
 
     func testCaptureRedesignedScreens() {
         let app = XCUIApplication()
-        app.launchArguments += ["--uitesting"]
+        app.launchArguments += ["--uitesting", "--uitesting-seed"]
         app.launch()
 
         let remote = XCUIRemote.shared
