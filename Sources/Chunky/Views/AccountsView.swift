@@ -247,8 +247,12 @@ struct AccountsView: View {
     private var tvOSCategoryList: some View {
         List(selection: $selectedCategory) {
             Section {
-                rowLabel("Downloads", systemImage: "arrow.down.circle").tag(TVAccountCategory.downloads)
-                rowLabel("Web", systemImage: "globe").tag(TVAccountCategory.web)
+                rowLabel("Downloads", systemImage: "arrow.down.circle")
+                    .tag(TVAccountCategory.downloads)
+                    .tvOSRowBackground()
+                rowLabel("Web", systemImage: "globe")
+                    .tag(TVAccountCategory.web)
+                    .tvOSRowBackground()
             }
 
             if !accounts.isEmpty {
@@ -256,6 +260,7 @@ struct AccountsView: View {
                     ForEach(accounts) { account in
                         rowLabel(account.name ?? "Account", systemImage: account.kind.systemImage)
                             .tag(TVAccountCategory.account(account.objectID))
+                            .tvOSRowBackground()
                     }
                 }
             }
@@ -263,10 +268,13 @@ struct AccountsView: View {
             Section("Aggiungi account") {
                 rowLabel("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
                     .tag(TVAccountCategory.addAccount(.opds))
+                    .tvOSRowBackground()
                 rowLabel("Nuovo account WebDAV", systemImage: "plus.circle")
                     .tag(TVAccountCategory.addAccount(.webdav))
+                    .tvOSRowBackground()
                 rowLabel("Nuovo account SMB", systemImage: RemoteAccountKind.smb.systemImage)
                     .tag(TVAccountCategory.addAccount(.smb))
+                    .tvOSRowBackground()
             }
         }
     }

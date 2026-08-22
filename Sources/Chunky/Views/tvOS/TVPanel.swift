@@ -30,6 +30,19 @@ struct TVPanel<Actions: View, Content: View>: View {
     }
 }
 
+extension View {
+    /// A resting-state background pill for a List row — plain `List` rows on tvOS are just bare
+    /// text on the blurred background until focused, which reads as unfinished next to real
+    /// tvOS apps (e.g. Infuse's Settings screen, which pills every row light gray at rest and
+    /// orange when focused). Chain onto row content inside a `List`.
+    func tvOSRowBackground() -> some View {
+        listRowBackground(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.12))
+        )
+    }
+}
+
 /// tvOS renders `Label`'s icon and title with zero gap between them in list rows ("↓Downloads")
 /// — an explicit layout keeps a readable spacing there. Shared by `AccountsView` and
 /// `ComicInfoSheet`, which both used to hand-roll their own identical copy of this.

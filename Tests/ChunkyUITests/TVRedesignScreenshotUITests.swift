@@ -27,9 +27,13 @@ final class TVRedesignScreenshotUITests: XCTestCase {
 
         let remote = XCUIRemote.shared
 
-        // Give the initial rescan/library load a moment before the first capture.
+        // Give the initial rescan/library load a moment before the first capture. tvOS
+        // sometimes shows its own user-profile-picker interstitial before handing focus to the
+        // app at all — the wait varies run to run, so this polls for the tab bar's own text
+        // instead of a fixed sleep.
         _ = app.wait(for: .runningForeground, timeout: 20)
-        Thread.sleep(forTimeInterval: 2)
+        _ = app.staticTexts["Libreria"].waitForExistence(timeout: 15)
+        Thread.sleep(forTimeInterval: 1)
         attach(app, name: "01-library-tab")
 
         // Step right through the tabs from the tab bar itself, capturing each. No Menu press

@@ -97,7 +97,9 @@ private struct TVSettingsView: View {
     var body: some View {
         List {
             NavigationLink("Aspetto") { ColorThemeView() }
+                .tvOSRowBackground()
             NavigationLink("Blocco genitori") { ParentalLockSettingsView() }
+                .tvOSRowBackground()
         }
         .scrollClipDisabled(true)
         .navigationTitle("Impostazioni")
