@@ -21,10 +21,7 @@ struct DownloadsView: View {
                     #endif
             }
             .listStyle(.plain)
-            // See `AccountsView.tvOSPanel` for why this is needed on tvOS 17.
-            #if os(tvOS)
-            .scrollClipDisabled(true)
-            #endif
+            .tvOSListFocusFix()
 
             Button(action: { downloadManager.stopAll() }) {
                 Text("Stop all")

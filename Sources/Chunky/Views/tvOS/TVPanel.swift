@@ -1,0 +1,44 @@
+#if os(tvOS)
+import SwiftUI
+
+/// Shared header for tvOS screens presented as the root of a sheet: a plain title row plus
+/// trailing actions instead of the system navigation bar, which in a compact sheet crams its
+/// title and toolbar buttons together (see the equivalent comment history on `AccountsView`,
+/// the pattern's original home before it moved here). `content` gets the tvOS 17 List/Form
+/// clipping fix automatically — see `View.tvOSListFocusFix()`.
+struct TVPanel<Actions: View, Content: View>: View {
+    let title: String
+    @ViewBuilder var actions: Actions
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 32) {
+                Text(title)
+                    .font(.title2.bold())
+                Spacer()
+                actions
+            }
+            .padding(.horizontal, 48)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
+
+            content
+                .tvOSListFocusFix()
+                .padding(.horizontal, 48)
+        }
+    }
+}
+
+/// tvOS renders `Label`'s icon and title with zero gap between them in list rows ("↓Downloads")
+/// — an explicit layout keeps a readable spacing there. Shared by `AccountsView` and
+/// `ComicInfoSheet`, which both used to hand-roll their own identical copy of this.
+func tvOSRowLabel(_ title: String, systemImage: String, tint: Color = .primary) -> some View {
+    HStack(spacing: 24) {
+        Image(systemName: systemImage)
+            .foregroundColor(tint)
+            .frame(width: 44)
+        Text(title)
+    }
+}
+#endif

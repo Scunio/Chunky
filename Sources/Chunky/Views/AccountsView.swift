@@ -12,6 +12,15 @@ private struct OpenRemoteService {
     let tintColor: Color
 }
 
+#if os(tvOS)
+private enum TVAccountCategory: Hashable {
+    case downloads
+    case web
+    case account(NSManagedObjectID)
+    case addAccount(RemoteAccountKind)
+}
+#endif
+
 struct AccountsView: View {
     @Environment(\.managedObjectContext) private var context
     @EnvironmentObject private var viewModel: LibraryViewModel
@@ -33,11 +42,15 @@ struct AccountsView: View {
     @State private var activeImporter: ActiveImporter?
     @State private var folderConversionError: String?
     /// "+" doesn't open another screen: it reveals the "Add account" section at the end of the
-    /// same list and turns into "Done" to close it again.
+    /// same list and turns into "Done" to close it again. iOS/macOS only — tvOS's split view
+    /// (see `tvOSSplitView`) always shows "Aggiungi account" as its own category instead.
     @State private var isAddingAccount = false
-    /// Closes the sheet from the tvOS header's "Chiudi" (the call sites' `toolbarDoneButton`
-    /// is a no-op there — see `View+ToolbarDoneButton.swift`).
+    /// Closes the sheet from `toolbarDoneButton` (no-op on tvOS — see `View+ToolbarDoneButton.swift`
+    /// — where dismissal is instead the system Menu-button behavior on a plain `.sheet`).
     @Environment(\.dismiss) private var dismiss
+    #if os(tvOS)
+    @State private var selectedCategory: TVAccountCategory?
+    #endif
 
     /// No system file picker on tvOS, so folder-based import has nothing to open there.
     private var folderConversionAvailable: Bool {
@@ -90,12 +103,12 @@ struct AccountsView: View {
         #endif
     }
 
-    /// iOS/macOS keep the system navigation bar; tvOS replaces it with a custom header —
-    /// see `tvOSPanel`.
+    /// iOS/macOS keep the system navigation bar and a single-column list; tvOS is a genuine
+    /// split view (category list + detail pane) — see `tvOSSplitView`.
     @ViewBuilder
     private var panel: some View {
         #if os(tvOS)
-        tvOSPanel
+        tvOSSplitView
         #else
         accountList
             .navigationTitle("Account")
@@ -215,30 +228,64 @@ struct AccountsView: View {
         }
     }
 
-    /// tvOS doesn't use the shared navigation-bar layout: in a compact sheet the platform
-    /// bar crams its toolbar buttons against the centered title. A plain header row keeps
-    /// that under its own control. No NavigationStack here: both call sites already wrap
-    /// this view in one, and nesting a second inside it leaves push/pop behavior undefined.
+    /// tvOS's native pattern for a filter→results screen (per the HIG's split-view guidance):
+    /// categories (Downloads/Web/accounts/add-account) on the left, the selected one's content
+    /// on the right — not a single-column list scrolling top to bottom like iOS/macOS. No
+    /// NavigationStack here: both call sites already wrap this view in one.
     #if os(tvOS)
-    private var tvOSPanel: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 32) {
-                Text("Account")
-                    .font(.title2.bold())
-                Spacer()
-                addAccountToggleButton
-                Button("Chiudi") { dismiss() }
-            }
-            .padding(.horizontal, 48)
-            .padding(.top, 24)
-            .padding(.bottom, 12)
+    private var tvOSSplitView: some View {
+        NavigationSplitView {
+            tvOSCategoryList
+                .navigationTitle("Account")
+                .tvOSListFocusFix()
+        } detail: {
+            tvOSDetailContent
+        }
+        .navigationSplitViewStyle(.balanced)
+    }
 
-            accountList
-                // tvOS 17 clips List content to its bounds by default, cutting off the
-                // rounded-corner focus highlight once padding is applied below — see
-                // https://developer.apple.com/forums/thread/740996.
-                .scrollClipDisabled(true)
-                .padding(.horizontal, 48)
+    private var tvOSCategoryList: some View {
+        List(selection: $selectedCategory) {
+            Section {
+                rowLabel("Downloads", systemImage: "arrow.down.circle").tag(TVAccountCategory.downloads)
+                rowLabel("Web", systemImage: "globe").tag(TVAccountCategory.web)
+            }
+
+            if !accounts.isEmpty {
+                Section("I tuoi account") {
+                    ForEach(accounts) { account in
+                        rowLabel(account.name ?? "Account", systemImage: account.kind.systemImage)
+                            .tag(TVAccountCategory.account(account.objectID))
+                    }
+                }
+            }
+
+            Section("Aggiungi account") {
+                rowLabel("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
+                    .tag(TVAccountCategory.addAccount(.opds))
+                rowLabel("Nuovo account WebDAV", systemImage: "plus.circle")
+                    .tag(TVAccountCategory.addAccount(.webdav))
+                rowLabel("Nuovo account SMB", systemImage: RemoteAccountKind.smb.systemImage)
+                    .tag(TVAccountCategory.addAccount(.smb))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tvOSDetailContent: some View {
+        switch selectedCategory {
+        case .downloads:
+            DownloadsView()
+        case .web:
+            LocalUploadView()
+        case .account(let objectID):
+            if let account = accounts.first(where: { $0.objectID == objectID }) {
+                RemoteBrowserView(account: account)
+            }
+        case .addAccount(let kind):
+            AddAccountView(initialKind: kind) { selectedCategory = .downloads }
+        case nil:
+            ContentUnavailableView("Scegli una categoria", systemImage: "cloud")
         }
     }
     #endif
@@ -248,12 +295,7 @@ struct AccountsView: View {
     /// keep the system label with its own metrics.
     private func rowLabel(_ title: String, systemImage: String, tint: Color = .primary) -> some View {
         #if os(tvOS)
-        HStack(spacing: 24) {
-            Image(systemName: systemImage)
-                .foregroundColor(tint)
-                .frame(width: 44)
-            Text(title)
-        }
+        tvOSRowLabel(title, systemImage: systemImage, tint: tint)
         #else
         Label {
             Text(title)

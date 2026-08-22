@@ -4,6 +4,9 @@ import CoreData
 struct AddAccountView: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
+    /// Set only when shown inline in tvOS's Account split view (`AccountsView.tvOSDetailContent`),
+    /// where there's no sheet/push to dismiss — `save()` calls this instead of `dismiss()` there.
+    var onSaved: (() -> Void)?
 
     @State private var kind: RemoteAccountKind
     @State private var name = ""
@@ -28,14 +31,14 @@ struct AddAccountView: View {
     @State private var preCacheDetailsEnabled = true
     @State private var preCacheCoversEnabled = true
 
-    init(initialKind: RemoteAccountKind = .opds) {
+    init(initialKind: RemoteAccountKind = .opds, onSaved: (() -> Void)? = nil) {
         _kind = State(initialValue: initialKind)
+        self.onSaved = onSaved
     }
 
     var body: some View {
         #if os(tvOS)
-        tvOSPanel
-            .sheetSized()
+        tvOSForm
             .onChange(of: kind, perform: updateDiscovery)
             .onAppear { updateDiscovery(kind) }
             .onDisappear { discovery.stop() }
@@ -228,31 +231,19 @@ struct AddAccountView: View {
         }
     }
 
-    /// Same rationale as `AccountsView.tvOSPanel`: in a compact sheet the platform
-    /// navigation bar truncates the title and crams "Annulla"/"Salva" on top of it. Unlike
-    /// AccountsView this keeps its own NavigationStack — the sheet is presented bare (no
-    /// wrapping stack at the call sites), and the "Tipo" Picker needs one to push its
-    /// selection screen on tvOS.
+    /// Shown inline as a category's content in `AccountsView`'s tvOS split view, not its own
+    /// sheet — no "Annulla" needed (switching to another category is the equivalent), just the
+    /// form and a "Salva" action. Its own `NavigationStack`: the "Tipo" Picker needs one to push
+    /// its selection screen on tvOS, and the split view's detail pane doesn't supply one.
     #if os(tvOS)
-    private var tvOSPanel: some View {
+    private var tvOSForm: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                HStack(spacing: 32) {
-                    Text("Nuovo account")
-                        .font(.title2.bold())
-                    Spacer()
-                    Button("Annulla") { dismiss() }
-                    Button("Salva", action: save)
+            formContent
+                .tvOSListFocusFix()
+                .navigationTitle("Nuovo account")
+                .toolbar {
+                    ToolbarItem { Button("Salva", action: save) }
                 }
-                .padding(.horizontal, 48)
-                .padding(.top, 24)
-                .padding(.bottom, 12)
-
-                formContent
-                    // See `AccountsView.tvOSPanel` for why this is needed on tvOS 17.
-                    .scrollClipDisabled(true)
-                    .padding(.horizontal, 48)
-            }
         }
     }
     #endif
@@ -285,7 +276,7 @@ struct AddAccountView: View {
             in: context
         )
         try? context.save()
-        dismiss()
+        if let onSaved { onSaved() } else { dismiss() }
     }
 
     private func applyDiscovered(_ server: DiscoveredSMBServer) {
@@ -387,6 +378,6 @@ struct AddAccountView: View {
             in: context
         )
         try? context.save()
-        dismiss()
+        if let onSaved { onSaved() } else { dismiss() }
     }
 }

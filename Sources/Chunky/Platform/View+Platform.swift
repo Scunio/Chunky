@@ -125,6 +125,20 @@ extension View {
 }
 
 extension View {
+    /// tvOS 17 clips List/Form/ScrollView content to its bounds by default, cutting off the
+    /// rounded-corner focus highlight once padding is applied to the container — see
+    /// https://developer.apple.com/forums/thread/740996. `.scrollClipDisabled(true)` is the
+    /// documented fix; a no-op on other platforms, where this bug doesn't exist.
+    func tvOSListFocusFix() -> some View {
+        #if os(tvOS)
+        self.scrollClipDisabled(true)
+        #else
+        self
+        #endif
+    }
+}
+
+extension View {
     /// Background of the parental lock screen, shared by all the windows it
     /// appears in (library, reader, Preferences on Mac). Must stay OPAQUE: a translucent
     /// material would let the content it's supposed to hide show through.

@@ -34,10 +34,7 @@ struct LocalUploadView: View {
                 }
             }
         }
-        // See `AccountsView.tvOSPanel` for why this is needed on tvOS 17.
-        #if os(tvOS)
-        .scrollClipDisabled(true)
-        #endif
+        .tvOSListFocusFix()
         .navigationTitle("Upload dalla rete")
         .onAppear {
             server.onFileReceived = { url in

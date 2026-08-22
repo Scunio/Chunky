@@ -21,8 +21,12 @@ struct ComicInfoSheet: View {
 
     var body: some View {
         #if os(tvOS)
-        tvOSPanel
-            .sheetSized()
+        TVPanel(title: "Info fumetto") {
+            Button("Chiudi") { dismiss() }
+        } content: {
+            listContent
+        }
+        .sheetSized()
         #else
         NavigationStack {
             listContent
@@ -93,40 +97,12 @@ struct ComicInfoSheet: View {
         }
     }
 
-    /// Same rationale as `AccountsView.tvOSPanel`: in a compact sheet the platform
-    /// navigation bar truncates the title and crams "Chiudi" against it. No NavigationStack
-    /// here — this sheet never pushes anything.
-    #if os(tvOS)
-    private var tvOSPanel: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 32) {
-                Text("Info fumetto")
-                    .font(.title2.bold())
-                Spacer()
-                Button("Chiudi") { dismiss() }
-            }
-            .padding(.horizontal, 48)
-            .padding(.top, 24)
-            .padding(.bottom, 12)
-
-            listContent
-                // See `AccountsView.tvOSPanel` for why this is needed on tvOS 17.
-                .scrollClipDisabled(true)
-                .padding(.horizontal, 48)
-        }
-    }
-    #endif
-
     /// tvOS renders `Label`'s icon and title with zero gap between them in list rows;
     /// an explicit layout keeps a readable spacing there while iOS/macOS keep the
     /// system label with its own metrics.
     private func actionLabel(_ title: String, systemImage: String) -> some View {
         #if os(tvOS)
-        HStack(spacing: 24) {
-            Image(systemName: systemImage)
-                .frame(width: 44)
-            Text(title)
-        }
+        tvOSRowLabel(title, systemImage: systemImage)
         #else
         Label {
             Text(title)
