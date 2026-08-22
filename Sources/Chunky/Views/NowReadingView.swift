@@ -18,7 +18,11 @@ struct NowReadingView: View {
                     .cornerRadius(6)
                     .overlay(pageBadge, alignment: .bottom)
             }
+            #if os(tvOS)
+            .buttonStyle(.card)
+            #else
             .buttonStyle(PlainButtonStyle())
+            #endif
         }
         .padding()
         .frame(width: 220)

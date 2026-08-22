@@ -249,6 +249,8 @@ struct AddAccountView: View {
                 .padding(.bottom, 12)
 
                 formContent
+                    // See `AccountsView.tvOSPanel` for why this is needed on tvOS 17.
+                    .scrollClipDisabled(true)
                     .padding(.horizontal, 48)
             }
         }

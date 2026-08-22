@@ -36,7 +36,11 @@ struct NewComicsView: View {
                                     .frame(maxWidth: .infinity)
                                     .cornerRadius(6)
                             }
+                            #if os(tvOS)
+                            .buttonStyle(.card)
+                            #else
                             .buttonStyle(PlainButtonStyle())
+                            #endif
                         }
                     }
                     .padding()
