@@ -1,6 +1,28 @@
 import SwiftUI
 
+/// Full grid item: cover art (`ComicCoverView`) plus title, stacked. On tvOS this combined
+/// shape isn't used inside a focusable `Button` (see `LibraryView.cellButton`) — a title nested
+/// inside the same container that receives the `.card` style's focus-scale transform scales and
+/// clips awkwardly there (same tvOS quirk documented by Swiftfin's `PosterButton`). Kept as one
+/// piece for callers that just need a static cover+title, e.g. `ReaderView`'s "up next" card.
 struct ComicGridItemView: View {
+    @ObservedObject var comic: ComicEntity
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ComicCoverView(comic: comic)
+            Text(comic.title ?? "Senza titolo")
+                .font(.caption.bold())
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// Cover art alone (image + progress/favorite/finished/pending-download badges), no title —
+/// the piece that should sit inside a focusable `Button` on tvOS, with the title placed as a
+/// sibling outside it. See `ComicGridItemView`'s doc comment for why.
+struct ComicCoverView: View {
     @ObservedObject var comic: ComicEntity
     /// Single source of truth for the "to download" badge: a live library-level `NSMetadataQuery`,
     /// so the badge updates on its own when the download finishes instead of depending on
@@ -8,30 +30,23 @@ struct ComicGridItemView: View {
     @ObservedObject private var downloadTracker = ICloudDownloadTracker.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // .overlay(alignment:), not a ZStack with conditional children: inside a
-            // LazyVGrid a ZStack sometimes fails to correctly resize/position children
-            // added via "if" (observed empirically — the same progress bar
-            // showed up in the horizontal "New" tray but not in the grid below it).
-            coverImage
-                .aspectRatio(2/3, contentMode: .fill)
-                .frame(maxWidth: .infinity)
-                .clipped()
-                .cornerRadius(8)
-                // A comic that's already finished is visible at a glance, like a checkmark
-                // ticked off a list: no need to read the badge to understand the status.
-                .saturation(comic.isFinished ? 0 : 1)
-                .opacity(comic.isFinished ? 0.55 : 1)
-                .overlay(progressBar, alignment: .bottom)
-                .overlay(finishedBadge, alignment: .topTrailing)
-                .overlay(favoriteBadge, alignment: .topLeading)
-                .overlay(pendingDownloadBadge, alignment: .bottomTrailing)
-
-            Text(comic.title ?? "Senza titolo")
-                .font(.caption.bold())
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
+        // .overlay(alignment:), not a ZStack with conditional children: inside a
+        // LazyVGrid a ZStack sometimes fails to correctly resize/position children
+        // added via "if" (observed empirically — the same progress bar
+        // showed up in the horizontal "New" tray but not in the grid below it).
+        coverImage
+            .aspectRatio(2/3, contentMode: .fill)
+            .frame(maxWidth: .infinity)
+            .clipped()
+            .cornerRadius(8)
+            // A comic that's already finished is visible at a glance, like a checkmark
+            // ticked off a list: no need to read the badge to understand the status.
+            .saturation(comic.isFinished ? 0 : 1)
+            .opacity(comic.isFinished ? 0.55 : 1)
+            .overlay(progressBar, alignment: .bottom)
+            .overlay(finishedBadge, alignment: .topTrailing)
+            .overlay(favoriteBadge, alignment: .topLeading)
+            .overlay(pendingDownloadBadge, alignment: .bottomTrailing)
     }
 
     private var isPendingDownload: Bool {

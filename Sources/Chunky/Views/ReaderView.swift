@@ -993,7 +993,7 @@ private struct ReaderContentView: View {
                 .foregroundColor(.white)
 
             HStack(spacing: 12) {
-                ComicGridItemView(comic: next)
+                ComicCoverView(comic: next)
                     .frame(width: 90, height: 135)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Continuare con:")

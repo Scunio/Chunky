@@ -730,17 +730,34 @@ private struct ComicCell: View {
 
     @ViewBuilder
     private var cellButton: some View {
+        #if os(tvOS)
+        // The title sits outside the Button, not inside `ComicGridItemView`'s combined
+        // cover+title stack: nested inside the container that gets `.card`'s focus-scale
+        // transform, it scaled and clipped awkwardly when focused (same fix Swiftfin's
+        // `PosterButton` documents as "layout required for tvOS focused offset label behavior").
+        VStack(alignment: .leading, spacing: 6) {
+            Button(action: onSelect) {
+                ComicCoverView(comic: comic)
+                    .overlay(selectionBadge, alignment: .topLeading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.card)
+            .accessibilityLabel(comic.title ?? "Fumetto")
+
+            Text(comic.title ?? "Senza titolo")
+                .font(.caption.bold())
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        #else
         Button(action: onSelect) {
             ComicGridItemView(comic: comic)
                 .overlay(selectionBadge, alignment: .topLeading)
                 .contentShape(Rectangle())
         }
-        #if os(tvOS)
-        .buttonStyle(.card)
-        #else
         .buttonStyle(.plain)
-        #endif
         .accessibilityLabel(comic.title ?? "Fumetto")
+        #endif
     }
 
     var body: some View {
