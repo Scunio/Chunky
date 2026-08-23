@@ -81,7 +81,7 @@ struct RemoteBrowserView: View {
                 }
             } catch {
                 await MainActor.run {
-                    errorMessage = error.localizedDescription
+                    errorMessage = error.chunkyFriendlyDescription
                     isLoading = false
                 }
             }
@@ -99,7 +99,7 @@ struct RemoteBrowserView: View {
                 }
             } catch {
                 await MainActor.run {
-                    viewModel.importError = error.localizedDescription
+                    viewModel.importError = error.chunkyFriendlyDescription
                     downloadingEntryIDs.remove(entry.id)
                 }
             }

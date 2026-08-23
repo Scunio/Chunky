@@ -326,7 +326,7 @@ struct AddAccountView: View {
                 }
             } catch {
                 await MainActor.run {
-                    speedTestResult = "Connessione non riuscita: \(error.localizedDescription)"
+                    speedTestResult = "Connessione non riuscita: \(error.chunkyFriendlyDescription)"
                     isRunningSpeedTest = false
                 }
             }

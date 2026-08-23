@@ -110,6 +110,42 @@ extension RemoteBrowsing {
     }
 }
 
+extension Error {
+    /// A plain error/errno number ("Error code 1") means nothing to someone who isn't reading
+    /// source code — this maps the network failures users actually hit while adding an account
+    /// (wrong host, server down, no Local Network permission) to what to check, instead of
+    /// just restating the failure.
+    var chunkyFriendlyDescription: String {
+        if let posixError = self as? POSIXError {
+            switch posixError.code {
+            case .EPERM:
+                return "Connessione bloccata dal sistema. Su Apple TV, apri Impostazioni → App → Chunky e attiva \"Rete locale\", poi riprova."
+            case .ETIMEDOUT:
+                return "Il server non ha risposto in tempo. Verifica che sia acceso e sulla stessa rete."
+            case .ECONNREFUSED:
+                return "Il server ha rifiutato la connessione. Controlla indirizzo e porta."
+            case .ENETUNREACH, .EHOSTUNREACH, .ENETDOWN:
+                return "Impossibile raggiungere il server. Verifica di essere sulla stessa rete Wi-Fi/LAN."
+            default:
+                break
+            }
+        }
+        if let urlError = self as? URLError {
+            switch urlError.code {
+            case .cannotFindHost, .cannotConnectToHost:
+                return "Impossibile raggiungere il server. Controlla l'indirizzo e che sia acceso."
+            case .timedOut:
+                return "Il server non ha risposto in tempo. Verifica che sia acceso e sulla stessa rete."
+            case .notConnectedToInternet, .networkConnectionLost:
+                return "Nessuna connessione di rete. Verifica il Wi-Fi/LAN."
+            default:
+                break
+            }
+        }
+        return localizedDescription
+    }
+}
+
 enum RemoteBrowsingFactory {
     static func makeBrowser(for kind: RemoteAccountKind) -> RemoteBrowsing {
         switch kind {
