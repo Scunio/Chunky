@@ -21,7 +21,7 @@ struct TVPanel<Actions: View, Content: View>: View {
             }
             .padding(.horizontal, 48)
             .padding(.top, 24)
-            .padding(.bottom, 12)
+            .padding(.bottom, 28)
 
             content
                 .tvOSListFocusFix()

@@ -240,7 +240,7 @@ struct AccountsView: View {
                     .font(.title2.bold())
                     .padding(.horizontal, 48)
                     .padding(.top, 24)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, 28)
                 tvOSCategoryList
                     .tvOSListFocusFix()
             }
