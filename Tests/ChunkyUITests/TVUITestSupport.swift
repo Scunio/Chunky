@@ -97,6 +97,12 @@ extension XCTestCase {
             return
         }
         let remote = XCUIRemote.shared
+        // A populated Libreria grid can start focus on its first cell, not the tab bar — a
+        // few presses up walk it back onto the bar before reading which tab is focused.
+        for _ in 0..<3 {
+            remote.press(.up)
+            Thread.sleep(forTimeInterval: 0.2)
+        }
         // Find which tab is currently focused by checking each in turn — cheap (5 elements)
         // and avoids assuming the bar starts on "Libreria" (true right after launch, not
         // necessarily true mid-test).
