@@ -575,6 +575,20 @@ struct LibraryView: View {
             #endif
             Text(LibraryGrouping.headerText(title: title, comics: comics))
                 .font(.subheadline.bold())
+            // On tvOS's wide grid, pushing this metadata to the far edge with a full-width
+            // Spacer leaves it looking like an unrelated stray number — keep it next to the
+            // title instead, like the row content below it.
+            #if os(tvOS)
+            if comics.contains(where: { $0.progress > 0 }) {
+                Text("· INIZIATA")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            Text("· \(comics.count)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Spacer()
+            #else
             Spacer()
             if comics.contains(where: { $0.progress > 0 }) {
                 Text("INIZIATA")
@@ -584,6 +598,7 @@ struct LibraryView: View {
             Text("\(comics.count)")
                 .font(.caption)
                 .foregroundColor(.secondary)
+            #endif
         }
         .foregroundColor(.primary)
         .padding(.horizontal, gridHorizontalPadding)
