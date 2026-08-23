@@ -68,16 +68,23 @@ extension XCTestCase {
     }
 
     /// Types `text` into `field`: selects it (opening tvOS's full-screen text-entry keyboard),
-    /// types, then confirms with the keyboard's own Done/Return via `.select` after a settle
-    /// delay — the keyboard sheet needs a moment to actually appear before typing lands in it.
+    /// types, then dismisses with Menu — this keyboard has no Done/Return key, and a second
+    /// `.select` just no-ops on the text view, leaving it open so the next field's `.select`
+    /// re-enters the same editor and appends instead of starting fresh. Types on `app`, not
+    /// `field` — once editing starts, tvOS swaps the field's placeholder for a dictation hint,
+    /// which breaks a query matched by placeholder; `app.typeText` goes to whatever has
+    /// keyboard focus instead.
     func enterText(_ text: String, into field: XCUIElement, app: XCUIApplication) {
         let remote = XCUIRemote.shared
         remote.press(.select)
         Thread.sleep(forTimeInterval: 1)
-        field.typeText(text)
+        app.typeText(text)
         Thread.sleep(forTimeInterval: 0.5)
-        remote.press(.select)
-        Thread.sleep(forTimeInterval: 0.8)
+        remote.press(.menu)
+        for _ in 0..<10 where app.keyboards.firstMatch.exists {
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        Thread.sleep(forTimeInterval: 0.3)
     }
 
     /// Moves the tab bar's selection to `tabLabel` by pressing right/left from wherever it

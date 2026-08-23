@@ -25,10 +25,7 @@ final class TVAccountUITests: XCTestCase {
         let webdavRow = app.buttons["Nuovo account WebDAV"]
         XCTAssertTrue(webdavRow.waitForExistence(timeout: 5))
 
-        // `hasFocus` on a List-embedded Button is unreliable here (XCUITest reads a stale
-        // accessibility snapshot for reused list cells), so this steers by a fixed press count
-        // instead of polling focus: Downloads → Web → Calibre/OPDS → WebDAV, 4 presses down
-        // from the tab bar with no accounts saved yet.
+        // `hasFocus` on a List-embedded Button is unreliable here — fixed press count instead.
         let remote = XCUIRemote.shared
         for _ in 0..<4 {
             remote.press(.down)
