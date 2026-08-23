@@ -33,15 +33,22 @@ final class TVRedesignScreenshotUITests: XCTestCase {
         // than assuming a fixed wait gets past it.
         _ = app.wait(for: .runningForeground, timeout: 20)
         var sawLibreria = false
-        for _ in 0..<15 {
-            if app.buttons["Libreria"].waitForExistence(timeout: 2) {
+        for attempt in 0..<40 {
+            if app.buttons["Libreria"].waitForExistence(timeout: 1.5) {
                 sawLibreria = true
                 break
             }
+            // The system profile picker ("Lorenzo"/"Anna") intercepts automated launches on
+            // this device intermittently and unpredictably (confirmed: it can reappear even
+            // mid-session, not just at cold launch) — press select regardless of what's
+            // focused, since on the picker that confirms a profile and on Chunky itself it's
+            // a harmless no-op (nothing new becomes focused from repeatedly selecting the
+            // already-focused "Libreria" tab). Patience over cleverness: 40 attempts, ~1s apart.
             remote.press(.select)
             Thread.sleep(forTimeInterval: 1)
+            if attempt % 5 == 4 { attach(app, name: "00-retry-\(attempt)") }
         }
-        XCTAssertTrue(sawLibreria, "La tab bar di Chunky non è comparsa: probabilmente bloccati sulla schermata profilo di sistema.")
+        XCTAssertTrue(sawLibreria, "La tab bar di Chunky non è comparsa dopo 40 tentativi: probabilmente bloccati sulla schermata profilo di sistema.")
         Thread.sleep(forTimeInterval: 1)
         attach(app, name: "01-library-tab")
 
