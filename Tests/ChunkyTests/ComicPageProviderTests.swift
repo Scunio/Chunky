@@ -60,6 +60,8 @@ struct CBZPageProviderTests {
     }
 }
 
+// PDFPageProvider doesn't exist on tvOS: PDFKit isn't available there (see PDFPageProvider.swift).
+#if !os(tvOS)
 @Suite("PDF")
 struct PDFPageProviderTests {
     private func provider() throws -> PDFPageProvider {
@@ -107,6 +109,7 @@ struct PDFPageProviderTests {
         #expect(throws: ComicReadError.pageOutOfRange) { try sut.image(atPage: index) }
     }
 }
+#endif
 
 @Suite("CBR")
 struct CBRPageProviderTests {
