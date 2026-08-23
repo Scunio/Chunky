@@ -14,11 +14,11 @@ struct TVComicDetailView: View {
     }
 
     var body: some View {
+        // The cover can't be a ZStack sibling: a resizable image with `.fill` reports a size
+        // larger than proposed on one axis to preserve its aspect ratio, so the ZStack sizes
+        // itself to that oversized image — pushing the bottom-aligned title/button far below
+        // the actual screen bounds. As a `.background` it fills its container's real size instead.
         ZStack(alignment: .bottomLeading) {
-            coverImage
-                .aspectRatio(contentMode: .fill)
-                .ignoresSafeArea()
-
             LinearGradient(
                 colors: [.black.opacity(0.85), .black.opacity(0.4), .clear],
                 startPoint: .bottom,
@@ -49,6 +49,13 @@ struct TVComicDetailView: View {
             }
             .padding(.horizontal, 80)
             .padding(.bottom, 80)
+        }
+        .background {
+            coverImage
+                .aspectRatio(contentMode: .fill)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .ignoresSafeArea()
         }
         .navigationTitle("")
         .toolbar(.hidden, for: .navigationBar)
