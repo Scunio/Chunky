@@ -38,7 +38,13 @@ enum LibraryStorage {
         }
         let root: URL
         #if os(tvOS)
-        root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        // Not `.documentDirectory`: tvOS gives apps no persistent Documents storage at all —
+        // confirmed on a physical Apple TV, every write API (Cocoa and raw POSIX) fails with
+        // EPERM there, while the identical call against `.cachesDirectory` succeeds. Apple's own
+        // tvOS storage guidance is Caches/Temporary only; Core Data's `defaultDirectoryURL()`
+        // already lands here for the same reason (see `PersistenceController`).
+        root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ComicsLibrary")
         #else
         if let ubiquityURL = FileManager.default.url(forUbiquityContainerIdentifier: ubiquityContainerID) {
             // The root folder must be "Documents" (not one level below, e.g.
@@ -109,8 +115,16 @@ enum LibraryStorage {
     /// when iCloud Drive isn't available: with iCloud active the library lives in the
     /// ubiquity container, and without `adoptFilesDroppedInLocalDocuments()` dragged files would stay
     /// here without ever appearing in the library.
+    ///
+    /// tvOS has no Files app/USB drop target at all — this is `rootFolderURL()` there instead of
+    /// the (unwritable, see `rootFolderURL()`) Documents folder, so callers that don't special-case
+    /// platforms, like `UITestSeed`, still land where the library actually scans.
     static var localDocumentsURL: URL {
+        #if os(tvOS)
+        rootFolderURL()
+        #else
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        #endif
     }
 
     /// Brings into the library the comics left in the local Documents folder and returns their
