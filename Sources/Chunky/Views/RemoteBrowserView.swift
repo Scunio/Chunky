@@ -36,6 +36,7 @@ struct RemoteBrowserView: View {
                 List(entries) { entry in
                     row(for: entry)
                 }
+                .tvOSListFocusFix()
             }
         }
         .navigationTitle(title ?? account.name ?? "Sfoglia")
