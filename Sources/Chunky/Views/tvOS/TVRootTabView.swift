@@ -21,7 +21,8 @@ struct TVRootTabView: View {
             NavigationStack { LibraryView(selection: .favorites) }
                 .tabItem { Label("Preferiti", systemImage: "star") }
 
-            NavigationStack { AccountsView() }
+            // No wrapping NavigationStack: AccountsView's tvOS body swaps its detail pane in place, no push/pop needed here.
+            AccountsView()
                 .tabItem { Label("Account", systemImage: "cloud") }
 
             NavigationStack { TVSettingsView() }

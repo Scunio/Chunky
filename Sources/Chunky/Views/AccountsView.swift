@@ -228,58 +228,63 @@ struct AccountsView: View {
         }
     }
 
-    /// tvOS's native pattern for a filter→results screen (per the HIG's split-view guidance):
-    /// categories (Downloads/Web/accounts/add-account) on the left, the selected one's content
-    /// on the right — not a single-column list scrolling top to bottom like iOS/macOS. No
-    /// NavigationStack here: both call sites already wrap this view in one.
+    /// tvOS's native pattern for a filter→results screen: categories on the left, the selected
+    /// one's content on the right — not a scrolling single column like iOS/macOS. A plain
+    /// `HStack`, not `NavigationSplitView`: the system container left the tab bar unable to
+    /// focus into the category list at all (verified via UI test).
     #if os(tvOS)
     private var tvOSSplitView: some View {
-        NavigationSplitView {
-            tvOSCategoryList
-                .navigationTitle("Account")
-                .tvOSListFocusFix()
-        } detail: {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Account")
+                    .font(.title2.bold())
+                    .padding(.horizontal, 48)
+                    .padding(.top, 24)
+                    .padding(.bottom, 12)
+                tvOSCategoryList
+                    .tvOSListFocusFix()
+            }
+            .frame(width: 640)
+
             tvOSDetailContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationSplitViewStyle(.balanced)
     }
 
+    /// Real `Button`s per row, not `.tag()` + `List(selection:)`: plain tagged content never
+    /// became focusable on tvOS — the focus engine needs an actually-interactive control.
     private var tvOSCategoryList: some View {
-        // `.plain`, not the default: `NavigationSplitView`'s primary column defaults to a
-        // sidebar-style list that ignores `.tvOSRowBackground()` — this is the one that respects it.
-        List(selection: $selectedCategory) {
+        List {
             Section {
-                rowLabel("Downloads", systemImage: "arrow.down.circle")
-                    .tag(TVAccountCategory.downloads)
-                    .tvOSRowBackground()
-                rowLabel("Web", systemImage: "globe")
-                    .tag(TVAccountCategory.web)
-                    .tvOSRowBackground()
+                categoryButton("Downloads", systemImage: "arrow.down.circle", category: .downloads)
+                categoryButton("Web", systemImage: "globe", category: .web)
             }
 
             if !accounts.isEmpty {
                 Section("I tuoi account") {
                     ForEach(accounts) { account in
-                        rowLabel(account.name ?? "Account", systemImage: account.kind.systemImage)
-                            .tag(TVAccountCategory.account(account.objectID))
-                            .tvOSRowBackground()
+                        categoryButton(account.name ?? "Account", systemImage: account.kind.systemImage,
+                                       category: .account(account.objectID))
                     }
                 }
             }
 
             Section("Aggiungi account") {
-                rowLabel("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
-                    .tag(TVAccountCategory.addAccount(.opds))
-                    .tvOSRowBackground()
-                rowLabel("Nuovo account WebDAV", systemImage: "plus.circle")
-                    .tag(TVAccountCategory.addAccount(.webdav))
-                    .tvOSRowBackground()
-                rowLabel("Nuovo account SMB", systemImage: RemoteAccountKind.smb.systemImage)
-                    .tag(TVAccountCategory.addAccount(.smb))
-                    .tvOSRowBackground()
+                categoryButton("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage,
+                               category: .addAccount(.opds))
+                categoryButton("Nuovo account WebDAV", systemImage: "plus.circle", category: .addAccount(.webdav))
+                categoryButton("Nuovo account SMB", systemImage: RemoteAccountKind.smb.systemImage,
+                               category: .addAccount(.smb))
             }
         }
         .listStyle(.plain)
+    }
+
+    private func categoryButton(_ title: String, systemImage: String, category: TVAccountCategory) -> some View {
+        Button(action: { selectedCategory = category }) {
+            rowLabel(title, systemImage: systemImage)
+        }
+        .tvOSRowBackground()
     }
 
     @ViewBuilder
