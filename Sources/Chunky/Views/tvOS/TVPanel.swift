@@ -35,9 +35,14 @@ extension View {
     /// text on the blurred background until focused, which reads as unfinished next to real
     /// tvOS apps (e.g. Infuse's Settings screen, which pills every row light gray at rest and
     /// orange when focused). Chain onto row content inside a `List`.
+    ///
+    /// A full `Capsule`, not a fixed corner radius: the system's own focus highlight on a
+    /// tvOS List row is a capsule shape, not a 12pt-rounded rectangle — confirmed on-device,
+    /// the mismatch made the row's shape visibly change between rest and focus instead of
+    /// just scaling/highlighting.
     func tvOSRowBackground() -> some View {
         listRowBackground(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            Capsule()
                 .fill(Color.white.opacity(0.12))
         )
     }
@@ -52,6 +57,14 @@ func tvOSRowLabel(_ title: String, systemImage: String, tint: Color = .primary) 
             .foregroundColor(tint)
             .frame(width: 44)
         Text(title)
+    }
+}
+
+#Preview {
+    TVPanel(title: "Anteprima") {
+        Button("Chiudi") {}
+    } content: {
+        Text("Contenuto")
     }
 }
 #endif

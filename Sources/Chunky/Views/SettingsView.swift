@@ -333,3 +333,7 @@ struct SettingsView: View {
         return "\(version) (\(build))"
     }
 }
+
+#Preview {
+    SettingsView()
+}

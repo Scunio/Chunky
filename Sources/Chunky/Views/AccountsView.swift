@@ -12,15 +12,6 @@ private struct OpenRemoteService {
     let tintColor: Color
 }
 
-#if os(tvOS)
-private enum TVAccountCategory: Hashable {
-    case downloads
-    case web
-    case account(NSManagedObjectID)
-    case addAccount(RemoteAccountKind)
-}
-#endif
-
 struct AccountsView: View {
     @Environment(\.managedObjectContext) private var context
     @EnvironmentObject private var viewModel: LibraryViewModel
@@ -48,9 +39,6 @@ struct AccountsView: View {
     /// Closes the sheet from `toolbarDoneButton` (no-op on tvOS — see `View+ToolbarDoneButton.swift`
     /// — where dismissal is instead the system Menu-button behavior on a plain `.sheet`).
     @Environment(\.dismiss) private var dismiss
-    #if os(tvOS)
-    @State private var selectedCategory: TVAccountCategory?
-    #endif
 
     /// No system file picker on tvOS, so folder-based import has nothing to open there.
     private var folderConversionAvailable: Bool {
@@ -103,12 +91,13 @@ struct AccountsView: View {
         #endif
     }
 
-    /// iOS/macOS keep the system navigation bar and a single-column list; tvOS is a genuine
-    /// split view (category list + detail pane) — see `tvOSSplitView`.
+    /// iOS/macOS keep the system navigation bar and a single-column list; tvOS pushes into each
+    /// destination instead (see `tvOSAccountList`) — matching Infuse's "Condivisioni" flow
+    /// (confirmed via on-device photos), not a permanently-visible category/detail split.
     @ViewBuilder
     private var panel: some View {
         #if os(tvOS)
-        tvOSSplitView
+        tvOSAccountList
         #else
         accountList
             .navigationTitle("Account")
@@ -228,80 +217,78 @@ struct AccountsView: View {
         }
     }
 
-    /// tvOS's native pattern for a filter→results screen: categories on the left, the selected
-    /// one's content on the right — not a scrolling single column like iOS/macOS. A plain
-    /// `HStack`, not `NavigationSplitView`: the system container left the tab bar unable to
-    /// focus into the category list at all (verified via UI test).
+    /// Infuse's "Condivisioni" pattern (confirmed via on-device photos): a persistent
+    /// illustration panel on the left, a plain pushed list on the right — not a permanently
+    /// split category/detail pane. Each row pushes into its destination via `NavigationLink`
+    /// like every other tvOS screen in the app, instead of swapping a detail pane in place.
+    /// Its own `NavigationStack`: this is the tvOS "Account" tab's root, nothing above it
+    /// supplies one (see `TVRootTabView`).
     #if os(tvOS)
-    private var tvOSSplitView: some View {
-        HStack(spacing: 0) {
+    private var tvOSAccountList: some View {
+        NavigationStack {
+            // Title lives in the layout, not `.navigationTitle` — same fix as
+            // `ColorThemeView`/`ParentalLockSettingsView`/`LibraryView`: on tvOS that overlays a
+            // fixed screen position instead of a sticky header, so a long enough list scrolls
+            // right through it.
             VStack(alignment: .leading, spacing: 0) {
                 Text("Account")
-                    .font(.title2.bold())
+                    .font(.largeTitle.bold())
                     .padding(.horizontal, 48)
-                    .padding(.top, 24)
-                    .padding(.bottom, 28)
-                tvOSCategoryList
-                    .tvOSListFocusFix()
-            }
-            .frame(width: 640)
+                    .padding(.top, 60)
+                    .padding(.bottom, 24)
 
-            tvOSDetailContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                accountListBody
+            }
+            .navigationTitle("")
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 
-    /// Real `Button`s per row, not `.tag()` + `List(selection:)`: plain tagged content never
-    /// became focusable on tvOS — the focus engine needs an actually-interactive control.
-    private var tvOSCategoryList: some View {
-        List {
-            Section {
-                categoryButton("Downloads", systemImage: "arrow.down.circle", category: .downloads)
-                categoryButton("Web", systemImage: "globe", category: .web)
-            }
+    private var accountListBody: some View {
+        HStack(spacing: 0) {
+            TVIllustrationPanel()
+                .frame(width: 480)
 
-            if !accounts.isEmpty {
-                Section("I tuoi account") {
-                    ForEach(accounts) { account in
-                        categoryButton(account.name ?? "Account", systemImage: account.kind.systemImage,
-                                       category: .account(account.objectID))
+            List {
+                    Section {
+                        NavigationLink(destination: DownloadsView()) {
+                            rowLabel("Downloads", systemImage: "arrow.down.circle")
+                        }
+                        .tvOSRowBackground()
+                        NavigationLink(destination: LocalUploadView()) {
+                            rowLabel("Web", systemImage: "globe")
+                        }
+                        .tvOSRowBackground()
+                    }
+
+                    if !accounts.isEmpty {
+                        Section("I tuoi account") {
+                            ForEach(accounts) { account in
+                                NavigationLink(destination: RemoteBrowserView(account: account)) {
+                                    rowLabel(account.name ?? "Account", systemImage: account.kind.systemImage)
+                                }
+                                .tvOSRowBackground()
+                            }
+                        }
+                    }
+
+                    Section("Aggiungi account") {
+                        NavigationLink(destination: AddAccountView(initialKind: .opds)) {
+                            rowLabel("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
+                        }
+                        .tvOSRowBackground()
+                        NavigationLink(destination: AddAccountView(initialKind: .webdav)) {
+                            rowLabel("Nuovo account WebDAV", systemImage: "plus.circle")
+                        }
+                        .tvOSRowBackground()
+                        NavigationLink(destination: AddAccountView(initialKind: .smb)) {
+                            rowLabel("Nuovo account SMB", systemImage: RemoteAccountKind.smb.systemImage)
+                        }
+                        .tvOSRowBackground()
                     }
                 }
-            }
-
-            Section("Aggiungi account") {
-                categoryButton("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage,
-                               category: .addAccount(.opds))
-                categoryButton("Nuovo account WebDAV", systemImage: "plus.circle", category: .addAccount(.webdav))
-                categoryButton("Nuovo account SMB", systemImage: RemoteAccountKind.smb.systemImage,
-                               category: .addAccount(.smb))
-            }
-        }
-        .listStyle(.plain)
-    }
-
-    private func categoryButton(_ title: String, systemImage: String, category: TVAccountCategory) -> some View {
-        Button(action: { selectedCategory = category }) {
-            rowLabel(title, systemImage: systemImage)
-        }
-        .tvOSRowBackground()
-    }
-
-    @ViewBuilder
-    private var tvOSDetailContent: some View {
-        switch selectedCategory {
-        case .downloads:
-            DownloadsView()
-        case .web:
-            LocalUploadView()
-        case .account(let objectID):
-            if let account = accounts.first(where: { $0.objectID == objectID }) {
-                RemoteBrowserView(account: account)
-            }
-        case .addAccount(let kind):
-            AddAccountView(initialKind: kind) { selectedCategory = .downloads }
-        case nil:
-            ContentUnavailableView("Scegli una categoria", systemImage: "cloud")
+            .listStyle(.plain)
+            .tvOSListFocusFix()
         }
     }
     #endif
@@ -356,4 +343,11 @@ struct AccountsView: View {
             }
         }
     }
+}
+
+#Preview {
+    let controller = PersistenceController(inMemory: true)
+    return AccountsView()
+        .environment(\.managedObjectContext, controller.container.viewContext)
+        .environmentObject(LibraryViewModel())
 }

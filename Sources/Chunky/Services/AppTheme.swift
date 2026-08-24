@@ -49,6 +49,16 @@ final class AppTheme: ObservableObject {
     var accent: Color? { Color(hex: accentHex) }
     var pageTint: Color? { Color(hex: pageTintHex) }
 
+    /// A dimmer variant of `text`, for secondary/metadata labels (row counts, subtitles) —
+    /// use this instead of the system `.secondary` wherever `text` is also in play. `.secondary`
+    /// is computed from `colorSchemeMode`, not from this custom palette, so a light custom
+    /// `background`/`text` combined with `colorSchemeMode = .dark` (a real, reachable
+    /// combination — confirmed live) makes `.secondary` render near-invisible: a light gray
+    /// meant for a dark background, sitting on the light custom one instead. Falls back to nil
+    /// (inherit the system `.secondary`) when there's no custom text color to dim in the first
+    /// place, so the automatic/system-palette case is unaffected.
+    var secondaryText: Color? { text?.opacity(0.6) }
+
     var colorSchemeMode: AppColorSchemeMode {
         get { AppColorSchemeMode(rawValue: colorSchemeModeRawValue) ?? .automatic }
         set { colorSchemeModeRawValue = newValue.rawValue }

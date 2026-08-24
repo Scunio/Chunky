@@ -8,6 +8,9 @@ struct RemoteBrowserView: View {
 
     @Environment(\.managedObjectContext) private var context
     @EnvironmentObject private var viewModel: LibraryViewModel
+    #if os(tvOS)
+    @Environment(\.dismiss) private var dismiss
+    #endif
 
     @State private var entries: [RemoteEntry] = []
     @State private var isLoading = false
@@ -18,29 +21,49 @@ struct RemoteBrowserView: View {
     private var url: URL { startURL ?? account.serverURL ?? URL(string: "about:blank")! }
 
     var body: some View {
-        Group {
-            if isLoading && entries.isEmpty {
-                ProgressView("Caricamento…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let errorMessage = errorMessage {
-                ContentUnavailableView {
-                    Label("Impossibile caricare", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(errorMessage)
-                } actions: {
-                    Button("Riprova", action: load)
-                }
-            } else if entries.isEmpty {
-                ContentUnavailableView("Nessun contenuto qui.", systemImage: "folder")
-            } else {
-                List(entries) { entry in
-                    row(for: entry)
-                }
-                .tvOSListFocusFix()
-            }
+        // Same fix as `DownloadsView`/`ColorThemeView`: `.navigationTitle` overlays a fixed
+        // screen position on tvOS instead of a sticky header, and a remote folder listing is
+        // unbounded. `TVPanel` puts the title in the layout instead.
+        #if os(tvOS)
+        TVPanel(title: title ?? account.name ?? "Sfoglia") {
+            EmptyView()
+        } content: {
+            browserContent
         }
-        .navigationTitle(title ?? account.name ?? "Sfoglia")
+        // Same missing-affordance fix as `DownloadsView` — pushed from the Account tab's
+        // hidden-nav-bar `NavigationStack` root, so Menu would otherwise exit the whole app
+        // instead of popping back (one level, whether that's the Account list or a parent
+        // folder — recursion into a subfolder pushes another instance of this same view).
+        .onExitCommand { dismiss() }
         .onAppear(perform: load)
+        #else
+        browserContent
+            .navigationTitle(title ?? account.name ?? "Sfoglia")
+            .onAppear(perform: load)
+        #endif
+    }
+
+    @ViewBuilder
+    private var browserContent: some View {
+        if isLoading && entries.isEmpty {
+            ProgressView("Caricamento…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let errorMessage = errorMessage {
+            ContentUnavailableView {
+                Label("Impossibile caricare", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(errorMessage)
+            } actions: {
+                Button("Riprova", action: load)
+            }
+        } else if entries.isEmpty {
+            ContentUnavailableView("Nessun contenuto qui.", systemImage: "folder")
+        } else {
+            List(entries) { entry in
+                row(for: entry)
+            }
+            .tvOSListFocusFix()
+        }
     }
 
     @ViewBuilder
@@ -105,4 +128,22 @@ struct RemoteBrowserView: View {
             }
         }
     }
+}
+
+#Preview {
+    let controller = PersistenceController(inMemory: true)
+    let context = controller.container.viewContext
+    let account = RemoteAccountEntity.create(
+        kind: .opds,
+        name: "Anteprima",
+        serverURLString: "http://192.168.1.10:8080/opds",
+        username: nil,
+        password: nil,
+        in: context
+    )
+    return NavigationStack {
+        RemoteBrowserView(account: account)
+    }
+    .environment(\.managedObjectContext, context)
+    .environmentObject(LibraryViewModel())
 }

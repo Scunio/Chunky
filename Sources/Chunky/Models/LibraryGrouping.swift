@@ -29,10 +29,15 @@ enum LibraryGrouping {
         }
     }
 
+    /// Pseudo-section for "recently added" (tvOS's Novità section in the library grid): its
+    /// comics are grouped by date added, not by series, so a shared trailing-number range
+    /// across them is coincidence, not an issue range — showing it would be nonsensical.
+    static let recentTitle = "Novità"
+
     /// "TOPOLINO 3594-3687" when the titles end with a number (e.g. periodical issues):
     /// otherwise just the series name.
     static func headerText(title: String, comics: [ComicEntity]) -> String {
-        guard title != ungroupedTitle else { return title.uppercased() }
+        guard title != ungroupedTitle, title != recentTitle else { return title.uppercased() }
         let numbers = comics.compactMap { issueNumber(fromTitle: $0.title ?? "") }
         guard let min = numbers.min(), let max = numbers.max(), numbers.count == comics.count else {
             return title.uppercased()

@@ -33,6 +33,26 @@ struct ColorThemeView: View {
     }
 
     var body: some View {
+        #if os(tvOS)
+        // `.navigationTitle` on tvOS renders as an overlay pinned to a fixed screen position,
+        // not a sticky header that pushes content down — a `Form` this long scrolls its
+        // sections right through it. `TVPanel` puts the title in the layout instead, so it
+        // never overlaps.
+        TVPanel(title: "Colori") {
+            EmptyView()
+        } content: {
+            formContent
+        }
+        #else
+        formContent
+            .navigationTitle("Colori")
+            #if os(macOS)
+            .formStyle(.grouped)
+            #endif
+        #endif
+    }
+
+    private var formContent: some View {
         Form {
             Section(
                 header: Text("Modalità"),
@@ -93,7 +113,7 @@ struct ColorThemeView: View {
                     }
                 }
                 #endif
-                HStack(spacing: 12) {
+                HStack(spacing: tvOSTintButtonSpacing) {
                     tintPresetButton(name: "Nessuno", hex: "")
                     tintPresetButton(name: "Seppia", hex: "#704214", opacity: 0.18)
                     tintPresetButton(name: "Notte", hex: "#0A1A2F", opacity: 0.35)
@@ -104,10 +124,6 @@ struct ColorThemeView: View {
                 Button("Ripristina automatico", action: theme.reset)
             }
         }
-        #if os(macOS)
-        .formStyle(.grouped)
-        #endif
-        .navigationTitle("Colori")
     }
 
     #if os(tvOS)
@@ -120,6 +136,18 @@ struct ColorThemeView: View {
     }
     #endif
 
+    /// tvOS's focus halo is sized by the system, not by this button's own padding/background —
+    /// with `PlainButtonStyle()` it still draws a halo that ignores this row's tight spacing and
+    /// overlaps the neighboring buttons. `.card` sizes its focus effect from the button's real
+    /// bounds instead, so the row needs the matching wider gap `.card` expects between buttons.
+    private var tvOSTintButtonSpacing: CGFloat {
+        #if os(tvOS)
+        40
+        #else
+        12
+        #endif
+    }
+
     private func tintPresetButton(name: String, hex: String, opacity: Double = 0.25) -> some View {
         Button(action: {
             theme.pageTintHex = hex
@@ -129,10 +157,16 @@ struct ColorThemeView: View {
                 .font(.caption)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
+                #if !os(tvOS)
                 .background(Color.secondary.opacity(0.15))
                 .cornerRadius(8)
+                #endif
         }
+        #if os(tvOS)
+        .buttonStyle(.card)
+        #else
         .buttonStyle(PlainButtonStyle())
+        #endif
     }
 
     #if !os(tvOS)
@@ -164,4 +198,8 @@ struct ColorThemeView: View {
         #endif
     }
     #endif
+}
+
+#Preview {
+    ColorThemeView()
 }

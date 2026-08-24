@@ -173,3 +173,10 @@ struct ContentView: View {
         #endif
     }
 }
+
+#Preview {
+    let controller = PersistenceController(inMemory: true)
+    return ContentView()
+        .environment(\.managedObjectContext, controller.container.viewContext)
+        .environmentObject(LibraryViewModel())
+}

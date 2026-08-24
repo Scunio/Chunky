@@ -69,9 +69,9 @@ final class ParentalLock: ObservableObject {
     }
 
     func unlockWithBiometrics(completion: @escaping (Bool) -> Void) {
-        // No Face ID/Touch ID (or any LAContext biometrics API) on tvOS: `isBiometricsEnabled`
-        // has no UI to turn it on there anyway (`ParentalLockSettingsView` isn't reachable),
-        // so this is unreachable in practice, but still needs a body that compiles.
+        // No Face ID/Touch ID (or any LAContext biometrics API) on tvOS: the toggle for
+        // `isBiometricsEnabled` is hidden there (`ParentalLockSettingsView`), so this is
+        // unreachable in practice, but still needs a body that compiles.
         #if os(tvOS)
         completion(false)
         #else

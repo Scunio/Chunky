@@ -314,4 +314,8 @@ private struct InfoSettingsTab: View {
         return "\(version) (\(build))"
     }
 }
+
+#Preview {
+    MacSettingsView()
+}
 #endif

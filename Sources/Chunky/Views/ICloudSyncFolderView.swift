@@ -67,3 +67,10 @@ struct ICloudSyncFolderView: View {
         }
     }
 }
+
+#Preview {
+    let controller = PersistenceController(inMemory: true)
+    return ICloudSyncFolderView()
+        .environment(\.managedObjectContext, controller.container.viewContext)
+        .environmentObject(LibraryViewModel())
+}

@@ -78,3 +78,16 @@ struct NewComicsView: View {
         }
     }
 }
+
+#Preview {
+    let controller = PersistenceController(inMemory: true)
+    let context = controller.container.viewContext
+    let comic = ComicEntity.create(
+        title: "Anteprima",
+        relativePath: "preview.cbz",
+        format: .cbz,
+        in: context
+    )
+    return NewComicsView(comics: [comic], onSelect: { _ in }, onClear: {})
+        .environment(\.managedObjectContext, context)
+}

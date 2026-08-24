@@ -63,3 +63,16 @@ struct NowReadingView: View {
         }
     }
 }
+
+#Preview {
+    let controller = PersistenceController(inMemory: true)
+    let context = controller.container.viewContext
+    let comic = ComicEntity.create(
+        title: "Anteprima",
+        relativePath: "preview.cbz",
+        format: .cbz,
+        in: context
+    )
+    return NowReadingView(comic: comic, onResume: {})
+        .environment(\.managedObjectContext, context)
+}

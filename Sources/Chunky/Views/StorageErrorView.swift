@@ -13,3 +13,9 @@ struct StorageErrorView: View {
         }
     }
 }
+
+#Preview {
+    StorageErrorView(error: NSError(domain: "com.scunio.chunky", code: 1, userInfo: [
+        NSLocalizedDescriptionKey: "Impossibile aprire lo store persistente."
+    ]))
+}

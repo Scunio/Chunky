@@ -43,6 +43,14 @@ struct ReaderFindView: View {
         .onAppear { isFieldFocused = true }
     }
 
+    private var tvOSTrailingButtonSpacing: CGFloat {
+        #if os(tvOS)
+        24
+        #else
+        8
+        #endif
+    }
+
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
@@ -56,16 +64,29 @@ struct ReaderFindView: View {
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 #endif
-            if !query.isEmpty {
-                Button(action: { query = "" }) {
-                    Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+            // Own HStack with wider tvOS spacing: `.card`'s focus halo is sized by the system,
+            // not by these buttons' own (small, icon-sized) bounds — at the outer HStack's 8pt
+            // gap it bled into whichever of these two sat next to it.
+            HStack(spacing: tvOSTrailingButtonSpacing) {
+                if !query.isEmpty {
+                    Button(action: { query = "" }) {
+                        Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                    }
+                    #if os(tvOS)
+                    .buttonStyle(.card)
+                    #else
+                    .buttonStyle(PlainButtonStyle())
+                    #endif
                 }
+                Button(action: onClose) {
+                    Text("Fine").foregroundColor(.accentColor)
+                }
+                #if os(tvOS)
+                .buttonStyle(.card)
+                #else
                 .buttonStyle(PlainButtonStyle())
+                #endif
             }
-            Button(action: onClose) {
-                Text("Fine").foregroundColor(.accentColor)
-            }
-            .buttonStyle(PlainButtonStyle())
         }
         .padding(12)
     }

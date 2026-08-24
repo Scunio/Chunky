@@ -60,8 +60,16 @@ private struct TVNowReadingTabView: View {
                     Text("\(min(Int(comic.lastReadPage) + 1, max(Int(comic.pageCount), 1))) / \(comic.pageCount)")
                         .foregroundColor(.secondary)
 
-                    Button("Riprendi") { selectedComic = comic }
-                        .buttonStyle(.card)
+                    // `.card` sizes its pill tightly around a bare label, no internal padding —
+                    // confirmed cramped-looking on-device on the equivalent button in
+                    // `TVComicDetailView`; same fix here.
+                    Button(action: { selectedComic = comic }) {
+                        Text("Riprendi")
+                            .font(.headline)
+                            .padding(.horizontal, 32)
+                            .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.card)
                 }
                 .padding(60)
             } else {
@@ -105,5 +113,12 @@ private struct TVSettingsView: View {
         .scrollClipDisabled(true)
         .navigationTitle("Impostazioni")
     }
+}
+
+#Preview {
+    let controller = PersistenceController(inMemory: true)
+    return TVRootTabView()
+        .environment(\.managedObjectContext, controller.container.viewContext)
+        .environmentObject(LibraryViewModel())
 }
 #endif

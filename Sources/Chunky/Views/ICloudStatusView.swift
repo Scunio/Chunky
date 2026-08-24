@@ -46,3 +46,7 @@ struct ICloudStatusSections: View {
         }
     }
 }
+
+#Preview {
+    ICloudStatusView()
+}

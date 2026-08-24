@@ -27,6 +27,9 @@ struct ChunkyApp: App {
                         .onOpenURL { url in
                             libraryViewModel.importFiles([url], into: persistenceController.container.viewContext)
                         }
+                        // An opaque overlay on top doesn't stop tvOS's remote focus from
+                        // reaching this underneath it — has to be disabled explicitly.
+                        .disabled(lock.isLocked)
 
                     if lock.isLocked {
                         ParentalLockGateView()

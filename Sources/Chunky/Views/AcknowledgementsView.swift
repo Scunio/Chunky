@@ -19,3 +19,7 @@ struct AcknowledgementsView: View {
         .navigationTitle("Licenze")
     }
 }
+
+#Preview {
+    AcknowledgementsView()
+}

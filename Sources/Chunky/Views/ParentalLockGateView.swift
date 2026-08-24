@@ -61,3 +61,7 @@ struct ParentalLockGateView: View {
         lock.unlockWithBiometrics { _ in }
     }
 }
+
+#Preview {
+    ParentalLockGateView()
+}

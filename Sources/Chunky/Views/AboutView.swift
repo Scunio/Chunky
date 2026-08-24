@@ -34,3 +34,7 @@ struct AboutView: View {
         return "Versione \(version) (\(build))"
     }
 }
+
+#Preview {
+    AboutView()
+}

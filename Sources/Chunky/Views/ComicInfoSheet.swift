@@ -121,3 +121,16 @@ struct ComicInfoSheet: View {
         }
     }
 }
+
+#Preview {
+    let controller = PersistenceController(inMemory: true)
+    let context = controller.container.viewContext
+    let comic = ComicEntity.create(
+        title: "Anteprima",
+        relativePath: "preview.cbz",
+        format: .cbz,
+        in: context
+    )
+    return ComicInfoSheet(comic: comic, loadedPageCount: 24)
+        .environment(\.managedObjectContext, context)
+}

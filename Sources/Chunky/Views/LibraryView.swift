@@ -71,9 +71,62 @@ struct LibraryView: View {
         #endif
     }
 
-    var body: some View {
+    private var libraryTitle: String {
+        effectiveSelection == .favorites ? "Preferiti" : (effectiveSelection.groupTitle ?? "Chunky")
+    }
+
+    /// "Chunky" on the unfiltered library repeats what the "Libreria" tab already says —
+    /// no real tvOS app (Apple TV app, Infuse, Netflix) re-announces its own name as a screen
+    /// title on its home tab. Only worth a title row when it says something the tab bar
+    /// doesn't: "Preferiti", or a series/group name.
+    private var tvOSLibraryTitle: String? {
+        effectiveSelection == .favorites ? "Preferiti" : effectiveSelection.groupTitle
+    }
+
+    /// `.navigationTitle` on tvOS overlays a fixed screen position instead of a sticky header —
+    /// confirmed on-device, the same bug already fixed in `ColorThemeView`/`ParentalLockSettingsView`,
+    /// here on the library's own title: scrolling the grid ran comic cards right through "Chunky".
+    /// Putting the title in the layout instead (a real row above the `ScrollView`, not `TVPanel`
+    /// — this view keeps its own toolbar/fileImporter/sheet modifiers below, unlike those two)
+    /// fixes it the same way. When there's nothing worth saying (see `tvOSLibraryTitle`), the
+    /// row is skipped instead of showing an empty gap — `libraryGrid`'s own top padding already
+    /// clears the focus-scale/safe-area margin.
+    @ViewBuilder
+    private var titledContent: some View {
+        #if os(tvOS)
+        // `gridColumns`' 6-column math (1760pt content + 80pt margin each side = 1920pt,
+        // the full screen width) assumes that 80pt margin is the ONLY inset — but SwiftUI
+        // applies the system's own safe-area inset to this content by default, on top of
+        // it, starving the grid of real width and clipping the last column off the right
+        // edge (confirmed live: the 6th card in a row was visibly cut off). `.ignoresSafeArea()`
+        // makes the explicit 80pt margin the sole authority, matching that math.
+        if let title = tvOSLibraryTitle {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title)
+                    .font(.largeTitle.bold())
+                    .padding(.horizontal, gridHorizontalPadding)
+                    .padding(.top, 60)
+                    .padding(.bottom, 8)
+                content
+            }
+            .ignoresSafeArea()
+        } else {
+            content
+                .ignoresSafeArea()
+        }
+        #else
         content
-            .navigationTitle(effectiveSelection == .favorites ? "Preferiti" : (effectiveSelection.groupTitle ?? "Chunky"))
+        #endif
+    }
+
+    var body: some View {
+        titledContent
+            #if os(tvOS)
+            .navigationTitle("")
+            .toolbar(.hidden, for: .navigationBar)
+            #else
+            .navigationTitle(libraryTitle)
+            #endif
             #if !os(tvOS)
             .toolbar {
                 #if os(iOS)
@@ -440,8 +493,10 @@ struct LibraryView: View {
         Group {
             if comics.isEmpty && !viewModel.isImporting {
                 emptyState
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filteredComics.isEmpty {
                 noResultsState
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 #if os(macOS)
                 if usesTableLayout {
@@ -479,14 +534,31 @@ struct LibraryView: View {
         LibraryGrouping.sections(for: filteredComics)
     }
 
+    /// Gap between whole sections (end of one section's grid, start of the next section's
+    /// header) — same reasoning as `tvOSSectionHeaderSpacing`/`tvOSGridRowSpacing`: a focused
+    /// card's `.card` scale needs real margin on every side, not just within one section.
+    /// Confirmed on-device: at 8pt, the next section's header text ("ALTRI FUMETTI", its count)
+    /// visually collided with the previous section's last row of card titles.
+    private var tvOSSectionGap: CGFloat {
+        #if os(tvOS)
+        56
+        #else
+        8
+        #endif
+    }
+
     private var libraryGrid: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
+            LazyVStack(alignment: .leading, spacing: tvOSSectionGap) {
                 #if os(tvOS)
                 // No separate "Novità" tab/popover on tvOS (see `TVRootTabView`): recently
                 // added comics get their own section at the top of the grid instead, same
-                // `sectionView` used for every other group.
-                if !recentComics.isEmpty {
+                // `sectionView` used for every other group. Only on the unfiltered "Libreria"
+                // tab (`effectiveSelection == .all`) — on "Preferiti" or a series view this
+                // section listed comics outside that selection, defeating the point of being
+                // there (confirmed live: the Preferiti tab showed non-favorite comics under
+                // "Novità" even though `filteredComics` itself was correctly favorites-only).
+                if effectiveSelection == .all && !recentComics.isEmpty {
                     sectionView(title: "Novità", comics: recentComics)
                 }
                 #endif
@@ -498,9 +570,9 @@ struct LibraryView: View {
                 case .alphabetical:
                     Text("TUTTI I FUMETTI (\(filteredComics.count))")
                         .font(.subheadline.bold())
-                        .foregroundColor(.secondary)
+                        .foregroundColor(theme.secondaryText)
                         .padding(.horizontal, gridHorizontalPadding)
-                    LazyVGrid(columns: gridColumns, spacing: 20) {
+                    LazyVGrid(columns: gridColumns, spacing: tvOSGridRowSpacing) {
                         ForEach(filteredComics) { comic in
                             cell(for: comic)
                         }
@@ -577,35 +649,45 @@ struct LibraryView: View {
                 .font(.subheadline.bold())
             // On tvOS's wide grid, pushing this metadata to the far edge with a full-width
             // Spacer leaves it looking like an unrelated stray number — keep it next to the
-            // title instead, like the row content below it.
+            // title instead, like the row content below it. No "started" badge here (unlike
+            // non-tvOS): each card already shows its own progress badge, so a section-level
+            // one is redundant, and a bare "· INIZIATA" reads as a cryptic status label
+            // instead of a count.
             #if os(tvOS)
-            if comics.contains(where: { $0.progress > 0 }) {
-                Text("· INIZIATA")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            Text("· \(comics.count)")
+            Text("\(comics.count) fumetti")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(theme.secondaryText)
             Spacer()
             #else
             Spacer()
             if comics.contains(where: { $0.progress > 0 }) {
                 Text("INIZIATA")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(theme.secondaryText)
             }
             Text("\(comics.count)")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(theme.secondaryText)
             #endif
         }
-        .foregroundColor(.primary)
         .padding(.horizontal, gridHorizontalPadding)
     }
 
+    /// `.card`'s tvOS focus-scale is a transform, not a layout change: a focused card in the
+    /// first grid row visibly grows up into the section header above it. Confirmed on a real
+    /// device — a screenshot taken via `XCUIApplication.screenshot()` did NOT show this overlap
+    /// (the system compositor's focus-scale effect isn't captured by that API), so don't trust
+    /// automated screenshots to validate spacing fixes in this area — only a real on-device look.
+    private var tvOSSectionHeaderSpacing: CGFloat {
+        #if os(tvOS)
+        40
+        #else
+        8
+        #endif
+    }
+
     private func sectionView(title: String, comics: [ComicEntity]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: tvOSSectionHeaderSpacing) {
             #if os(tvOS)
             // No collapsible-section pattern on tvOS (a full-width focusable header bar
             // is jarring on a TV) — the header is just a static label, always expanded.
@@ -626,7 +708,7 @@ struct LibraryView: View {
             #endif
 
             if !collapsedGroups.contains(title) {
-                LazyVGrid(columns: gridColumns, spacing: 20) {
+                LazyVGrid(columns: gridColumns, spacing: tvOSGridRowSpacing) {
                     ForEach(comics) { comic in
                         cell(for: comic)
                     }
@@ -634,6 +716,17 @@ struct LibraryView: View {
                 .padding(.horizontal, gridHorizontalPadding)
             }
         }
+    }
+
+    /// Same reasoning as `tvOSSectionHeaderSpacing`: a focused card's `.card` scale grows up
+    /// into the row above it, not just down toward its own title. `LazyVGrid`'s default row
+    /// spacing (20pt, fine on iOS/macOS where nothing scales on focus) isn't enough margin.
+    private var tvOSGridRowSpacing: CGFloat {
+        #if os(tvOS)
+        40
+        #else
+        20
+        #endif
     }
 
     private func cell(for comic: ComicEntity) -> some View {
@@ -804,7 +897,10 @@ private struct ComicCell: View {
         // cover+title stack: nested inside the container that gets `.card`'s focus-scale
         // transform, it scaled and clipped awkwardly when focused (same fix Swiftfin's
         // `PosterButton` documents as "layout required for tvOS focused offset label behavior").
-        VStack(alignment: .leading, spacing: 6) {
+        // The gap below the button also needs to be real margin, not just rest-state spacing:
+        // `.card`'s focus-scale grows the cover past its own frame without pushing the title
+        // down, confirmed by an on-device photo showing the focused cover overlapping the title.
+        VStack(alignment: .leading, spacing: 30) {
             Button(action: onSelect) {
                 ComicCoverView(comic: comic)
                     .overlay(selectionBadge, alignment: .topLeading)
@@ -813,10 +909,21 @@ private struct ComicCell: View {
             .buttonStyle(.card)
             .accessibilityLabel(comic.title ?? "Fumetto")
 
-            Text(comic.title ?? "Senza titolo")
-                .font(.caption.bold())
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // A ghost two-line block behind the real title, so every cell in a row reserves
+            // the same title height regardless of whether this particular title wraps to one
+            // line or two. Without it, a longer title (e.g. "Temple of the Lost King") made
+            // its own row taller, and `.card`'s cover above it — bound to the same VStack —
+            // shrank to compensate, ending up visibly shorter than its neighbors' covers in
+            // the same row (confirmed live: covers misaligned/uneven heights across a row).
+            ZStack(alignment: .topLeading) {
+                Text("Two\nLines")
+                    .opacity(0)
+                    .accessibilityHidden(true)
+                Text(comic.title ?? "Senza titolo")
+                    .lineLimit(2)
+            }
+            .font(.caption.bold())
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         #else
         Button(action: onSelect) {
@@ -942,4 +1049,13 @@ private struct NewGroupPromptModifier: ViewModifier {
 extension UTType {
     static let cbz = UTType(exportedAs: "com.scunio.chunky.cbz")
     static let cbr = UTType(exportedAs: "com.scunio.chunky.cbr")
+}
+
+#Preview {
+    let controller = PersistenceController(inMemory: true)
+    return NavigationStack {
+        LibraryView()
+    }
+    .environment(\.managedObjectContext, controller.container.viewContext)
+    .environmentObject(LibraryViewModel())
 }

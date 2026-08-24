@@ -129,3 +129,18 @@ struct ComicCoverView: View {
         }
     }
 }
+
+#Preview {
+    let controller = PersistenceController(inMemory: true)
+    let context = controller.container.viewContext
+    let comic = ComicEntity.create(
+        title: "Anteprima",
+        relativePath: "preview.cbz",
+        format: .cbz,
+        in: context
+    )
+    return ComicGridItemView(comic: comic)
+        .environment(\.managedObjectContext, context)
+        .frame(width: 160)
+        .padding()
+}

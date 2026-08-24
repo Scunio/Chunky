@@ -24,6 +24,9 @@ struct AddAccountView: View {
     @StateObject private var discovery = SMBDiscoveryService()
     @State private var speedTestResult: String?
     @State private var isRunningSpeedTest = false
+    #if os(tvOS)
+    @State private var isAdvancedExpanded = false
+    #endif
 
     // Automation, available for every account kind (SMB, WebDAV, OPDS).
     @State private var autoScanEnabled = true
@@ -92,6 +95,8 @@ struct AddAccountView: View {
         }
     }
 
+    /// iOS/macOS only — tvOS has its own `tvOSFormContent` (see below).
+    #if !os(tvOS)
     private var formContent: some View {
         Form {
             Section(header: Text("Tipo di account")) {
@@ -184,23 +189,20 @@ struct AddAccountView: View {
             }
         }
     }
+    #endif
 
-    /// `DisclosureGroup` is unavailable on tvOS, so the "Avanzate" fields are shown flat there
-    /// (in a plain `Section`) instead of collapsed behind a disclosure toggle.
-    @ViewBuilder
+    /// Only reached from `formContent` (iOS/macOS) — tvOS builds its own advanced-fields
+    /// rows directly in `tvOSFormContent`. `DisclosureGroup` doesn't exist on tvOS at all
+    /// (not just unused there — the type itself fails to compile), hence the `#if`.
+    #if !os(tvOS)
     private var advancedSMBSection: some View {
-        #if os(tvOS)
-        Section(header: Text("Avanzate")) {
-            advancedSMBFields
-        }
-        #else
         Section {
             DisclosureGroup("Avanzate") {
                 advancedSMBFields
             }
         }
-        #endif
     }
+    #endif
 
     private var advancedSMBFields: some View {
         Group {
@@ -231,20 +233,122 @@ struct AddAccountView: View {
         }
     }
 
-    /// Shown inline as a category's content in `AccountsView`'s tvOS split view, not its own
-    /// sheet — no "Annulla" needed (switching to another category is the equivalent), just the
-    /// form and a "Salva" action. Its own `NavigationStack`: the "Tipo" Picker needs one to push
-    /// its selection screen on tvOS, and the split view's detail pane doesn't supply one.
+    /// tvOS-only: same fields/logic as `formContent`, but each section is one merged card
+    /// (`TVFormSection`/`TVFormRow`) instead of a `Form`'s separate floating pills per row —
+    /// `.listStyle(.grouped)` was tried first and confirmed (on-device and in the Simulator)
+    /// to NOT produce that on tvOS, so this is a hand-rolled plain `VStack`, no `List`/`Form`.
+    #if os(tvOS)
+    private var tvOSFormContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            TVFormFieldRow(label: "Tipo") {
+                Picker("", selection: $kind) {
+                    ForEach(RemoteAccountKind.allCases) { kind in
+                        Text(kind.label).tag(kind)
+                    }
+                }
+                .labelsHidden()
+            }
+
+            if kind == .smb {
+                if !discovery.servers.isEmpty {
+                    TVFormSectionLabel(title: "Trovati in rete")
+                    ForEach(discovery.servers) { server in
+                        Button(action: { applyDiscovered(server) }) {
+                            Label(server.name, systemImage: RemoteAccountKind.smb.systemImage)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 14)
+                        }
+                        .buttonStyle(.card)
+                    }
+                }
+
+                TVFormFieldRow(label: "Nome") { TextField("es. Il mio NAS", text: $name) }
+                TVFormFieldRow(label: "Indirizzo") { TextField("es. 192.168.1.10", text: $smbHost).disableAutocorrection(true) }
+                TVFormFieldRow(label: "Condivisione") { TextField("es. Video", text: $smbShare).disableAutocorrection(true) }
+                Text("L'indirizzo del NAS in rete locale, es. 192.168.1.10 o nas.local. Se non compare sopra nell'elenco trovato in rete, inseriscilo qui manualmente.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+
+                TVFormDisclosureRow(title: "Avanzate", isExpanded: $isAdvancedExpanded)
+                if isAdvancedExpanded {
+                    TVFormFieldRow(label: "Porta") { TextField("445", text: $smbPort) }
+                    TVFormFieldRow(label: "Workgroup") { TextField("opzionale", text: $smbWorkgroup).disableAutocorrection(true) }
+                    TVFormFieldRow(label: "Endpoint") { TextField("IP risolto, opzionale", text: $smbResolvedAddressOverride).disableAutocorrection(true) }
+                    Button(isRunningSpeedTest ? "Test in corso..." : "Test di velocità", action: runSpeedTest)
+                        .disabled(isRunningSpeedTest || smbHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || smbShare.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if let speedTestResult {
+                        Text(speedTestResult)
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            } else {
+                TVFormFieldRow(label: "Nome") { TextField("es. La mia libreria", text: $name) }
+                TVFormFieldRow(label: "URL del server") {
+                    TextField(kind == .opds ? "es. http://192.168.1.10:8080/opds" : "es. https://miocloud.example.com/…", text: $serverURLString)
+                        .disableAutocorrection(true)
+                }
+                Text(kind == .opds
+                    ? "L'indirizzo del catalogo OPDS, es. http://192.168.1.10:8080/opds"
+                    : "L'indirizzo del server WebDAV, es. https://miocloud.example.com/remote.php/dav/files/utente/")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            TVFormSectionLabel(title: "Credenziali (opzionali)")
+            TVFormFieldRow(label: "Nome utente") { TextField("opzionale", text: $username).disableAutocorrection(true) }
+            TVFormFieldRow(label: "Password") { SecureField("opzionale", text: $password) }
+
+            TVFormSectionLabel(title: "Automazione")
+            TVFormToggleRow(label: "Scansione automatica", isOn: $autoScanEnabled)
+            TVFormToggleRow(label: "Cartelle Smart", isOn: $smartFoldersEnabled)
+            TVFormToggleRow(label: "Pre-cache (dettagli e copertine)", isOn: precacheBinding)
+            Text("Con \"Pre-cache\" attivo, ogni fumetto nuovo trovato viene scaricato subito per intero, invece di aspettare che lo apri: non esiste un modo per leggere solo titolo/copertina senza scaricare tutto il file, quindi su librerie grandi può consumare parecchia banda.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+
+            if let validationError {
+                Text(validationError)
+                    .foregroundColor(.red)
+                    .font(.footnote)
+            }
+
+            TVFormPrimaryButton(title: "Salva", action: save)
+                .padding(.top, 12)
+        }
+    }
+    #endif
+
+    /// Pushed from `AccountsView`'s tvOS account list (`NavigationLink`), not shown as its own
+    /// sheet — no "Annulla" needed (Menu/back is the equivalent), just the form and "Salva" at
+    /// the bottom. No `NavigationStack` of its own: it's pushed inside the one `AccountsView`
+    /// already provides, and nesting a second `NavigationStack` inside that one would break
+    /// push/pop instead of extending it.
     #if os(tvOS)
     private var tvOSForm: some View {
-        NavigationStack {
-            formContent
-                .tvOSListFocusFix()
-                .navigationTitle("Nuovo account")
-                .toolbar {
-                    ToolbarItem { Button("Salva", action: save) }
-                }
+        ScrollView {
+            // Title lives in the layout, not `.navigationTitle` — same fix as
+            // `ColorThemeView`/`ParentalLockSettingsView`: on tvOS that overlays a fixed
+            // screen position instead of a sticky header, so it scrolls right through when
+            // the form is this long. "Salva" moved into the form itself (see
+            // `TVFormPrimaryButton` at the bottom), matching Infuse's bottom-of-form
+            // primary action instead of a small top-corner toolbar button.
+            VStack(alignment: .leading, spacing: 24) {
+                Text("Nuovo account")
+                    .font(.largeTitle.bold())
+                tvOSFormContent
+            }
+            .padding(.horizontal, 48)
+            .padding(.vertical, 24)
         }
+        .navigationTitle("")
+        .toolbar(.hidden, for: .navigationBar)
+        // Same missing-affordance fix as `DownloadsView` — this view hides its own nav bar
+        // *and* is pushed from the Account tab's hidden-nav-bar `NavigationStack` root, so
+        // Menu would otherwise exit the whole app instead of popping back to the Account list.
+        .onExitCommand { dismiss() }
     }
     #endif
 
@@ -380,4 +484,15 @@ struct AddAccountView: View {
         try? context.save()
         if let onSaved { onSaved() } else { dismiss() }
     }
+}
+
+#Preview {
+    // Wrapped in its own `NavigationStack` here only for the preview: in the real app tvOS
+    // pushes this from `AccountsView`'s own stack (see `tvOSForm`'s doc comment) — a bare
+    // preview needs *some* stack ancestor for the "Tipo" Picker's push to work.
+    let controller = PersistenceController(inMemory: true)
+    return NavigationStack {
+        AddAccountView(initialKind: .smb)
+    }
+    .environment(\.managedObjectContext, controller.container.viewContext)
 }

@@ -15,8 +15,26 @@ struct PersistenceController {
     /// the whole app on a physical Apple TV before any UI existed.
     private static let loadTimeout: DispatchTimeInterval = .seconds(20)
 
+    /// Anchors `Bundle(for:)` below — any class works, this one exists purely to be that anchor.
+    private final class BundleToken {}
+
+    /// `NSPersistentCloudKitContainer(name:)` alone resolves its model via `Bundle.main`. That's
+    /// correct for a normally-launched app, but confirmed to break under Xcode's Previews/
+    /// RunCodeSnippet JIT execution (`__preview.dylib` injected): there, `Bundle.main` resolves
+    /// to the injected dylib wrapper, not the bundle actually containing `Chunky.momd`, so the
+    /// container silently loads zero entities and every fetch crashes with "must have an
+    /// entity". `Bundle(for:)` finds the bundle containing this module's own compiled code
+    /// instead, which is reliable in both contexts — a real launch behaves identically either way.
+    private static let model: NSManagedObjectModel = {
+        guard let modelURL = Bundle(for: BundleToken.self).url(forResource: "Chunky", withExtension: "momd"),
+              let model = NSManagedObjectModel(contentsOf: modelURL) else {
+            fatalError("Could not locate/load the Chunky Core Data model")
+        }
+        return model
+    }()
+
     init(inMemory: Bool = false) {
-        container = NSPersistentCloudKitContainer(name: "Chunky")
+        container = NSPersistentCloudKitContainer(name: "Chunky", managedObjectModel: Self.model)
 
         guard let cloudDescription = container.persistentStoreDescriptions.first else {
             fatalError("NSPersistentCloudKitContainer did not create its default store description")

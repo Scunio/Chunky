@@ -1,64 +1,70 @@
 #if os(tvOS)
 import SwiftUI
 
-/// Detail screen between the library grid and the reader — full-bleed cover, gradient scrim,
-/// title and a default-focused "Leggi"/"Riprendi" button, matching the shape Apple's own
-/// "Destination Video" sample uses for its tvOS detail screen (`Views/tvOS/DetailView.swift`:
-/// full-bleed image + material gradient + oversized rounded title).
+/// Detail screen between the library grid and the reader — cover on the left, title/metadata/
+/// "Leggi" on the right, on the app's normal background. Replaces an earlier full-bleed-cover
+/// version (Destination Video's hero-image style): with this app's fixture/placeholder covers
+/// it read as an oversized, empty screen rather than a poster backdrop, and cover art here isn't
+/// guaranteed to be wide/atmospheric the way a movie backdrop is — a two-column layout doesn't
+/// depend on the cover looking good stretched full-screen.
 struct TVComicDetailView: View {
     @ObservedObject var comic: ComicEntity
     let onRead: () -> Void
+    @Environment(\.dismiss) private var dismiss
 
     private var hasStartedReading: Bool {
         comic.lastReadPage > 0 && !comic.isFinished
     }
 
     var body: some View {
-        // The cover can't be a ZStack sibling: a resizable image with `.fill` reports a size
-        // larger than proposed on one axis to preserve its aspect ratio, so the ZStack sizes
-        // itself to that oversized image — pushing the bottom-aligned title/button far below
-        // the actual screen bounds. As a `.background` it fills its container's real size instead.
-        ZStack(alignment: .bottomLeading) {
-            LinearGradient(
-                colors: [.black.opacity(0.85), .black.opacity(0.4), .clear],
-                startPoint: .bottom,
-                endPoint: .top
-            )
-            .frame(height: 480)
-            .ignoresSafeArea(edges: .bottom)
+        HStack(alignment: .top, spacing: 60) {
+            coverImage
+                .aspectRatio(2 / 3, contentMode: .fit)
+                .frame(width: 440)
+                .cornerRadius(16)
+                .shadow(color: .black.opacity(0.4), radius: 24, y: 12)
 
             VStack(alignment: .leading, spacing: 16) {
                 Text(comic.title ?? "Senza titolo")
-                    .font(.system(size: 64, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                    .font(.system(size: 56, weight: .bold, design: .rounded))
                     .lineLimit(2)
 
                 if let series = comic.seriesName, !series.isEmpty {
                     Text(series)
                         .font(.title3)
-                        .foregroundColor(.white.opacity(0.8))
+                        .foregroundColor(.secondary)
                 }
 
                 Text("\(comic.pageCount) pagine" + (comic.isFinished ? " · Letto" : hasStartedReading ? " · In lettura" : ""))
                     .font(.body)
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(.secondary)
 
-                Button(hasStartedReading ? "Riprendi" : "Leggi", action: onRead)
-                    .buttonStyle(.card)
-                    .padding(.top, 8)
+                // `.card` sizes its pill tightly around the label with no padding of its own —
+                // a bare `Button(String, action:)` reads as cramped, text nearly touching the
+                // edges (confirmed on-device). Real padding on the label gives it breathing room.
+                Button(action: onRead) {
+                    Text(hasStartedReading ? "Riprendi" : "Leggi")
+                        .font(.headline)
+                        .padding(.horizontal, 32)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(.card)
+                .padding(.top, 8)
+
+                Spacer()
             }
-            .padding(.horizontal, 80)
-            .padding(.bottom, 80)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background {
-            coverImage
-                .aspectRatio(contentMode: .fill)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-                .ignoresSafeArea()
-        }
+        .padding(.horizontal, 80)
+        .padding(.top, 60)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationTitle("")
         .toolbar(.hidden, for: .navigationBar)
+        // With the nav bar hidden at every level of the stack (this screen and the grid behind
+        // it both suppress it), tvOS has no visible "non-root" affordance to base Menu's default
+        // pop-vs-exit-app decision on, so it falls through to exiting the whole app instead of
+        // popping back to the grid. Driving the pop explicitly avoids relying on that default.
+        .onExitCommand { dismiss() }
     }
 
     @ViewBuilder
@@ -71,5 +77,20 @@ struct TVComicDetailView: View {
                 .fill(Color.secondary.opacity(0.2))
         }
     }
+}
+
+#Preview {
+    let controller = PersistenceController(inMemory: true)
+    let context = controller.container.viewContext
+    let comic = ComicEntity.create(
+        title: "Anteprima",
+        relativePath: "preview.cbz",
+        format: .cbz,
+        in: context
+    )
+    return NavigationStack {
+        TVComicDetailView(comic: comic, onRead: {})
+    }
+    .environment(\.managedObjectContext, context)
 }
 #endif

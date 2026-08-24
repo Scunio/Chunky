@@ -16,6 +16,18 @@ enum ParentalAutoLockTrigger: String, CaseIterable, Identifiable {
 
 struct ParentalLockSettingsView: View {
     var body: some View {
+        #if os(tvOS)
+        // Same fix as `ColorThemeView`: `.navigationTitle` overlays a fixed screen position on
+        // tvOS instead of a sticky header, so a Form long enough to scroll (toggles + two
+        // footers here) scrolls right through it. `TVPanel` puts the title in the layout instead.
+        TVPanel(title: "Blocco genitori") {
+            EmptyView()
+        } content: {
+            Form {
+                ParentalLockSections()
+            }
+        }
+        #else
         Form {
             ParentalLockSections()
         }
@@ -23,6 +35,7 @@ struct ParentalLockSettingsView: View {
         .formStyle(.grouped)
         #endif
         .navigationTitle("Blocco genitori")
+        #endif
     }
 }
 
@@ -51,10 +64,12 @@ struct ParentalLockSections: View {
                         get: { lock.isEnabled },
                         set: { lock.isEnabled = $0 }
                     ))
+                    #if !os(tvOS)
                     Toggle("Sblocca con Face ID / Touch ID", isOn: Binding(
                         get: { lock.isBiometricsEnabled },
                         set: { lock.isBiometricsEnabled = $0 }
                     ))
+                    #endif
                     Button("Blocca ora") { lock.lockIfNeeded() }
                     Button("Rimuovi codice", action: lock.removePasscode)
                         .foregroundColor(.red)
@@ -104,4 +119,8 @@ struct ParentalLockSections: View {
         confirmPasscode = ""
         errorMessage = nil
     }
+}
+
+#Preview {
+    ParentalLockSettingsView()
 }

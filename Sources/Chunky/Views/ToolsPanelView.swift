@@ -83,3 +83,7 @@ struct ToolsPanelView: View {
         #endif
     }
 }
+
+#Preview {
+    ToolsPanelView()
+}

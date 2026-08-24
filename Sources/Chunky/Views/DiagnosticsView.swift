@@ -57,3 +57,7 @@ struct DiagnosticsSections: View {
         logText = ""
     }
 }
+
+#Preview {
+    DiagnosticsView()
+}
