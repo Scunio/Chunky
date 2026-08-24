@@ -106,11 +106,23 @@ extension ReaderContentView {
     /// already on record in tvOS-design-patterns.md). Buttons just get sized with `.frame(...)`
     /// and left to the system's own background.
     #if os(tvOS)
+    /// Stronger than the shared iOS/macOS `chromeBackground`: that's tuned for a bar spanning
+    /// the whole screen width, but a small floating pill sitting directly on the page (no
+    /// surrounding chrome to separate it visually) needs more contrast to still read as
+    /// "chrome" instead of blending into a dark comic canvas — confirmed live, the
+    /// systemGray6-derived `chromeBackground` on a black page read as barely distinct from
+    /// the page itself. A thin stroke on top gives the pill a defined edge even where the fill
+    /// alone comes close to the page tone.
+    private var tvOSPillBackground: Color {
+        isBackgroundDark ? Color.black.opacity(0.75) : Color.white.opacity(0.9)
+    }
+
     func tvOSFloatingPill<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         content()
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
-            .background(Capsule().fill(chromeBackground))
+            .background(Capsule().fill(tvOSPillBackground))
+            .overlay(Capsule().strokeBorder(chromeForeground.opacity(0.22), lineWidth: 1))
     }
     #endif
 
@@ -119,9 +131,14 @@ extension ReaderContentView {
         HStack {
             headerLeadingActions
             Spacer()
+            // Smaller/more subdued than the Libreria/layout buttons either side: while
+            // reading, the title is the least useful piece of chrome on screen (the user
+            // already knows what they opened) — sized down so it reads as a secondary label
+            // instead of competing for attention with the two real controls flanking it.
             tvOSFloatingPill {
                 Text(comic.title ?? "")
-                    .font(.headline)
+                    .font(.subheadline)
+                    .foregroundColor(chromeForeground.opacity(0.75))
                     .lineLimit(1)
             }
             Spacer()

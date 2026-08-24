@@ -24,6 +24,11 @@ struct AddAccountView: View {
     @StateObject private var discovery = SMBDiscoveryService()
     @State private var speedTestResult: String?
     @State private var isRunningSpeedTest = false
+    // Share discovery ("Sfoglia condivisioni"): lets the user pick a share from what the server
+    // actually offers instead of typing its exact name blind.
+    @State private var isBrowsingShares = false
+    @State private var availableShares: [String] = []
+    @State private var shareBrowseError: String?
     #if os(tvOS)
     @State private var isAdvancedExpanded = false
     #endif
@@ -138,6 +143,24 @@ struct AddAccountView: View {
                         .autocapitalization(.none)
                         #endif
                         .disableAutocorrection(true)
+                    Button(isBrowsingShares ? "Ricerca in corso..." : "Sfoglia condivisioni", action: browseShares)
+                        .disabled(isBrowsingShares || smbHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if let shareBrowseError {
+                        Text(shareBrowseError)
+                            .font(.footnote)
+                            .foregroundColor(.red)
+                    }
+                }
+
+                if !availableShares.isEmpty {
+                    Section(header: Text("Condivisioni trovate")) {
+                        ForEach(availableShares, id: \.self) { share in
+                            Button(action: { smbShare = share }) {
+                                Text(share)
+                            }
+                            .foregroundColor(.primary)
+                        }
+                    }
                 }
 
                 advancedSMBSection
@@ -269,6 +292,27 @@ struct AddAccountView: View {
                 Text("L'indirizzo del NAS in rete locale, es. 192.168.1.10 o nas.local. Se non compare sopra nell'elenco trovato in rete, inseriscilo qui manualmente.")
                     .font(.footnote)
                     .foregroundColor(.secondary)
+
+                Button(isBrowsingShares ? "Ricerca in corso..." : "Sfoglia condivisioni", action: browseShares)
+                    .buttonStyle(.card)
+                    .disabled(isBrowsingShares || smbHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if let shareBrowseError {
+                    Text(shareBrowseError)
+                        .font(.footnote)
+                        .foregroundColor(.red)
+                }
+                if !availableShares.isEmpty {
+                    TVFormSectionLabel(title: "Condivisioni trovate")
+                    ForEach(availableShares, id: \.self) { share in
+                        Button(action: { smbShare = share }) {
+                            Text(share)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 14)
+                        }
+                        .buttonStyle(.card)
+                    }
+                }
 
                 TVFormDisclosureRow(title: "Avanzate", isExpanded: $isAdvancedExpanded)
                 if isAdvancedExpanded {
@@ -432,6 +476,47 @@ struct AddAccountView: View {
                 await MainActor.run {
                     speedTestResult = "Connessione non riuscita: \(error.chunkyFriendlyDescription)"
                     isRunningSpeedTest = false
+                }
+            }
+        }
+    }
+
+    /// Connects with just host/port/credentials (no share yet) and lists what the server
+    /// offers, so "Condivisione" can be picked from real results instead of typed blind.
+    private func browseShares() {
+        shareBrowseError = nil
+        availableShares = []
+
+        let trimmedHost = smbHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedHost.isEmpty else { return }
+        let trimmedWorkgroup = smbWorkgroup.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedOverride = smbResolvedAddressOverride.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let port = Int32(smbPort.trimmingCharacters(in: .whitespacesAndNewlines)), port > 0 else {
+            shareBrowseError = "Porta non valida."
+            return
+        }
+
+        isBrowsingShares = true
+        Task {
+            do {
+                let shares = try await SMBClient().listShares(
+                    host: trimmedOverride.isEmpty ? trimmedHost : trimmedOverride,
+                    port: port,
+                    domain: trimmedWorkgroup.isEmpty ? nil : trimmedWorkgroup,
+                    username: username.isEmpty ? nil : username,
+                    password: password.isEmpty ? nil : password
+                )
+                await MainActor.run {
+                    availableShares = shares.map(\.name)
+                    isBrowsingShares = false
+                    if availableShares.isEmpty {
+                        shareBrowseError = "Nessuna condivisione trovata."
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    shareBrowseError = "Impossibile elencare le condivisioni: \(error.chunkyFriendlyDescription)"
+                    isBrowsingShares = false
                 }
             }
         }

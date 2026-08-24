@@ -90,6 +90,15 @@ final class SMBClient: RemoteBrowsing {
         }
     }
 
+    /// Enumerates the shares a server offers, without connecting to any particular one — lets
+    /// the "Nuovo account" form offer a "Sfoglia condivisioni" button instead of requiring the
+    /// share name to be typed in blind. `enumerateHidden: false` (AMSMB2's own default) already
+    /// excludes administrative shares (`C$`, `IPC$`, `ADMIN$`), so nothing further to filter here.
+    func listShares(host: String, port: Int32, domain: String? = nil, username: String? = nil, password: String? = nil) async throws -> [(name: String, comment: String)] {
+        let manager = try makeManager(for: SMBConnectionInfo(host: host, port: port, share: "", domain: domain, username: username, password: password))
+        return try await manager.listShares()
+    }
+
     /// Connects and times the round trip, then — if the share root (or a first-level subfolder)
     /// has a comic file — downloads the smallest one found to estimate throughput. This is a
     /// foreground, one-shot measurement (no guarantee of Wi-Fi stability), meant as a rough

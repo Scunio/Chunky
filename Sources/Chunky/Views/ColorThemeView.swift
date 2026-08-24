@@ -118,6 +118,17 @@ struct ColorThemeView: View {
                     tintPresetButton(name: "Seppia", hex: "#704214", opacity: 0.18)
                     tintPresetButton(name: "Notte", hex: "#0A1A2F", opacity: 0.35)
                 }
+                #if os(tvOS)
+                // With 3 buttons packed into one Form row, the List's own default row
+                // background (sized to the whole row) sat behind each button's own
+                // `.buttonStyle(.card)` fill — visible as two overlapping rounded shapes on
+                // whichever button had focus (confirmed live from a screenshot, same nested-
+                // shape family already documented for the reader header, different root cause:
+                // a row-level default background instead of a background we added ourselves).
+                // Every other `.card` row in this screen is one button per row, where the row
+                // and the button coincide, so this doesn't show there.
+                .listRowBackground(Color.clear)
+                #endif
             }
 
             Section {

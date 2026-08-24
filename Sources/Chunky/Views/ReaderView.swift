@@ -628,6 +628,8 @@ struct ReaderContentView: View {
                     isPageJumpPresented = false
                     #if os(tvOS)
                     readerFocus = .pager
+                    // See the identical fix on `nextComicConfirmation`'s Annulla for why.
+                    isAwaitingPagerReturn = true
                     #endif
                 }) {
                     Text("Annulla")
@@ -699,6 +701,8 @@ struct ReaderContentView: View {
         isFindPresented = false
         #if os(tvOS)
         readerFocus = .pager
+        // See the identical fix on `nextComicConfirmation`'s Annulla for why.
+        isAwaitingPagerReturn = true
         #endif
     }
 
@@ -713,6 +717,8 @@ struct ReaderContentView: View {
         isPageJumpPresented = false
         #if os(tvOS)
         readerFocus = .pager
+        // See the identical fix on `nextComicConfirmation`'s Annulla for why.
+        isAwaitingPagerReturn = true
         #endif
     }
 
@@ -1164,6 +1170,17 @@ struct ReaderContentView: View {
                     pendingNextComic = nil
                     #if os(tvOS)
                     readerFocus = .pager
+                    // Dismissing a Button bound via `.focused($readerFocus, equals:)` resets
+                    // `readerFocus` to nil as it leaves the tree — confirmed live via a
+                    // temporary print trace: the explicit `.pager` assignment right above gets
+                    // raced/overwritten, and real UIKit focus lands on some header button
+                    // instead (same "bug #2" class as tvOS-design-patterns.md, just triggered
+                    // by removal instead of an unbound-button hop). Rather than chase that
+                    // real focus transfer (already shown unreliable for a focused Button
+                    // elsewhere in this file), reuse the header's own proven fix: force the
+                    // Left/Right page-turn proxy on immediately, so paging still works right
+                    // away regardless of which header button silently ends up focused.
+                    isAwaitingPagerReturn = true
                     #endif
                 }) {
                     Text("Annulla")

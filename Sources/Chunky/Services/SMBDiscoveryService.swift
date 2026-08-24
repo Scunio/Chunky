@@ -93,7 +93,17 @@ final class SMBDiscoveryService: ObservableObject {
     private nonisolated static func hostString(from host: NWEndpoint.Host) -> String {
         switch host {
         case .name(let name, _): return name
-        case .ipv4(let address): return "\(address)"
+        case .ipv4(let address):
+            // `IPv4Address`'s own `description` appends the resolving interface as a
+            // `%en0`-style zone suffix when the endpoint was reached over a specific
+            // interface (confirmed live: a real NAS discovered this way produced
+            // "192.168.1.10%en0", which `SMB2Manager` then rejected outright — "Il server
+            // non ha risposto correttamente" — since that suffix isn't valid IPv4/hostname
+            // syntax for any consumer expecting a plain address). Unlike IPv6 link-local
+            // addresses, a zone ID is never semantically part of an IPv4 address, so it's
+            // always safe to drop here.
+            let string = "\(address)"
+            return String(string.split(separator: "%", maxSplits: 1).first ?? Substring(string))
         case .ipv6(let address): return "\(address)"
         @unknown default: return ""
         }

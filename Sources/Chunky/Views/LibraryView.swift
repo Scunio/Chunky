@@ -589,6 +589,16 @@ struct LibraryView: View {
             .padding(.vertical, 60)
             #endif
         }
+        #if os(tvOS)
+        // Marks the grid as its own focus region, distinct from the top tab bar: without it,
+        // the focus engine's directional heuristics between the tab bar and this ScrollView
+        // were unreliable — reported live (and reproduced): Up from the grid reaches the tab
+        // bar fine, but Down from the tab bar back into the grid got stuck there instead of
+        // returning to the last-focused cell, so the bar never scrolled back out of the way.
+        // `.focusSection()` is Apple's own documented fix for exactly this "top bar above a
+        // scrollable region" shape.
+        .focusSection()
+        #endif
     }
 
     /// Comics imported in the last 7 days and not yet "unmarked" with Clear: feed
