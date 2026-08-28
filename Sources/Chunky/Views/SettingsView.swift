@@ -101,12 +101,17 @@ struct InfoButton: View {
 /// `compact: true` omits the trailing Spacer: use it for a Picker's label, where SwiftUI
 /// already adds the current value and the little arrow after the whole label on its own —
 /// a Spacer here would make it expand awkwardly instead of staying compact next to the title.
-func labelWithInfo(_ title: String, info: String, compact: Bool = false) -> some View {
+func infoLabel(_ title: String, info: String, compact: Bool = false) -> some View {
     HStack(spacing: compact ? 4 : nil) {
         Text(title)
         if !compact { Spacer() }
         InfoButton(text: info)
     }
+}
+
+@available(*, deprecated, renamed: "infoLabel")
+func labelWithInfo(_ title: String, info: String, compact: Bool = false) -> some View {
+    infoLabel(title, info: info, compact: compact)
 }
 
 struct SettingsView: View {
@@ -154,26 +159,26 @@ struct SettingsView: View {
                 #endif
                 Toggle("Doppia pagina di default", isOn: $isDoublePageEnabled)
                 Toggle(isOn: $isCoverAlone) {
-                    labelWithInfo("Copertina da sola", info: "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi.")
+                    infoLabel("Copertina da sola", info: "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi.")
                 }
             }
 
             Section(header: Text("Navigazione")) {
                 Toggle(isOn: $isTapToPanEnabled) {
-                    labelWithInfo("Tap-to-pan", info: "Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati. Non si applica con la modalità una mano attiva, che già unifica le due zone a modo suo (vedi sotto).")
+                    infoLabel("Tap-to-pan", info: "Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati. Non si applica con la modalità una mano attiva, che già unifica le due zone a modo suo (vedi sotto).")
                 }
                 .disabled(isOneHandedModeEnabled)
                 Toggle(isOn: $isOneHandedModeEnabled) {
-                    labelWithInfo("Modalità una mano", info: "Le zone di tap per cambiare pagina diventano orizzontali (alto/basso) invece che laterali, più comode da raggiungere con il pollice.")
+                    infoLabel("Modalità una mano", info: "Unifica le due zone laterali: toccare il bordo destro o sinistro fa la stessa cosa (avanza di default), così puoi sfogliare con il pollice senza dover raggiungere il lato opposto. La fascia centrale resta per mostrare/nascondere i controlli.")
                 }
                 .disabled(tapPageTurnStyle == .disabled)
                 Toggle(isOn: $isHotCornersEnabled) {
-                    labelWithInfo("Hot corners", info: "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina.")
+                    infoLabel("Hot corners", info: "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina.")
                 }
                 .disabled(tapPageTurnStyle == .disabled)
                 #if os(iOS)
                 Toggle(isOn: $isTwoFingerBrightnessEnabled) {
-                    labelWithInfo("Luminosità con due dita", info: "Se attivo, puoi regolare la luminosità dello schermo trascinando su e giù con due dita nella vista di lettura.")
+                    infoLabel("Luminosità con due dita", info: "Se attivo, puoi regolare la luminosità dello schermo trascinando su e giù con due dita nella vista di lettura.")
                 }
                 #endif
                 Picker("Tap page-turn", selection: $tapPageTurnStyle) {
@@ -213,16 +218,16 @@ struct SettingsView: View {
                 footer: Text("L'upscaling migliora le pagine a bassa risoluzione con un filtro di qualità superiore al semplice ridimensionamento. Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni.")
             ) {
                 Toggle(isOn: $isAutoCropEnabled) {
-                    labelWithInfo("Ritaglia bordi bianchi", info: "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo.")
+                    infoLabel("Ritaglia bordi bianchi", info: "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo.")
                 }
                 Toggle(isOn: $isAutoTintContrastEnabled) {
-                    labelWithInfo("Auto tint & contrasto", info: "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità.")
+                    infoLabel("Auto tint & contrasto", info: "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità.")
                 }
                 Toggle(isOn: $isUpscalingEnabled) {
-                    labelWithInfo("Upscaling pagine a bassa risoluzione", info: "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione.")
+                    infoLabel("Upscaling pagine a bassa risoluzione", info: "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione.")
                 }
                 Toggle(isOn: $isMotionBlurEnabled) {
-                    labelWithInfo("Motion-blur", info: "Rende più fluido il movimento quando scorri con il dito una pagina ingrandita.")
+                    infoLabel("Motion-blur", info: "Rende più fluido il movimento quando scorri con il dito una pagina ingrandita.")
                 }
             }
 
@@ -286,7 +291,7 @@ struct SettingsView: View {
                         Text(option.label).tag(option)
                     }
                 } label: {
-                    labelWithInfo("Riparti dalla prima pagina", info: "Difficilmente ti servirà, ma se ne hai bisogno eccolo qui.", compact: true)
+                    infoLabel("Riparti dalla prima pagina", info: "Difficilmente ti servirà, ma se ne hai bisogno eccolo qui.", compact: true)
                 }
             }
 
@@ -298,7 +303,7 @@ struct SettingsView: View {
                 footer: Text("Le segnalazioni di crash restano solo su questo dispositivo (nessun server remoto): vengono aggiunte al log diagnostico e possono arrivare con qualche ritardo, generalmente solo su dispositivo fisico.")
             ) {
                 Toggle(isOn: $isCrashReportingEnabled) {
-                    labelWithInfo("Invia segnalazioni di crash", info: "Le segnalazioni di crash sono anonime, e aiutano a individuare e correggere i problemi.")
+                    infoLabel("Invia segnalazioni di crash", info: "Le segnalazioni di crash sono anonime, e aiutano a individuare e correggere i problemi.")
                 }
             }
             #endif

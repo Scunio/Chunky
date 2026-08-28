@@ -830,15 +830,15 @@ struct ReaderContentView: View {
         // for the Mac's multiple windows, useless here with a single scene. Only useful
         // with an external keyboard connected; nothing changes for touch.
         .onKeyPress(.leftArrow) {
-            step(-1, provider: provider, style: tapPageTurnStyle)
+            advancePage(-1, provider: provider, style: tapPageTurnStyle)
             return .handled
         }
         .onKeyPress(.rightArrow) {
-            step(1, provider: provider, style: tapPageTurnStyle)
+            advancePage(1, provider: provider, style: tapPageTurnStyle)
             return .handled
         }
         .onKeyPress(.space) {
-            step(1, provider: provider, style: tapPageTurnStyle)
+            advancePage(1, provider: provider, style: tapPageTurnStyle)
             return .handled
         }
     }
@@ -903,17 +903,17 @@ struct ReaderContentView: View {
             }
 
             if !isInteractiveSwipe && swipePageTurnStyle != .disabled && !isZoomed {
-                discreteSwipeCatcher(provider: provider)
+                discreteSwipeOverlay(provider: provider)
             }
 
-            tapZonesOrControlsToggle(provider: provider)
+            pageTapZonesOverlay(provider: provider)
         }
     }
 
     /// Recognizes the swipe as a discrete gesture (threshold exceeded = one page) for the
     /// styles that interactive paging can't render. `simultaneousGesture` so as not to steal
     /// the touch from the tap zones underneath.
-    private func discreteSwipeCatcher(provider: ComicPageProvider) -> some View {
+    private func discreteSwipeOverlay(provider: ComicPageProvider) -> some View {
         Color.clear
             .contentShape(Rectangle())
             .simultaneousGesture(
@@ -921,12 +921,17 @@ struct ReaderContentView: View {
                     .onEnded { value in
                         guard abs(value.translation.width) > abs(value.translation.height),
                               abs(value.translation.width) > 60 else { return }
-                        step(value.translation.width < 0 ? 1 : -1, provider: provider, style: swipePageTurnStyle)
+                        advancePage(value.translation.width < 0 ? 1 : -1, provider: provider, style: swipePageTurnStyle)
                     }
             )
     }
 
-    private func tapZonesOrControlsToggle(provider: ComicPageProvider) -> some View {
+    @available(*, deprecated, renamed: "discreteSwipeOverlay")
+    private func discreteSwipeCatcher(provider: ComicPageProvider) -> some View {
+        discreteSwipeOverlay(provider: provider)
+    }
+
+    private func pageTapZonesOverlay(provider: ComicPageProvider) -> some View {
         PageTapZones(
             oneHanded: isOneHandedModeEnabled,
             oneHandedReversed: isOneHandedZonesReversed,
@@ -941,13 +946,13 @@ struct ReaderContentView: View {
             // With "Tap-to-pan" the "back" zone also advances: handy if you can't
             // comfortably reach both sides of the screen. Ignored while one-handed mode is
             // on: there both zones already share one action (`PageTapZoneGeometry.action`'s
-            // `sharedAction`, following `isOneHandedZonesReversed`) for the same "can't
+            // `oneHandedAction`, following `isOneHandedZonesReversed`) for the same "can't
             // reach both sides" reason, so this would otherwise silently fight that choice
             // — turning "one-handed, reversed" (meant to send both zones back) into "both
             // zones forward" behind the user's back, with no indication why.
-            step(isTapToPanEnabled && !isOneHandedModeEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
+            advancePage(isTapToPanEnabled && !isOneHandedModeEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
         } onNext: {
-            step(1, provider: provider, style: tapPageTurnStyle)
+            advancePage(1, provider: provider, style: tapPageTurnStyle)
         } onToggleControls: {
             toggleControls()
         } onExit: {
@@ -957,6 +962,11 @@ struct ReaderContentView: View {
         } onToggleDoublePage: {
             if isDoublePageAllowed { isDoublePageEnabled.toggle() }
         }
+    }
+
+    @available(*, deprecated, renamed: "pageTapZonesOverlay")
+    private func tapZonesOrControlsToggle(provider: ComicPageProvider) -> some View {
+        pageTapZonesOverlay(provider: provider)
     }
     #elseif os(tvOS)
     /// Deliberately not a port of the macOS tap-zone/scroll-monitor machinery: the Siri Remote
@@ -992,9 +1002,9 @@ struct ReaderContentView: View {
             .onMoveCommand { direction in
                 switch direction {
                 case .left:
-                    step(-1, provider: provider, style: tapPageTurnStyle)
+                    advancePage(-1, provider: provider, style: tapPageTurnStyle)
                 case .right:
-                    step(1, provider: provider, style: tapPageTurnStyle)
+                    advancePage(1, provider: provider, style: tapPageTurnStyle)
                 case .up:
                     readerFocus = .libreria
                 default:
@@ -1010,9 +1020,9 @@ struct ReaderContentView: View {
 
             if tapPageTurnStyle != .disabled {
                 PageTapZones(oneHanded: isOneHandedModeEnabled, oneHandedReversed: isOneHandedZonesReversed, hotCorners: isHotCornersEnabled, rightToLeft: comic.readingDirection == .rightToLeft) {
-                    step(-1, provider: provider, style: tapPageTurnStyle)
+                    advancePage(-1, provider: provider, style: tapPageTurnStyle)
                 } onNext: {
-                    step(1, provider: provider, style: tapPageTurnStyle)
+                    advancePage(1, provider: provider, style: tapPageTurnStyle)
                 } onToggleControls: {
                     toggleControls()
                 } onExit: {
@@ -1030,15 +1040,15 @@ struct ReaderContentView: View {
         }
         .background(ScrollSwipeMonitor { direction in
             guard swipePageTurnStyle != .disabled, !isZoomed else { return }
-            step(direction, provider: provider, style: swipePageTurnStyle)
+            advancePage(direction, provider: provider, style: swipePageTurnStyle)
         })
         // Published only while this view is alive, so only while a reader window is really
         // on stage — no parental-lock filter here, because with `lock.isLocked`
         // `ReaderWindowContainer` shows `ParentalLockGateView` instead of `ReaderView`, so
         // this code simply isn't mounted at all.
         .focusedSceneValue(\.readerActions, ReaderCommandActions(
-            previousPage: { step(-1, provider: provider, style: tapPageTurnStyle) },
-            nextPage: { step(1, provider: provider, style: tapPageTurnStyle) }
+            previousPage: { advancePage(-1, provider: provider, style: tapPageTurnStyle) },
+            nextPage: { advancePage(1, provider: provider, style: tapPageTurnStyle) }
         ))
     }
     #endif
@@ -1065,10 +1075,10 @@ struct ReaderContentView: View {
             isAwaitingPagerReturn = false
         case .left where isAwaitingPagerReturn:
             guard let provider else { return }
-            step(-1, provider: provider, style: tapPageTurnStyle)
+            advancePage(-1, provider: provider, style: tapPageTurnStyle)
         case .right where isAwaitingPagerReturn:
             guard let provider else { return }
-            step(1, provider: provider, style: tapPageTurnStyle)
+            advancePage(1, provider: provider, style: tapPageTurnStyle)
         default:
             break
         }
@@ -1081,7 +1091,12 @@ struct ReaderContentView: View {
     /// `pageTurnTransition`. When the native pager is active (swipe and tap both on
     /// "Scroll") the swipe's slide doesn't go through here: the TabView handles it by
     /// following the finger.
+    @available(*, deprecated, renamed: "advancePage")
     private func step(_ direction: Int, provider: ComicPageProvider, style: TapPageTurnStyle) {
+        advancePage(direction, provider: provider, style: style)
+    }
+
+    private func advancePage(_ direction: Int, provider: ComicPageProvider, style: TapPageTurnStyle) {
         switch pagination(pageCount: provider.pageCount).step(from: currentPage, direction: direction) {
         case .endReached(let triggersNextComic):
             if triggersNextComic, let candidate = nextComicInLibrary {
@@ -1270,7 +1285,6 @@ struct ReaderContentView: View {
         }
     }
     #endif
-
 
     var footer: some View {
         Group {

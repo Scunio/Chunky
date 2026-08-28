@@ -144,17 +144,17 @@ struct PageTapZones: View {
                     // wide zone follows whichever side is "forward" in reading order — on
                     // the right normally, on the left with RTL reading.
                     let leftWidth = oneHanded
-                        ? PageTapZoneGeometry.oneHandedSideWidth(for: proxy.size.width)
+                        ? PageTapZoneGeometry.unifiedSideWidth(for: proxy.size.width)
                         : (rightToLeft ? PageTapZoneGeometry.forwardSideWidth(for: proxy.size.width) : PageTapZoneGeometry.backSideWidth(for: proxy.size.width))
                     let rightWidth = oneHanded
-                        ? PageTapZoneGeometry.oneHandedSideWidth(for: proxy.size.width)
+                        ? PageTapZoneGeometry.unifiedSideWidth(for: proxy.size.width)
                         : (rightToLeft ? PageTapZoneGeometry.backSideWidth(for: proxy.size.width) : PageTapZoneGeometry.forwardSideWidth(for: proxy.size.width))
                     let verticalInset: CGFloat = hotCorners ? PageTapZoneGeometry.cornerSize : 0
                     let bandHeight = proxy.size.height - verticalInset * 2
-                    accessibilityZone(label: previousOrSharedLabel, action: oneHanded ? sharedAction : onPrevious)
+                    accessibilityZone(label: previousOrSharedLabel, action: oneHanded ? oneHandedAction : onPrevious)
                         .frame(width: leftWidth, height: bandHeight)
                         .position(x: leftWidth / 2, y: verticalInset + bandHeight / 2)
-                    accessibilityZone(label: nextOrSharedLabel, action: oneHanded ? sharedAction : onNext)
+                    accessibilityZone(label: nextOrSharedLabel, action: oneHanded ? oneHandedAction : onNext)
                         .frame(width: rightWidth, height: bandHeight)
                         .position(x: proxy.size.width - rightWidth / 2, y: verticalInset + bandHeight / 2)
                     accessibilityZone(label: "Mostra o nascondi i controlli", action: onToggleControls)
@@ -166,14 +166,18 @@ struct PageTapZones: View {
         }
     }
 
-    private var sharedAction: () -> Void { oneHandedReversed ? onPrevious : onNext }
+    private var oneHandedAction: () -> Void { oneHandedReversed ? onPrevious : onNext }
+    @available(*, deprecated, renamed: "oneHandedAction")
+    private var sharedAction: () -> Void { oneHandedAction }
     /// `onPrevious`/`onNext` are the left zone and the right one: in manga the left is the
     /// one that moves forward, so the labels must be swapped.
     private var previousLabel: String { rightToLeft ? "Pagina successiva" : "Pagina precedente" }
     private var nextLabel: String { rightToLeft ? "Pagina precedente" : "Pagina successiva" }
-    private var sharedLabel: String { oneHandedReversed ? previousLabel : nextLabel }
-    private var previousOrSharedLabel: String { oneHanded ? sharedLabel : previousLabel }
-    private var nextOrSharedLabel: String { oneHanded ? sharedLabel : nextLabel }
+    private var oneHandedLabel: String { oneHandedReversed ? previousLabel : nextLabel }
+    @available(*, deprecated, renamed: "oneHandedLabel")
+    private var sharedLabel: String { oneHandedLabel }
+    private var previousOrSharedLabel: String { oneHanded ? oneHandedLabel : previousLabel }
+    private var nextOrSharedLabel: String { oneHanded ? oneHandedLabel : nextLabel }
 
     private func accessibilityZone(label: String, action: @escaping () -> Void) -> some View {
         Color.clear
@@ -205,12 +209,17 @@ enum PageTapZoneGeometry {
         min(totalWidth * 0.18, 90)
     }
 
-    /// "One-handed" mode: both sides do the same action (see `sharedAction` in
+    /// "One-handed" mode: both sides do the same action (see `oneHandedAction` in
     /// `PageTapZones`), so the forward/back asymmetry doesn't make sense here — one side
     /// isn't "more forward" than the other, they're the exact same action duplicated for
     /// thumb convenience. Fixed width, as before the asymmetric zones were introduced.
-    static func oneHandedSideWidth(for totalWidth: CGFloat) -> CGFloat {
+    static func unifiedSideWidth(for totalWidth: CGFloat) -> CGFloat {
         min(totalWidth * 0.18, 90)
+    }
+
+    @available(*, deprecated, renamed: "unifiedSideWidth")
+    static func oneHandedSideWidth(for totalWidth: CGFloat) -> CGFloat {
+        unifiedSideWidth(for: totalWidth)
     }
 
     enum Action {
@@ -255,12 +264,12 @@ enum PageTapZoneGeometry {
         guard point.y >= verticalInset, point.y <= size.height - verticalInset else { return nil }
 
         if oneHanded {
-            // Both sides call the same closure (see `sharedAction`): there's no "forward"
+            // Both sides call the same closure (see `oneHandedAction`): there's no "forward"
             // side and "back" side to make asymmetric, they're the same action.
-            let sideWidth = oneHandedSideWidth(for: size.width)
-            let sharedAction: Action = oneHandedReversed ? .previous : .next
-            if point.x <= sideWidth { return sharedAction }
-            if point.x >= size.width - sideWidth { return sharedAction }
+            let sideWidth = unifiedSideWidth(for: size.width)
+            let oneHandedAction: Action = oneHandedReversed ? .previous : .next
+            if point.x <= sideWidth { return oneHandedAction }
+            if point.x >= size.width - sideWidth { return oneHandedAction }
             return .toggleControls
         }
 
@@ -551,13 +560,13 @@ struct PageTapZones: View {
             // Left and right do the same action (the thumb doesn't need to aim at the exact
             // edge): which one, oneHandedReversed decides. Central band for the controls,
             // as in normal mode.
-            let sharedAction = oneHandedReversed ? onPrevious : onNext
-            let sharedLabel = oneHandedReversed ? previousLabel : nextLabel
+            let oneHandedAction = oneHandedReversed ? onPrevious : onNext
+            let oneHandedLabel = oneHandedReversed ? previousLabel : nextLabel
             HStack(spacing: 0) {
-                zone(label: sharedLabel, action: sharedAction)
+                zone(label: oneHandedLabel, action: oneHandedAction)
                     .frame(width: min(proxy.size.width * 0.18, 90))
                 zone(label: "Mostra o nascondi i controlli", action: onToggleControls)
-                zone(label: sharedLabel, action: sharedAction)
+                zone(label: oneHandedLabel, action: oneHandedAction)
                     .frame(width: min(proxy.size.width * 0.18, 90))
             }
         } else {
