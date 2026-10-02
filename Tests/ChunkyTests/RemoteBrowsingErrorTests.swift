@@ -1,6 +1,7 @@
 import Foundation
 import Testing
-@testable import Chunky
+// Niente `@testable import Chunky`: i test compilano i sorgenti direttamente
+// nello stesso modulo (vedi template `ChunkyUnitTest` in project.yml).
 
 @Suite("Messaggi di errore per gli account remoti")
 struct RemoteBrowsingErrorTests {

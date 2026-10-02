@@ -57,6 +57,7 @@ targetTemplates:
       base:
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: true
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/Chunky/Chunky-Bridging-Header.h
 
   ChunkyUITest:
     type: bundle.ui-testing
@@ -79,6 +80,7 @@ targetTemplates:
     settings:
       base:
         PRODUCT_NAME: Chunky
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/Chunky/Chunky-Bridging-Header.h
         PRODUCT_BUNDLE_IDENTIFIER: com.scunio.Chunky
         MARKETING_VERSION: "1.0.2"
         CURRENT_PROJECT_VERSION: "1"

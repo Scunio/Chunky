@@ -107,7 +107,10 @@ extension LibraryViewModel {
         if let opened = source.dateLastOpened, (target.dateLastOpened ?? .distantPast) < opened {
             target.dateLastOpened = opened
         }
-        if target.coverImageData == nil { target.coverImageData = source.coverImageData }
+        // Safe accessors: a direct `coverImageData` read on a row whose external
+        // sidecar file is missing raises an uncatchable NSException (see
+        // `ComicEntity.safeCoverImageData`) instead of returning nil.
+        if target.safeCoverImageData == nil { target.coverImageData = source.safeCoverImageData }
         if source.isFavorite { target.isFavorite = true }
         if (target.seriesName ?? "").isEmpty { target.seriesName = source.seriesName }
         if (target.title ?? "").isEmpty { target.title = source.title }

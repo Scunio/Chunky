@@ -21,12 +21,16 @@ enum CoverThumbnailCache {
     }()
 
     static func image(for comic: ComicEntity) -> PlatformImage? {
+        // `safeCoverImageData`, not `coverImageData`: when the sidecar file backing
+        // this external-binary attribute goes missing, a direct access raises an
+        // NSException (`_PFExternalReferenceData _retrieveExternalData`) that Swift
+        // cannot catch and the app aborts — the TestFlight 1.0.2 grid crash.
         guard let objectID = comic.objectID as NSManagedObjectID?, !objectID.isTemporaryID else {
-            return comic.coverImageData.flatMap(PlatformImage.from(data:))
+            return comic.safeCoverImageData.flatMap(PlatformImage.from(data:))
         }
         let key = NSManagedObjectIDBox(objectID)
         if let cached = cache.object(forKey: key) { return cached }
-        guard let data = comic.coverImageData, let decoded = PlatformImage.from(data: data) else { return nil }
+        guard let data = comic.safeCoverImageData, let decoded = PlatformImage.from(data: data) else { return nil }
         cache.setObject(decoded, forKey: key)
         return decoded
     }
