@@ -30,6 +30,8 @@
         <attribute name="resolvedAddressOverride" optional="YES" attributeType="String"/>
         <attribute name="autoScanEnabled" attributeType="Boolean" optional="NO" defaultValueString="YES" usesScalarValueType="YES"/>
         <attribute name="lastScanDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <!-- Ultimo errore di scansione (testo gia localizzato per la UI). Solo locale (syncable=NO): permesso Rete locale e rete cambiano per device. -->
+        <attribute name="lastScanError" optional="YES" attributeType="String" syncable="NO"/>
         <attribute name="smartFoldersEnabled" attributeType="Boolean" optional="NO" defaultValueString="YES" usesScalarValueType="YES"/>
         <attribute name="preCacheDetailsEnabled" attributeType="Boolean" optional="NO" defaultValueString="YES" usesScalarValueType="YES"/>
         <attribute name="preCacheCoversEnabled" attributeType="Boolean" optional="NO" defaultValueString="YES" usesScalarValueType="YES"/>

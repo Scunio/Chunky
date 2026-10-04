@@ -18,7 +18,13 @@ final class WebDAVClient: RemoteBrowsing {
         </D:propfind>
         """.utf8)
 
-        let (data, response) = try await fetch(request)
+        // Credenziali lette qui in modo sincrono: dopo il primo `await`
+        // l'account (main-confined) non va più toccato.
+        let (data, response) = try await RemoteSession.data(
+            for: request,
+            username: account.username,
+            password: account.password
+        )
         if let http = response as? HTTPURLResponse, http.statusCode == 401 {
             throw RemoteBrowsingError.unauthorized
         }
@@ -35,21 +41,6 @@ final class WebDAVClient: RemoteBrowsing {
 
     func download(_ entry: RemoteEntry, account: RemoteAccountEntity) async throws -> URL {
         try await downloadFile(from: entry.url, account: account, suggestedName: entry.title)
-    }
-
-    private func fetch(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        try await withCheckedThrowingContinuation { continuation in
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else if let data = data, let response = response {
-                    continuation.resume(returning: (data, response))
-                } else {
-                    continuation.resume(throwing: RemoteBrowsingError.invalidResponse)
-                }
-            }
-            task.resume()
-        }
     }
 }
 

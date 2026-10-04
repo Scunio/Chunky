@@ -5,46 +5,61 @@ import Foundation
 /// <entry> is either a subfolder (navigation link) or a downloadable comic (acquisition
 /// link).
 final class OPDSClient: RemoteBrowsing {
+    /// Segue i link `rel="next"` del feed (cataloghi grandi, es. Calibre con
+    /// migliaia di titoli): senza, la libreria vedrebbe solo la prima pagina.
+    /// Tetto anti-loop: max 5 pagine, e stop se `next` punta alla pagina stessa.
     func listEntries(at url: URL, account: RemoteAccountEntity) async throws -> [RemoteEntry] {
-        let request = authenticatedRequest(for: url, account: account)
-        let (data, response) = try await fetch(request)
-        if let http = response as? HTTPURLResponse, http.statusCode == 401 {
-            throw RemoteBrowsingError.unauthorized
-        }
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw RemoteBrowsingError.invalidResponse
-        }
+        var allEntries: [RemoteEntry] = []
+        var pageURL: URL? = url
+        var pagesFetched = 0
 
-        let parser = XMLParser(data: data)
-        let delegate = OPDSFeedDelegate(baseURL: url)
-        parser.delegate = delegate
-        guard parser.parse() else { throw RemoteBrowsingError.parsingFailed }
-        return delegate.entries
+        while let current = pageURL, pagesFetched < 5 {
+            pagesFetched += 1
+            let (entries, next) = try await fetchPage(at: current, account: account)
+            allEntries += entries
+            pageURL = (next == nil || next == current || next == url) ? nil : next
+        }
+        return allEntries
     }
 
     func download(_ entry: RemoteEntry, account: RemoteAccountEntity) async throws -> URL {
         try await downloadFile(from: entry.url, account: account, suggestedName: entry.title)
     }
 
-    private func fetch(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        try await withCheckedThrowingContinuation { continuation in
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else if let data = data, let response = response {
-                    continuation.resume(returning: (data, response))
-                } else {
-                    continuation.resume(throwing: RemoteBrowsingError.invalidResponse)
-                }
-            }
-            task.resume()
+    private func fetchPage(at url: URL, account: RemoteAccountEntity) async throws -> ([RemoteEntry], URL?) {
+        let request = authenticatedRequest(for: url, account: account)
+        // Credenziali lette qui in modo sincrono: dopo il primo `await`
+        // l'account (main-confined) non va più toccato.
+        let (data, response) = try await RemoteSession.data(
+            for: request,
+            username: account.username,
+            password: account.password
+        )
+        if let http = response as? HTTPURLResponse, http.statusCode == 401 {
+            throw RemoteBrowsingError.unauthorized
         }
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw RemoteBrowsingError.invalidResponse
+        }
+        return try Self.parseFeed(data, baseURL: url)
+    }
+
+    /// Parsing puro (niente rete): testabile con fixture XML inline.
+    static func parseFeed(_ data: Data, baseURL: URL) throws -> ([RemoteEntry], URL?) {
+        let parser = XMLParser(data: data)
+        let delegate = OPDSFeedDelegate(baseURL: baseURL)
+        parser.delegate = delegate
+        guard parser.parse() else { throw RemoteBrowsingError.parsingFailed }
+        let next = delegate.nextHref.flatMap { URL(string: $0, relativeTo: baseURL)?.absoluteURL }
+        return (delegate.entries, next)
     }
 }
 
 private final class OPDSFeedDelegate: NSObject, XMLParserDelegate {
     let baseURL: URL
     private(set) var entries: [RemoteEntry] = []
+    /// Link `rel="next"` a livello di feed (fuori dalle `<entry>`): pagina successiva.
+    private(set) var nextHref: String?
 
     private var currentTitle = ""
     private var currentText = ""
@@ -66,6 +81,12 @@ private final class OPDSFeedDelegate: NSObject, XMLParserDelegate {
             currentTitle = ""
             acquisitionHref = nil
             navigationHref = nil
+        }
+
+        if elementName == "link", !isInEntry {
+            if attributeDict["rel"] == "next", let href = attributeDict["href"] {
+                nextHref = href
+            }
         }
 
         if elementName == "link", isInEntry {

@@ -45,12 +45,17 @@ enum RemoteAccountScanner {
         // never collides with) one already in the library.
         let existingPaths = Set(existingComics.compactMap { $0.sourceRelativePath })
 
-        await walk(browser: browser, account: account, url: rootURL, existingPaths: existingPaths, depth: 0, context: context)
+        // La scansione non fallisce mai verso l'esterno (gira ogni 3 minuti in
+        // foreground): il primo errore incontrato resta visibile sull'account
+        // (`lastScanError`) invece di perdersi in un `try?` silenzioso.
+        let firstError = await walk(browser: browser, account: account, url: rootURL, existingPaths: existingPaths, depth: 0, context: context)
 
+        account.lastScanError = firstError?.chunkyFriendlyDescription
         account.lastScanDate = Date()
         try? context.save()
     }
 
+    /// Il primo errore incontrato (root o sottocartelle), `nil` se tutto ok.
     private static func walk(
         browser: RemoteBrowsing,
         account: RemoteAccountEntity,
@@ -58,19 +63,27 @@ enum RemoteAccountScanner {
         existingPaths: Set<String>,
         depth: Int,
         context: NSManagedObjectContext
-    ) async {
-        guard depth < maxDepth else { return }
-        guard let entries = try? await browser.listEntries(at: url, account: account) else { return }
+    ) async -> Error? {
+        guard depth < maxDepth else { return nil }
+        let entries: [RemoteEntry]
+        do {
+            entries = try await browser.listEntries(at: url, account: account)
+        } catch {
+            return error
+        }
 
+        var firstError: Error?
         for entry in entries {
             if entry.isContainer {
-                await walk(browser: browser, account: account, url: entry.url, existingPaths: existingPaths, depth: depth + 1, context: context)
+                let nested = await walk(browser: browser, account: account, url: entry.url, existingPaths: existingPaths, depth: depth + 1, context: context)
+                if firstError == nil { firstError = nested }
             } else {
                 let sourcePath = entry.url.absoluteString
                 guard !existingPaths.contains(sourcePath) else { continue }
                 await registerPlaceholder(entry: entry, account: account, sourcePath: sourcePath, context: context)
             }
         }
+        return firstError
     }
 
     private static func registerPlaceholder(

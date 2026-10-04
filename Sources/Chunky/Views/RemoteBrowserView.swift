@@ -1,5 +1,10 @@
 import SwiftUI
 import CoreData
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 struct RemoteBrowserView: View {
     let account: RemoteAccountEntity
@@ -16,6 +21,11 @@ struct RemoteBrowserView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var downloadingEntryIDs: Set<RemoteEntry.ID> = []
+    @State private var searchText = ""
+    @State private var isRefreshingLibrary = false
+    /// L'ultimo caricamento è fallito per blocco privacy "Rete locale": serve
+    /// il toggle manuale, "Riprova" da solo non basta (vedi banner sotto).
+    @State private var localNetworkBlocked = false
 
     private var browser: RemoteBrowsing { RemoteBrowsingFactory.makeBrowser(for: account.kind) }
     private var url: URL { startURL ?? account.serverURL ?? URL(string: "about:blank")! }
@@ -26,7 +36,8 @@ struct RemoteBrowserView: View {
         // unbounded. `TVPanel` puts the title in the layout instead.
         #if os(tvOS)
         TVPanel(title: title ?? account.name ?? "Sfoglia") {
-            EmptyView()
+            Button("Aggiorna", action: refreshLibrary)
+                .disabled(isLoading || isRefreshingLibrary)
         } content: {
             browserContent
         }
@@ -36,11 +47,30 @@ struct RemoteBrowserView: View {
         // folder — recursion into a subfolder pushes another instance of this same view).
         .onExitCommand { dismiss() }
         .onAppear(perform: load)
+        .searchable(text: $searchText, prompt: "Cerca qui")
         #else
         browserContent
             .navigationTitle(title ?? account.name ?? "Sfoglia")
+            .searchable(text: $searchText, prompt: "Cerca qui")
+            .refreshable { await reload() }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: refreshLibrary) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(isLoading || isRefreshingLibrary)
+                    .accessibilityLabel("Aggiorna libreria da qui")
+                }
+            }
             .onAppear(perform: load)
         #endif
+    }
+
+    /// Voci filtrate dalla ricerca (filtro locale sui titoli già caricati).
+    private var visibleEntries: [RemoteEntry] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return entries }
+        return entries.filter { $0.title.localizedCaseInsensitiveContains(query) }
     }
 
     @ViewBuilder
@@ -54,13 +84,29 @@ struct RemoteBrowserView: View {
             } description: {
                 Text(errorMessage)
             } actions: {
+                #if !os(tvOS)
+                if localNetworkBlocked {
+                    Button("Apri Impostazioni", action: openSystemSettings)
+                }
+                #endif
                 Button("Riprova", action: load)
             }
         } else if entries.isEmpty {
             ContentUnavailableView("Nessun contenuto qui.", systemImage: "folder")
+        } else if visibleEntries.isEmpty {
+            ContentUnavailableView(
+                "Nessun risultato",
+                systemImage: "magnifyingglass",
+                description: Text("Niente che contenga \"\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))\".")
+            )
         } else {
-            List(entries) { entry in
-                row(for: entry)
+            let folders = visibleEntries.filter(\.isContainer).count
+            List {
+                Section(header: Text("\(folders) cartelle · \(visibleEntries.count - folders) fumetti")) {
+                    ForEach(visibleEntries) { entry in
+                        row(for: entry)
+                    }
+                }
             }
             .tvOSListFocusFix()
         }
@@ -93,22 +139,52 @@ struct RemoteBrowserView: View {
     }
 
     private func load() {
-        isLoading = true
-        errorMessage = nil
-        Task {
-            do {
-                let loaded = try await browser.listEntries(at: url, account: account)
-                await MainActor.run {
-                    entries = loaded
-                    isLoading = false
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.chunkyFriendlyDescription
-                    isLoading = false
-                }
+        Task { await reload() }
+    }
+
+    private func reload() async {
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+            localNetworkBlocked = false
+        }
+        do {
+            let loaded = try await browser.listEntries(at: url, account: account)
+            await MainActor.run {
+                entries = loaded
+                isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.chunkyFriendlyDescription
+                localNetworkBlocked = error.isLocalNetworkDenied
+                isLoading = false
             }
         }
+    }
+
+    /// Riscansiona l'account (registra eventuali fumetti nuovi in libreria) e
+    /// ricarica la cartella: la scansione automatica gira ogni 3 minuti, ma da
+    /// qui l'utente non deve aspettarla.
+    private func refreshLibrary() {
+        isRefreshingLibrary = true
+        Task {
+            await RemoteAccountScanner.scan(account: account, context: context)
+            await reload()
+            await MainActor.run { isRefreshingLibrary = false }
+        }
+    }
+
+    private func openSystemSettings() {
+        #if os(iOS)
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+        #elseif os(macOS)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork") {
+            NSWorkspace.shared.open(url)
+        }
+        #endif
     }
 
     private func downloadAndImport(_ entry: RemoteEntry) {

@@ -11,7 +11,7 @@
 
 </div>
 
-Chunky is a SwiftUI comic/manga reader built for people with large digital libraries — CBZ and CBR archives, PDFs, and loose folders of scanned images. It runs natively on iPhone/iPad, Mac, and Apple TV, keeps your library in sync via iCloud, and can pull comics straight from WebDAV, SMB, FTP/SFTP, OPDS servers, or your Mac's shared folders.
+Chunky is a SwiftUI comic/manga reader built for people with large digital libraries — CBZ and CBR archives, PDFs, and loose folders of scanned images. It runs natively on iPhone/iPad, Mac, and Apple TV, keeps your library in sync via iCloud, and can pull comics straight from WebDAV, SMB, OPDS servers, or your Mac's shared folders.
 
 <div align="center">
   <img src="docs/screenshots/iphone-library.png" width="18%" alt="iPhone library grid, grouped by series" />
@@ -29,7 +29,7 @@ Chunky is a SwiftUI comic/manga reader built for people with large digital libra
 ### 📚 Library
 - Automatic grouping by series, with favorites and read/unread progress
 - iCloud Drive sync — one library across all your devices
-- Import from WebDAV, SMB, FTP/SFTP, AFP, OPDS, or a local upload server reachable from any browser on the same Wi-Fi
+- Import from WebDAV, SMB, OPDS, or a local upload server reachable from any browser on the same Wi-Fi
 - Turn a folder of loose scanned images into a proper comic archive
 - "Rebuild library" recovery tool for restores gone half-right
 
@@ -72,7 +72,7 @@ The project is defined in [`project.yml`](project.yml) and the `.xcodeproj` is g
 
 `Chunky_iOS`, `Chunky_macOS`, and `Chunky_tvOS` are three separate targets rather than one multiplatform target, so each ships only the Info.plist keys and entitlements that apply to it. `Scripts/verify-plists.sh <derived-data-path> [macos|ios|both]` checks that for iOS/macOS, and runs in CI.
 
-Once open in Xcode, pick the `Chunky_iOS`, `Chunky_macOS`, or `Chunky_tvOS` scheme and run. No signing team is configured by default — set your own in Xcode's Signing & Capabilities tab before running on a device or enabling iCloud sync. tvOS has no Files app/iCloud Drive, so it always uses remote servers (WebDAV, SMB, FTP/SFTP, OPDS) or a local upload server instead — no iCloud sync there.
+Once open in Xcode, pick the `Chunky_iOS`, `Chunky_macOS`, or `Chunky_tvOS` scheme and run. No signing team is configured by default — set your own in Xcode's Signing & Capabilities tab before running on a device or enabling iCloud sync. tvOS has no Files app/iCloud Drive, so it always uses remote servers (WebDAV, SMB, OPDS) or a local upload server instead — no iCloud sync there.
 
 Dependencies ([ZIPFoundation](https://github.com/weichsel/ZIPFoundation) and [Unrar.swift](https://github.com/mtgto/Unrar.swift)) are resolved automatically by Swift Package Manager on first build.
 

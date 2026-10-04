@@ -64,7 +64,14 @@ extension RemoteBrowsing {
         let request = authenticatedRequest(for: url, account: account)
         let holder = ContinuationHolder()
 
-        let task = URLSession.shared.downloadTask(with: request) { location, response, error in
+        // Sessione condivisa: timeout, attesa connettività e auth Digest/NTLM
+        // via challenge (vedi `RemoteSession`). Credenziali lette qui in modo
+        // sincrono: dopo il primo `await` l'account non va più toccato.
+        let task = RemoteSession.downloadTask(
+            with: request,
+            username: account.username,
+            password: account.password
+        ) { location, response, error in
             if let error = error {
                 holder.continuation?.resume(throwing: error)
                 return

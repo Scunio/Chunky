@@ -49,16 +49,12 @@ struct AccountsView: View {
         #endif
     }
 
+    /// Scorciatoie al selettore file — non connessioni dirette. Solo voci per app
+    /// con File Provider; niente protocolli non parlati (FTP/SFTP, AFP).
     private static let openServices: [OpenRemoteService] = [
-        OpenRemoteService(name: "FTP / SFTP", systemImage: "network", tintColor: .primary),
-        OpenRemoteService(name: "AFP", systemImage: "folder", tintColor: .primary),
-        OpenRemoteService(name: "ComicStreamer", systemImage: "server.rack", tintColor: .primary),
-        OpenRemoteService(name: "Image Comics", systemImage: "book.closed", tintColor: .primary),
-        OpenRemoteService(name: "Transporter", systemImage: "shippingbox", tintColor: .primary),
         OpenRemoteService(name: "Dropbox", systemImage: "square.on.square", tintColor: .blue),
         OpenRemoteService(name: "Google Drive", systemImage: "triangle", tintColor: .green),
-        OpenRemoteService(name: "OneDrive", systemImage: "icloud", tintColor: .blue),
-        OpenRemoteService(name: "Amazon Cloud Drive", systemImage: "cloud", tintColor: .orange)
+        OpenRemoteService(name: "OneDrive", systemImage: "icloud", tintColor: .blue)
     ]
 
     var body: some View {
@@ -143,7 +139,7 @@ struct AccountsView: View {
                 Section(header: Text("I tuoi account")) {
                     ForEach(accounts) { account in
                         NavigationLink(destination: RemoteBrowserView(account: account)) {
-                            rowLabel(account.name ?? "Account", systemImage: account.kind.systemImage)
+                            accountRow(for: account)
                         }
                     }
                     .onDelete(perform: deleteAccounts)
@@ -157,8 +153,23 @@ struct AccountsView: View {
                     }
                     .foregroundColor(.primary)
 
-                    // No system file picker on tvOS: these open one (see the `.fileImporter` above).
-                    #if !os(tvOS)
+                    Button(action: { addAccountKind = .webdav; isShowingAddAccount = true }) {
+                        rowLabel("Nuovo account WebDAV", systemImage: "plus.circle")
+                    }
+                    .foregroundColor(.primary)
+
+                    Button(action: { addAccountKind = .smb; isShowingAddAccount = true }) {
+                        rowLabel("Nuovo account SMB", systemImage: RemoteAccountKind.smb.systemImage)
+                    }
+                    .foregroundColor(.primary)
+                }
+
+                // No system file picker on tvOS: these open one (see the `.fileImporter` above).
+                #if !os(tvOS)
+                Section(
+                    header: Text("Importa da file"),
+                    footer: Text("Apre il selettore file del sistema: i servizi cloud compaiono lì solo se hai le loro app installate.")
+                ) {
                     ForEach(Self.openServices, id: \.name) { service in
                         Button(action: { activeImporter = .comics }) {
                             Label {
@@ -170,18 +181,8 @@ struct AccountsView: View {
                         }
                         .foregroundColor(.primary)
                     }
-                    #endif
-
-                    Button(action: { addAccountKind = .webdav; isShowingAddAccount = true }) {
-                        rowLabel("Nuovo account WebDAV", systemImage: "plus.circle")
-                    }
-                    .foregroundColor(.primary)
-
-                    Button(action: { addAccountKind = .smb; isShowingAddAccount = true }) {
-                        rowLabel("Nuovo account SMB", systemImage: RemoteAccountKind.smb.systemImage)
-                    }
-                    .foregroundColor(.primary)
                 }
+                #endif
             // On tvOS, the folder-import feature this section exists for needs a system file
             // picker tvOS doesn't have (hidden below), so without a real import error to show
             // there'd be nothing left but an orphaned header/footer floating with no button.
@@ -265,7 +266,7 @@ struct AccountsView: View {
                         Section("I tuoi account") {
                             ForEach(accounts) { account in
                                 NavigationLink(destination: RemoteBrowserView(account: account)) {
-                                    rowLabel(account.name ?? "Account", systemImage: account.kind.systemImage)
+                                    accountRow(for: account)
                                 }
                                 .tvOSRowBackground()
                             }
@@ -304,6 +305,51 @@ struct AccountsView: View {
             Text(title)
         } icon: {
             Image(systemName: systemImage).foregroundColor(tint)
+        }
+        #endif
+    }
+
+    private static let scanDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    /// Stato ultima scansione: errore (rosso) o data (grigia).
+    private func accountStatus(for account: RemoteAccountEntity) -> (text: String, isError: Bool) {
+        if let error = account.lastScanError, !error.isEmpty {
+            return (error, true)
+        }
+        if let date = account.lastScanDate {
+            return ("Ultima scansione: \(Self.scanDateFormatter.string(from: date))", false)
+        }
+        return ("Mai scansionato", false)
+    }
+
+    @ViewBuilder
+    private func accountRow(for account: RemoteAccountEntity) -> some View {
+        let status = accountStatus(for: account)
+        #if os(tvOS)
+        VStack(alignment: .leading, spacing: 4) {
+            tvOSRowLabel(account.name ?? "Account", systemImage: account.kind.systemImage)
+            Text(status.text)
+                .font(.caption)
+                .foregroundColor(status.isError ? .red : .secondary)
+                .lineLimit(2)
+                .padding(.leading, 68)
+        }
+        #else
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(account.name ?? "Account")
+                Text(status.text)
+                    .font(.caption)
+                    .foregroundColor(status.isError ? .red : .secondary)
+                    .lineLimit(2)
+            }
+        } icon: {
+            Image(systemName: account.kind.systemImage)
         }
         #endif
     }
