@@ -5,10 +5,24 @@ import Testing
 
 @Suite("Messaggi di errore per gli account remoti")
 struct RemoteBrowsingErrorTests {
-    @Test("Nessun permesso di Rete locale su tvOS indica dove attivarlo")
+    @Test("Nessun permesso di Rete locale indica dove attivarlo (per piattaforma)")
     func localNetworkPermissionDenied() {
         let error = POSIXError(.EPERM)
         #expect(error.chunkyFriendlyDescription.contains("Rete locale"))
+        #expect(error.isLocalNetworkDenied)
+        #if os(tvOS)
+        #expect(error.chunkyFriendlyDescription.contains("App"))
+        #elseif os(iOS)
+        #expect(error.chunkyFriendlyDescription.contains("Privacy e sicurezza"))
+        #elseif os(macOS)
+        #expect(error.chunkyFriendlyDescription.contains("Impostazioni di Sistema"))
+        #endif
+    }
+
+    @Test("Altri errori non sono blocco Rete locale")
+    func otherErrorsAreNotLocalNetworkDenied() {
+        #expect(!POSIXError(.ETIMEDOUT).isLocalNetworkDenied)
+        #expect(!URLError(.timedOut).isLocalNetworkDenied)
     }
 
     @Test("Timeout indica di verificare che il server sia acceso")
@@ -24,7 +38,7 @@ struct RemoteBrowsingErrorTests {
     }
 
     @Test("Rete irraggiungibile indica di verificare di essere sulla stessa rete", arguments: [
-        POSIXErrorCode.ENETUNREACH, .EHOSTUNREACH, .ENETDOWN,
+        POSIXErrorCode.ENETUNREACH, .EHOSTUNREACH, .ENETDOWN
     ])
     func networkUnreachable(code: POSIXErrorCode) {
         let error = POSIXError(code)
@@ -38,7 +52,7 @@ struct RemoteBrowsingErrorTests {
     }
 
     @Test("Host non trovato indica di controllare l'indirizzo", arguments: [
-        URLError.Code.cannotFindHost, .cannotConnectToHost,
+        URLError.Code.cannotFindHost, .cannotConnectToHost
     ])
     func hostUnreachable(code: URLError.Code) {
         let error = URLError(code)
@@ -52,7 +66,7 @@ struct RemoteBrowsingErrorTests {
     }
 
     @Test("Assenza di rete indica di verificare Wi-Fi/LAN", arguments: [
-        URLError.Code.notConnectedToInternet, .networkConnectionLost,
+        URLError.Code.notConnectedToInternet, .networkConnectionLost
     ])
     func noNetwork(code: URLError.Code) {
         let error = URLError(code)

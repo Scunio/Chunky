@@ -119,7 +119,18 @@ extension Error {
         if let posixError = self as? POSIXError {
             switch posixError.code {
             case .EPERM:
-                return "Connessione bloccata dal sistema. Su Apple TV, apri Impostazioni → App → Chunky e attiva \"Rete locale\", poi riprova."
+                // Il permesso "Rete locale" è per-app e va concesso a Chunky anche
+                // se la rete funziona. E una volta negato, iOS/tvOS non ripropone
+                // il prompt: bisogna riattivarlo a mano dalle impostazioni.
+                #if os(tvOS)
+                return "Connessione bloccata dal sistema. Apri Impostazioni → App → Chunky e attiva \"Rete locale\", poi riprova."
+                #elseif os(iOS)
+                return "Connessione bloccata dal sistema. Apri Impostazioni → Privacy e sicurezza → Rete locale e attiva Chunky, poi riprova."
+                #elseif os(macOS)
+                return "Connessione bloccata dal sistema. Apri Impostazioni di Sistema → Privacy e sicurezza → Rete locale e attiva Chunky, poi riprova."
+                #else
+                return "Connessione bloccata dal sistema. Attiva l'accesso alla rete locale per Chunky nelle impostazioni, poi riprova."
+                #endif
             case .ETIMEDOUT:
                 return "Il server non ha risposto in tempo. Verifica che sia acceso e sulla stessa rete."
             case .ECONNREFUSED:
@@ -143,6 +154,13 @@ extension Error {
             }
         }
         return localizedDescription
+    }
+
+    /// Vero quando l'errore è il blocco privacy "Rete locale" (permesso negato
+    /// per questa app). Serve alla UI per mostrare il banner con il pulsante
+    /// "Apri Impostazioni" invece di un generico messaggio di rete.
+    var isLocalNetworkDenied: Bool {
+        (self as? POSIXError)?.code == .EPERM
     }
 }
 

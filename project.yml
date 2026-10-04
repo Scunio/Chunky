@@ -130,7 +130,7 @@ targets:
         # registra in libreria.
         UIFileSharingEnabled: true
         NSFaceIDUsageDescription: "Usa Face ID per sbloccare Chunky quando il blocco genitori è attivo."
-        NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
+        NSLocalNetworkUsageDescription: "Chunky usa la rete locale per trovare il NAS di casa (SMB) e ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
         NSBonjourServices:
           - _smb._tcp
         NSUbiquitousContainers:
@@ -188,7 +188,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         LSApplicationCategoryType: public.app-category.entertainment
         NSHumanReadableCopyright: "MIT License"
-        NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
+        NSLocalNetworkUsageDescription: "Chunky usa la rete locale per trovare il NAS di casa (SMB) e ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
         NSBonjourServices:
           - _smb._tcp
         NSUbiquitousContainers:
@@ -242,7 +242,7 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         ITSAppUsesNonExemptEncryption: false
-        NSLocalNetworkUsageDescription: "Chunky usa la rete locale per ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
+        NSLocalNetworkUsageDescription: "Chunky usa la rete locale per trovare il NAS di casa (SMB) e ricevere fumetti caricati da un browser sullo stesso Wi-Fi."
         NSBonjourServices:
           - _smb._tcp
         # Niente NSUbiquitousContainers qui: è la chiave che rende il container visibile in

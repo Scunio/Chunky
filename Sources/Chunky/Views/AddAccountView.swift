@@ -1,5 +1,10 @@
 import SwiftUI
 import CoreData
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 struct AddAccountView: View {
     @Environment(\.managedObjectContext) private var context
@@ -22,6 +27,9 @@ struct AddAccountView: View {
     @State private var smbWorkgroup = ""
     @State private var smbResolvedAddressOverride = ""
     @StateObject private var discovery = SMBDiscoveryService()
+    /// Preflight del permesso "Rete locale": se è indeciso fa comparire il
+    /// prompt di sistema, se è negato guida al toggle nelle Impostazioni.
+    @StateObject private var localNetwork = LocalNetworkPermission()
     @State private var speedTestResult: String?
     @State private var isRunningSpeedTest = false
     // Share discovery ("Sfoglia condivisioni"): lets the user pick a share from what the server
@@ -29,6 +37,10 @@ struct AddAccountView: View {
     @State private var isBrowsingShares = false
     @State private var availableShares: [String] = []
     @State private var shareBrowseError: String?
+    /// Ultimo tentativo fallito per blocco privacy "Rete locale" (permesso negato
+    /// per Chunky: iOS/tvOS non ripropongono il prompt, serve il toggle manuale).
+    /// Guida la UI a mostrare il banner con "Apri Impostazioni".
+    @State private var localNetworkBlocked = false
     #if os(tvOS)
     @State private var isAdvancedExpanded = false
     #endif
@@ -49,7 +61,7 @@ struct AddAccountView: View {
         tvOSForm
             .onChange(of: kind, perform: updateDiscovery)
             .onAppear { updateDiscovery(kind) }
-            .onDisappear { discovery.stop() }
+            .onDisappear { discovery.stop(); localNetwork.stop() }
         #else
         NavigationStack {
             formContent
@@ -75,7 +87,7 @@ struct AddAccountView: View {
         .sheetSized()
         .onChange(of: kind, perform: updateDiscovery)
         .onAppear { updateDiscovery(kind) }
-        .onDisappear { discovery.stop() }
+        .onDisappear { discovery.stop(); localNetwork.stop() }
         #endif
     }
 
@@ -94,9 +106,65 @@ struct AddAccountView: View {
 
     private func updateDiscovery(_ kind: RemoteAccountKind) {
         if kind == .smb {
+            // Entrambi fanno operazioni di rete locale: il primo che parte fa
+            // comparire il prompt di sistema se il permesso è ancora indeciso.
             discovery.start()
+            localNetwork.check()
         } else {
             discovery.stop()
+            localNetwork.stop()
+        }
+    }
+
+    /// Il blocco privacy è confermato quando il preflight lo rileva oppure un
+    /// tentativo SMB fallisce con EPERM (il client SMB usa socket diretti).
+    private var isBlockedBySystem: Bool {
+        localNetwork.status == .denied || localNetworkBlocked
+    }
+
+    private func retryLocalNetworkCheck() {
+        localNetworkBlocked = false
+        localNetwork.stop()
+        discovery.start()
+        localNetwork.check()
+    }
+
+    /// Apre le impostazioni di sistema nel punto giusto per riattivare la
+    /// "Rete locale". Su tvOS non esiste un URL per le impostazioni: il
+    /// chiamante mostra solo le istruzioni testuali.
+    private func openSystemSettings() {
+        #if os(iOS)
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+        #elseif os(macOS)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork") {
+            NSWorkspace.shared.open(url)
+        }
+        #endif
+    }
+
+    /// Banner mostrato quando l'accesso alla rete locale è negato a Chunky
+    /// (preflight o tentativo SMB fallito): il prompt di sistema non ricompare
+    /// da solo, serve il toggle manuale e poi "Riprova".
+    private var localNetworkHelpSection: some View {
+        Section(header: Text("Serve l'accesso alla rete locale")) {
+            Text("Senza questo permesso non possiamo raggiungere il NAS: attivalo per Chunky e poi premi Riprova, non serve reinserire nulla.")
+                .font(.footnote)
+            #if os(tvOS)
+            Text("Apri Impostazioni → App → Chunky e attiva \"Rete locale\".")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+            Button("Riprova", action: retryLocalNetworkCheck)
+            #else
+            Button("Apri Impostazioni", action: openSystemSettings)
+            Button("Riprova", action: retryLocalNetworkCheck)
+            #if os(iOS)
+            Text("Percorso: Impostazioni → Privacy e sicurezza → Rete locale → Chunky.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+            #endif
+            #endif
         }
     }
 
@@ -127,9 +195,13 @@ struct AddAccountView: View {
                     }
                 }
 
+                if isBlockedBySystem {
+                    localNetworkHelpSection
+                }
+
                 Section(
-                    header: Text("Server"),
-                    footer: Text("L'indirizzo del NAS in rete locale, es. 192.168.1.10 o nas.local. Se non compare sopra nell'elenco trovato in rete, inseriscilo qui manualmente.")
+                    header: Text("1. NAS in rete"),
+                    footer: Text("Tocca il NAS se compare sopra, altrimenti scrivi l'indirizzo a mano (es. 192.168.1.10). Alla prima ricerca l'iPhone chiede \"Rete locale\": serve Consenti, altrimenti blocca tutto qui.")
                 ) {
                     TextField("Nome account", text: $name)
                     TextField("Indirizzo", text: $smbHost)
@@ -138,6 +210,12 @@ struct AddAccountView: View {
                         .autocapitalization(.none)
                         #endif
                         .disableAutocorrection(true)
+                }
+
+                Section(
+                    header: Text("2. Condivisione"),
+                    footer: Text("Non serve indovinare il nome: premi il pulsante con le credenziali compilate e scegli dall'elenco reale del NAS.")
+                ) {
                     TextField("Condivisione", text: $smbShare)
                         #if os(iOS)
                         .autocapitalization(.none)
@@ -181,7 +259,7 @@ struct AddAccountView: View {
                 }
             }
 
-            Section(header: Text("Credenziali (opzionali)")) {
+            Section(header: Text(kind == .smb ? "3. Credenziali (servono quasi sempre)" : "Credenziali (opzionali)")) {
                 TextField("Nome utente", text: $username)
                     #if os(iOS)
                     .autocapitalization(.none)
@@ -286,10 +364,18 @@ struct AddAccountView: View {
                     }
                 }
 
-                TVFormFieldRow(label: "Nome") { TextField("es. Il mio NAS", text: $name) }
-                TVFormFieldRow(label: "Indirizzo") { TextField("es. 192.168.1.10", text: $smbHost).disableAutocorrection(true) }
-                TVFormFieldRow(label: "Condivisione") { TextField("es. Video", text: $smbShare).disableAutocorrection(true) }
-                Text("L'indirizzo del NAS in rete locale, es. 192.168.1.10 o nas.local. Se non compare sopra nell'elenco trovato in rete, inseriscilo qui manualmente.")
+                if isBlockedBySystem {
+                    Text("Serve l'accesso alla rete locale: apri Impostazioni → App → Chunky, attiva \"Rete locale\" e poi riprova.")
+                        .font(.footnote)
+                        .foregroundColor(.red)
+                    Button("Riprova", action: retryLocalNetworkCheck)
+                        .buttonStyle(.card)
+                }
+
+                TVFormFieldRow(label: "1. Nome") { TextField("es. Il mio NAS", text: $name) }
+                TVFormFieldRow(label: "1. Indirizzo") { TextField("es. 192.168.1.10", text: $smbHost).disableAutocorrection(true) }
+                TVFormFieldRow(label: "2. Condivisione") { TextField("es. Video", text: $smbShare).disableAutocorrection(true) }
+                Text("Tocca il NAS in \"Trovati in rete\" se compare, altrimenti scrivi l'indirizzo a mano. Poi premi \"Sfoglia condivisioni\" e scegli dall'elenco reale del NAS.")
                     .font(.footnote)
                     .foregroundColor(.secondary)
 
@@ -341,7 +427,7 @@ struct AddAccountView: View {
                     .foregroundColor(.secondary)
             }
 
-            TVFormSectionLabel(title: "Credenziali (opzionali)")
+            TVFormSectionLabel(title: kind == .smb ? "3. Credenziali (servono quasi sempre)" : "Credenziali (opzionali)")
             TVFormFieldRow(label: "Nome utente") { TextField("opzionale", text: $username).disableAutocorrection(true) }
             TVFormFieldRow(label: "Password") { SecureField("opzionale", text: $password) }
 
@@ -452,6 +538,7 @@ struct AddAccountView: View {
         }
 
         isRunningSpeedTest = true
+        localNetworkBlocked = false
         let connection = SMBConnectionInfo(
             host: trimmedOverride.isEmpty ? trimmedHost : trimmedOverride,
             port: port,
@@ -475,6 +562,7 @@ struct AddAccountView: View {
             } catch {
                 await MainActor.run {
                     speedTestResult = "Connessione non riuscita: \(error.chunkyFriendlyDescription)"
+                    localNetworkBlocked = error.isLocalNetworkDenied
                     isRunningSpeedTest = false
                 }
             }
@@ -497,6 +585,7 @@ struct AddAccountView: View {
         }
 
         isBrowsingShares = true
+        localNetworkBlocked = false
         Task {
             do {
                 let shares = try await SMBClient().listShares(
@@ -516,6 +605,7 @@ struct AddAccountView: View {
             } catch {
                 await MainActor.run {
                     shareBrowseError = "Impossibile elencare le condivisioni: \(error.chunkyFriendlyDescription)"
+                    localNetworkBlocked = error.isLocalNetworkDenied
                     isBrowsingShares = false
                 }
             }

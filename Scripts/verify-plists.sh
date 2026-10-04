@@ -39,6 +39,11 @@ if [ -f "$MAC_PLIST" ]; then
     for key in LSMinimumSystemVersion CFBundleDocumentTypes UTExportedTypeDeclarations NSUbiquitousContainers; do
         require_present "$MAC_PLIST" "$key" macOS
     done
+    # Senza queste due chiavi il sistema non mostra mai il prompt "Rete locale"
+    # e ogni connessione SMB fallisce con EPERM: regressione silenziosa.
+    for key in NSLocalNetworkUsageDescription NSBonjourServices; do
+        require_present "$MAC_PLIST" "$key" macOS
+    done
     if [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$MAC_PLIST" 2>/dev/null)" = "com.scunio.Chunky" ]; then
         pass "macOS: CFBundleIdentifier invariato"
     else
@@ -54,6 +59,11 @@ fi
 if [ -f "$IOS_PLIST" ]; then
     echo "== iOS: $IOS_PLIST"
     for key in UILaunchScreen UISupportedInterfaceOrientations UIBackgroundModes CFBundleDocumentTypes NSFaceIDUsageDescription UIFileSharingEnabled; do
+        require_present "$IOS_PLIST" "$key" iOS
+    done
+    # Senza queste due chiavi il sistema non mostra mai il prompt "Rete locale"
+    # e ogni connessione SMB fallisce con EPERM: regressione silenziosa.
+    for key in NSLocalNetworkUsageDescription NSBonjourServices; do
         require_present "$IOS_PLIST" "$key" iOS
     done
     if [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$IOS_PLIST" 2>/dev/null)" = "com.scunio.Chunky" ]; then
