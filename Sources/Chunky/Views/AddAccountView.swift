@@ -15,6 +15,8 @@ struct AddAccountView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var validationError: String?
+    /// Conferma di eliminazione (solo modifica): azione distruttiva sempre con alert.
+    @State private var isConfirmingDelete = false
 
     // SMB-only fields.
     @State private var smbHost = ""
@@ -316,6 +318,18 @@ struct AddAccountView: View {
                         .font(.footnote)
                 }
             }
+
+            if isEditing {
+                Section {
+                    Button("Elimina account", role: .destructive, action: { isConfirmingDelete = true })
+                }
+            }
+        }
+        .alert("Eliminare questo account?", isPresented: $isConfirmingDelete) {
+            Button("Elimina", role: .destructive, action: deleteEditingAccount)
+            Button("Annulla", role: .cancel) {}
+        } message: {
+            Text("Viene rimossa solo la connessione con le sue credenziali: i fumetti già scaricati restano in libreria.")
         }
     }
     #endif
@@ -479,6 +493,12 @@ struct AddAccountView: View {
 
             TVFormPrimaryButton(title: "Salva", action: save)
                 .padding(.top, 12)
+
+            if isEditing {
+                Button("Elimina account", action: { isConfirmingDelete = true })
+                    .buttonStyle(.card)
+                    .foregroundColor(.red)
+            }
         }
     }
     #endif
@@ -505,6 +525,12 @@ struct AddAccountView: View {
             .padding(.horizontal, 48)
             .padding(.vertical, 24)
         }
+        .alert("Eliminare questo account?", isPresented: $isConfirmingDelete) {
+            Button("Elimina", role: .destructive, action: deleteEditingAccount)
+            Button("Annulla", role: .cancel) {}
+        } message: {
+            Text("Viene rimossa solo la connessione con le sue credenziali: i fumetti già scaricati restano in libreria.")
+        }
         .navigationTitle("")
         .toolbar(.hidden, for: .navigationBar)
         // Same missing-affordance fix as `DownloadsView` — this view hides its own nav bar
@@ -513,6 +539,17 @@ struct AddAccountView: View {
         .onExitCommand { dismiss() }
     }
     #endif
+
+    /// Elimina l'account in modifica: solo la riga di configurazione più la password
+    /// nel Keychain. Nel modello non esiste alcuna relazione tra account e fumetti,
+    /// quindi libreria e file scaricati restano intatti.
+    private func deleteEditingAccount() {
+        guard let existing = editingAccount else { return }
+        KeychainStore.deletePassword(forAccount: existing.stableID)
+        context.delete(existing)
+        try? context.save()
+        if let onSaved { onSaved() } else { dismiss() }
+    }
 
     private func save() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
