@@ -50,6 +50,10 @@ struct AddAccountView: View {
     /// locale restano identici; il `kind` in modifica è bloccato (cambiare tipo
     /// orfanerebbe i campi specifici e va fatto con elimina+ricrea).
     private var editingAccount: RemoteAccountEntity?
+    /// Chiamato dopo un'eliminazione riuscita perché il chiamante chiuda anche la
+    /// vista sottostante (es. il browser aperto su quell'account): senza, si resta
+    /// dentro un oggetto cancellato. La lista si aggiorna da sola via FetchRequest.
+    var onDeleted: (() -> Void)?
     private var isEditing: Bool { editingAccount != nil }
 
     init(initialKind: RemoteAccountKind = .opds, onSaved: (() -> Void)? = nil) {
@@ -60,11 +64,12 @@ struct AddAccountView: View {
 
     /// Modalità modifica: pre-compila tutti i campi dall'account (password inclusa,
     /// letta dal Keychain). L'oggetto è sullo stesso main context della vista.
-    init(editing account: RemoteAccountEntity, onSaved: (() -> Void)? = nil) {
+    init(editing account: RemoteAccountEntity, onSaved: (() -> Void)? = nil, onDeleted: (() -> Void)? = nil) {
         let kind = account.kind
         _kind = State(initialValue: kind)
         self.editingAccount = account
         self.onSaved = onSaved
+        self.onDeleted = onDeleted
         _name = State(initialValue: account.name ?? "")
         _username = State(initialValue: account.username ?? "")
         _password = State(initialValue: account.password ?? "")
@@ -548,7 +553,10 @@ struct AddAccountView: View {
         KeychainStore.deletePassword(forAccount: existing.stableID)
         context.delete(existing)
         try? context.save()
+        // Prima chiude Modifica, poi il chiamante chiude l'eventuale browser sopra
+        // l'account cancellato (doppio dismiss standard: sheet e poi push).
         if let onSaved { onSaved() } else { dismiss() }
+        onDeleted?()
     }
 
     private func save() {

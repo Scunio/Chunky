@@ -28,13 +28,21 @@ struct AccountsView: View {
         var id: Self { self }
     }
 
-    @State private var isShowingAddAccount = false
-    @State private var addAccountKind: RemoteAccountKind = .opds
-    /// Modifica di un account esistente (best practice: stesso form di creazione in
-    /// modalità edit, presentato come sheet; il tap sulla riga resta "Sfoglia",
-    /// la modifica è swipe-action + menu contestuale così non ruba il tap principale).
-    @State private var accountToEdit: RemoteAccountEntity?
-    @State private var isShowingEditAccount = false
+    /// Unico sheet di questa vista (best practice SwiftUI): due `.sheet(isPresented:)`
+    /// sulla stessa vista entrano in conflitto e presentano il foglio sbagliato o vuoto
+    /// (schermata bianca da swipe → Modifica). Un enum identifica crea vs modifica.
+    private enum AccountSheet: Identifiable {
+        case add(RemoteAccountKind)
+        case edit(RemoteAccountEntity)
+        var id: String {
+            switch self {
+            case .add(let kind): return "add-\(kind.rawValue)"
+            case .edit(let account): return account.objectID.uriRepresentation().absoluteString
+            }
+        }
+    }
+
+    @State private var activeSheet: AccountSheet?
     @State private var activeImporter: ActiveImporter?
     @State private var folderConversionError: String?
     /// "+" doesn't open another screen: it reveals the "Add account" section at the end of the
@@ -64,12 +72,12 @@ struct AccountsView: View {
 
     var body: some View {
         panel
-            .sheet(isPresented: $isShowingAddAccount) {
-                AddAccountView(initialKind: addAccountKind)
-            }
-            .sheet(isPresented: $isShowingEditAccount) {
-                if let accountToEdit {
-                    AddAccountView(editing: accountToEdit)
+            .sheet(item: $activeSheet) { sheet in
+                switch sheet {
+                case .add(let kind):
+                    AddAccountView(initialKind: kind)
+                case .edit(let account):
+                    AddAccountView(editing: account)
                 }
             }
         // No system file picker on tvOS: the buttons that set `activeImporter` are hidden
@@ -154,16 +162,14 @@ struct AccountsView: View {
                         #if !os(tvOS)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button("Modifica") {
-                                accountToEdit = account
-                                isShowingEditAccount = true
+                                activeSheet = .edit(account)
                             }
                             .tint(.blue)
                         }
                         #endif
                         .contextMenu {
                             Button("Modifica") {
-                                accountToEdit = account
-                                isShowingEditAccount = true
+                                activeSheet = .edit(account)
                             }
                         }
                     }
@@ -173,17 +179,17 @@ struct AccountsView: View {
 
             if isAddingAccount {
                 Section(header: Text("Add account")) {
-                    Button(action: { addAccountKind = .opds; isShowingAddAccount = true }) {
+                    Button(action: { activeSheet = .add(.opds) }) {
                         rowLabel("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
                     }
                     .foregroundColor(.primary)
 
-                    Button(action: { addAccountKind = .webdav; isShowingAddAccount = true }) {
+                    Button(action: { activeSheet = .add(.webdav) }) {
                         rowLabel("Nuovo account WebDAV", systemImage: "plus.circle")
                     }
                     .foregroundColor(.primary)
 
-                    Button(action: { addAccountKind = .smb; isShowingAddAccount = true }) {
+                    Button(action: { activeSheet = .add(.smb) }) {
                         rowLabel("Nuovo account SMB", systemImage: RemoteAccountKind.smb.systemImage)
                     }
                     .foregroundColor(.primary)

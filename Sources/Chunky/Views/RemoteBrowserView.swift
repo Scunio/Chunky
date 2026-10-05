@@ -8,9 +8,7 @@ struct RemoteBrowserView: View {
 
     @Environment(\.managedObjectContext) private var context
     @EnvironmentObject private var viewModel: LibraryViewModel
-    #if os(tvOS)
     @Environment(\.dismiss) private var dismiss
-    #endif
 
     @State private var entries: [RemoteEntry] = []
     @State private var isLoading = false
@@ -37,7 +35,7 @@ struct RemoteBrowserView: View {
         TVPanel(title: title ?? account.name ?? "Sfoglia") {
             HStack(spacing: 24) {
                 if startURL == nil {
-                    NavigationLink(destination: AddAccountView(editing: account)) {
+                    NavigationLink(destination: AddAccountView(editing: account, onDeleted: { dismiss() })) {
                         Text("Modifica")
                     }
                     .buttonStyle(.card)
@@ -76,7 +74,7 @@ struct RemoteBrowserView: View {
                 }
             }
             .sheet(isPresented: $isShowingEdit) {
-                AddAccountView(editing: account)
+                AddAccountView(editing: account, onDeleted: { dismiss() })
             }
             .onAppear { startPreflightIfNeeded(); load() }
             .onDisappear { localNetwork.stop() }
