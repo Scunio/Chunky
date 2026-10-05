@@ -398,7 +398,7 @@ struct AccountsView: View {
     private func deleteAccounts(at offsets: IndexSet) {
         for index in offsets {
             let account = accounts[index]
-            KeychainStore.deletePassword(forAccount: account.resolvedID)
+            KeychainStore.deletePassword(forAccount: account.stableID)
             context.delete(account)
         }
         try? context.save()

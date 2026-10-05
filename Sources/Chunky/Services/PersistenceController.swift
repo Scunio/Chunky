@@ -60,6 +60,11 @@ struct PersistenceController {
 
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+
+        // Gli account creati prima dell'introduzione di `id` ce l'hanno a nil e senza
+        // backfill ogni accesso al Keychain userebbe un UUID diverso (vedi `stableID`).
+        // Su main all'avvio: sincrono e una tantum (idempotente).
+        RemoteAccountEntity.backfillMissingIDs(in: container.viewContext)
     }
 
     /// Loads every store description, waiting for all of them to report in before returning —

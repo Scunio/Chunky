@@ -34,19 +34,64 @@ extension RemoteAccountEntity {
         URL(string: serverURLString ?? "")
     }
 
-    /// The id is set by `create(...)` on insertion and is never nil in practice;
-    /// this accessor avoids having to unwrap the Core Data-generated Optional on every use.
-    var resolvedID: UUID {
-        id ?? UUID()
+    /// ID stabile per il Keychain. `id` è opzionale nel modello e gli account creati
+    /// prima della sua introduzione ce l'hanno a nil: un `id ?? UUID()` inline
+    /// restituirebbe un UUID diverso a OGNI accesso e scrittura e lettura nel
+    /// Keychain non si incontrerebbero mai — password "sbiancata" a ogni Modifica
+    /// anche con l'entitlement a posto. Qui l'id viene assegnato una volta sola.
+    /// Il salvataggio è sincrono sul main thread, accodato (`perform`) da qualsiasi
+    /// altro thread: un `save` diretto del viewContext da background crasherebbe,
+    /// e un `performAndWait` rischierebbe il deadlock sotto test. La persistenza è
+    /// comunque garantita dal backfill all'avvio più il save dei flussi di
+    /// creazione/modifica (sempre su main subito dopo).
+    var stableID: UUID {
+        if let id { return id }
+        let new = UUID()
+        guard let context = managedObjectContext else {
+            id = new
+            return new
+        }
+        if Thread.isMainThread {
+            id = new
+            try? context.save()
+        } else {
+            // Assegnazione immediata (stabilizza questo object graph per l'operazione
+            // in corso), persistenza accodata senza bloccare il thread chiamante.
+            context.perform {
+                // Un altro thread potrebbe averlo già assegnato nel frattempo.
+                if self.id == nil {
+                    self.id = new
+                    try? context.save()
+                }
+            }
+            id = new
+        }
+        return new
+    }
+
+    /// Assegna un `id` persistente agli account che ne sono privi (creati prima della
+    /// sua introduzione) — chiamato all'avvio così da qui in poi ogni accesso al
+    /// Keychain usa una chiave stabile. Idempotente: senza orfani non tocca lo store.
+    static func backfillMissingIDs(in context: NSManagedObjectContext) {
+        let request = RemoteAccountEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == nil")
+        guard let orphans = try? context.fetch(request), !orphans.isEmpty else { return }
+        for account in orphans { account.id = UUID() }
+        do {
+            try context.save()
+            DiagnosticLog.log("CoreData: backfill id per \(orphans.count) account senza id")
+        } catch {
+            DiagnosticLog.log("CoreData: backfill id fallito: \(error.localizedDescription)")
+        }
     }
 
     var password: String? {
-        get { KeychainStore.password(forAccount: resolvedID) }
+        get { KeychainStore.password(forAccount: stableID) }
         set {
             if let newValue = newValue, !newValue.isEmpty {
-                KeychainStore.savePassword(newValue, forAccount: resolvedID)
+                KeychainStore.savePassword(newValue, forAccount: stableID)
             } else {
-                KeychainStore.deletePassword(forAccount: resolvedID)
+                KeychainStore.deletePassword(forAccount: stableID)
             }
         }
     }
