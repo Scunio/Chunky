@@ -59,9 +59,6 @@ struct DiagnosticsSections: View {
                 #endif
                 Button("Svuota log", action: clear)
                     .foregroundColor(.red)
-                Text("Tocca Copia e incollalo in chat, oppure usa Condividi.")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
             }
         }
         .onAppear(perform: refresh)
