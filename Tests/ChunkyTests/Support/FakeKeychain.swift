@@ -52,6 +52,11 @@ final class FakeKeychain: KeychainAccessing {
         items[Key(service: service, account: account, dataProtection: false)] = Data(password.utf8)
     }
 
+    /// Writes directly into the modern (data-protection) keychain.
+    func seedModern(service: String, account: String, password: String) {
+        items[Key(service: service, account: account, dataProtection: true)] = Data(password.utf8)
+    }
+
     func value(service: String, account: String, dataProtection: Bool) -> String? {
         items[Key(service: service, account: account, dataProtection: dataProtection)]
             .flatMap { String(data: $0, encoding: .utf8) }

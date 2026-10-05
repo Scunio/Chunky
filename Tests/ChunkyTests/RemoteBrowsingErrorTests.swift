@@ -5,18 +5,11 @@ import Testing
 
 @Suite("Messaggi di errore per gli account remoti")
 struct RemoteBrowsingErrorTests {
-    @Test("Nessun permesso di Rete locale indica dove attivarlo (per piattaforma)")
+    @Test("Accesso negato indica cosa ricontrollare nell'account")
     func localNetworkPermissionDenied() {
         let error = POSIXError(.EPERM)
-        #expect(error.chunkyFriendlyDescription.contains("Rete locale"))
+        #expect(error.chunkyFriendlyDescription == "Accesso negato dal NAS. Controlla condivisione, nome utente e password (Account → Modifica).")
         #expect(error.isLocalNetworkDenied)
-        #if os(tvOS)
-        #expect(error.chunkyFriendlyDescription.contains("App"))
-        #elseif os(iOS)
-        #expect(error.chunkyFriendlyDescription.contains("Privacy e sicurezza"))
-        #elseif os(macOS)
-        #expect(error.chunkyFriendlyDescription.contains("Impostazioni di Sistema"))
-        #endif
     }
 
     @Test("Altri errori non sono blocco Rete locale")

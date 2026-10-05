@@ -1,14 +1,10 @@
 import SwiftUI
 import CoreData
-#if os(iOS)
-import UIKit
-#elseif os(macOS)
-import AppKit
-#endif
 
 struct AddAccountView: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     /// Set only when shown inline in tvOS's Account split view (`AccountsView.tvOSDetailContent`),
     /// where there's no sheet/push to dismiss — `save()` calls this instead of `dismiss()` there.
     var onSaved: (() -> Void)?
@@ -37,12 +33,6 @@ struct AddAccountView: View {
     @State private var isBrowsingShares = false
     @State private var availableShares: [String] = []
     @State private var shareBrowseError: String?
-    /// Ultimo tentativo SMB fallito con EPERM: SOSPETTO blocco "Rete locale",
-    /// non conferma (può essere anche rifiuto del server: credenziali,
-    /// diritti sulla condivisione). Il banner bloccante compare solo se il
-    /// preflight lo conferma (`isBlockedBySystem`); altrimenti l'errore
-    /// specifico resta visibile sotto il campo interessato.
-    @State private var localNetworkBlocked = false
     #if os(tvOS)
     @State private var isAdvancedExpanded = false
     #endif
@@ -101,6 +91,7 @@ struct AddAccountView: View {
         #if os(tvOS)
         tvOSForm
             .onChange(of: kind, perform: updateDiscovery)
+            .onChange(of: scenePhase, perform: recheckOnForeground)
             .onAppear { updateDiscovery(kind) }
             .onDisappear { discovery.stop(); localNetwork.stop() }
         #else
@@ -127,6 +118,7 @@ struct AddAccountView: View {
         }
         .sheetSized()
         .onChange(of: kind, perform: updateDiscovery)
+        .onChange(of: scenePhase, perform: recheckOnForeground)
         .onAppear { updateDiscovery(kind) }
         .onDisappear { discovery.stop(); localNetwork.stop() }
         #endif
@@ -158,65 +150,45 @@ struct AddAccountView: View {
     }
 
     /// Blocco privacy CONFERMATO: solo il preflight `NWBrowser` con
-    /// PolicyDenied (-65570) lo prova. Un EPERM SMB da solo (`localNetworkBlocked`)
-    /// è solo un sospetto — mostrarci il banner "attiva Rete locale" causava il
-    /// falso positivo "è già attiva ma dice di attivarla" quando invece erano
-    /// sbagliati credenziali/condivisione (TN3179).
+    /// PolicyDenied (-65570) lo prova. Un EPERM SMB da solo è solo un sospetto
+    /// (spesso credenziali/condivisione sbagliate): resta come errore sotto il
+    /// campo interessato, mai come banner (TN3179).
     private var isBlockedBySystem: Bool {
         localNetwork.status == .denied
     }
 
-    /// Sospetto non confermato: un tentativo SMB è fallito con EPERM ma il
-    /// preflight non ha confermato il blocco privacy. L'errore specifico resta
-    /// sotto il campo (con suggerimento secondario sulla Rete locale); qui si
-    /// aggiunge solo un link secondario alle Impostazioni, mai il banner bloccante.
-    private var hasSMBSuspect: Bool {
-        localNetworkBlocked && localNetwork.status != .denied
-    }
-
-    private func retryLocalNetworkCheck() {
-        localNetworkBlocked = false
+    /// Rivaluta il permesso quando l'app torna in primo piano: se l'utente ha
+    /// flippato il toggle nelle Impostazioni di sistema, lo stato cambia solo
+    /// rifacendo il check — così non serve alcun bottone "Riprova".
+    private func recheckOnForeground(_ phase: ScenePhase) {
+        guard phase == .active, kind == .smb, localNetwork.status == .denied else { return }
         localNetwork.stop()
         discovery.start()
         localNetwork.check()
     }
 
-    /// Apre le impostazioni di sistema nel punto giusto per riattivare la
-    /// "Rete locale". Su tvOS non esiste un URL per le impostazioni: il
-    /// chiamante mostra solo le istruzioni testuali.
-    private func openSystemSettings() {
-        #if os(iOS)
-        if let url = URL(string: UIApplication.openSettingsURLString) {
-            UIApplication.shared.open(url)
-        }
-        #elseif os(macOS)
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork") {
-            NSWorkspace.shared.open(url)
-        }
-        #endif
-    }
-
     /// Banner mostrato SOLO a blocco privacy confermato dal preflight
-    /// (PolicyDenied): il prompt di sistema non ricompare da solo, serve il
-    /// toggle manuale e poi "Riprova". Per il sospetto non confermato (EPERM
-    /// SMB senza preflight denied) l'errore resta sotto il campo interessato.
+    /// (PolicyDenied). Solo testo con il percorso manuale: il deep-link alle
+    /// Impostazioni apre la pagina vuota dell'app (il toggle sta sotto
+    /// Privacy e sicurezza, non raggiungibile via API), quindi il bottone
+    /// portava in un vicolo cieco. Niente "Riprova": al ritorno in app il
+    /// check riparte da solo via `recheckOnForeground`.
     private var localNetworkHelpSection: some View {
         Section(header: Text("Serve l'accesso alla rete locale")) {
-            Text("Senza questo permesso non possiamo raggiungere il NAS: attivalo per Chunky e poi premi Riprova, non serve reinserire nulla.")
+            Text("Chunky è bloccato dalle Impostazioni di sistema: senza questo permesso non raggiungiamo il NAS. Non serve reinserire nulla, basta attivarlo e tornare qui.")
                 .font(.footnote)
             #if os(tvOS)
-            Text("Apri Impostazioni → App → Chunky e attiva \"Rete locale\".")
+            Text("Percorso: Impostazioni → App → Chunky → \"Rete locale\".")
                 .font(.footnote)
                 .foregroundColor(.secondary)
-            Button("Riprova", action: retryLocalNetworkCheck)
-            #else
-            Button("Apri Impostazioni", action: openSystemSettings)
-            Button("Riprova", action: retryLocalNetworkCheck)
-            #if os(iOS)
+            #elseif os(iOS)
             Text("Percorso: Impostazioni → Privacy e sicurezza → Rete locale → Chunky.")
                 .font(.footnote)
                 .foregroundColor(.secondary)
-            #endif
+            #elseif os(macOS)
+            Text("Percorso: Impostazioni di Sistema → Privacy e sicurezza → Rete locale → Chunky.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
             #endif
         }
     }
@@ -283,10 +255,6 @@ struct AddAccountView: View {
                         Text(shareBrowseError)
                             .font(.footnote)
                             .foregroundColor(.red)
-                        if hasSMBSuspect {
-                            Button("Apri Impostazioni", action: openSystemSettings)
-                                .font(.footnote)
-                        }
                     }
                 }
 
@@ -390,10 +358,6 @@ struct AddAccountView: View {
                 Text(speedTestResult)
                     .font(.footnote)
                     .foregroundColor(.secondary)
-                if hasSMBSuspect {
-                    Button("Apri Impostazioni", action: openSystemSettings)
-                        .font(.footnote)
-                }
             }
         }
     }
@@ -435,11 +399,9 @@ struct AddAccountView: View {
                 }
 
                 if isBlockedBySystem {
-                    Text("Serve l'accesso alla rete locale: apri Impostazioni → App → Chunky, attiva \"Rete locale\" e poi riprova.")
+                    Text("Serve l'accesso alla rete locale: Impostazioni → App → Chunky → \"Rete locale\". Torna qui dopo averlo attivato.")
                         .font(.footnote)
                         .foregroundColor(.red)
-                    Button("Riprova", action: retryLocalNetworkCheck)
-                        .buttonStyle(.card)
                 }
 
                 TVFormFieldRow(label: "1. Nome") { TextField("es. Il mio NAS", text: $name) }
@@ -456,11 +418,6 @@ struct AddAccountView: View {
                     Text(shareBrowseError)
                         .font(.footnote)
                         .foregroundColor(.red)
-                    if hasSMBSuspect {
-                        Text("Se indirizzo e credenziali sono giusti, controlla anche Impostazioni → App → Chunky → \"Rete locale\".")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    }
                 }
                 if !availableShares.isEmpty {
                     TVFormSectionLabel(title: "Condivisioni trovate")
@@ -487,11 +444,6 @@ struct AddAccountView: View {
                         Text(speedTestResult)
                             .font(.footnote)
                             .foregroundColor(.secondary)
-                        if hasSMBSuspect {
-                            Text("Se indirizzo e credenziali sono giusti, controlla anche Impostazioni → App → Chunky → \"Rete locale\".")
-                                .font(.footnote)
-                                .foregroundColor(.secondary)
-                        }
                     }
                 }
             } else {
@@ -638,7 +590,6 @@ struct AddAccountView: View {
         }
 
         isRunningSpeedTest = true
-        localNetworkBlocked = false
         let connection = SMBConnectionInfo(
             host: trimmedOverride.isEmpty ? trimmedHost : trimmedOverride,
             port: port,
@@ -662,7 +613,6 @@ struct AddAccountView: View {
             } catch {
                 await MainActor.run {
                     speedTestResult = "Connessione non riuscita: \(error.chunkyFriendlyDescription)"
-                    localNetworkBlocked = error.isLocalNetworkDenied
                     DiagnosticLog.log("SMB speed test host=\(trimmedHost) EPERM=\(error.isLocalNetworkDenied) preflight=\(localNetwork.status) err=\(error.localizedDescription)")
                     isRunningSpeedTest = false
                 }
@@ -686,7 +636,6 @@ struct AddAccountView: View {
         }
 
         isBrowsingShares = true
-        localNetworkBlocked = false
         Task {
             do {
                 let shares = try await SMBClient().listShares(
@@ -706,7 +655,6 @@ struct AddAccountView: View {
             } catch {
                 await MainActor.run {
                     shareBrowseError = "Impossibile elencare le condivisioni: \(error.chunkyFriendlyDescription)"
-                    localNetworkBlocked = error.isLocalNetworkDenied
                     DiagnosticLog.log("SMB browse host=\(trimmedHost) EPERM=\(error.isLocalNetworkDenied) preflight=\(localNetwork.status) err=\(error.localizedDescription)")
                     isBrowsingShares = false
                 }

@@ -159,6 +159,12 @@ targets:
     entitlements:
       path: Support/Chunky-iOS.entitlements
       properties:
+        # Senza questo, SecItemAdd con kSecUseDataProtectionKeychain fallisce sul
+        # dispositivo vero (errSecMissingEntitlement -34018) e le password non
+        # vengono mai salvate — sul simulatore il controllo non scatta, quindi
+        # in sviluppo sembrava funzionare. Vedi KeychainStore.
+        keychain-access-groups:
+          - "$(AppIdentifierPrefix)com.scunio.Chunky"
         com.apple.developer.icloud-container-identifiers:
           - iCloud.com.scunio.Chunky
         com.apple.developer.icloud-services:
@@ -217,6 +223,10 @@ targets:
     entitlements:
       path: Support/Chunky-macOS.entitlements
       properties:
+        # Vedi commento gemello in Chunky_iOS: senza keychain-access-groups le
+        # password non vengono salvate sul Mac vero (errSecMissingEntitlement).
+        keychain-access-groups:
+          - "$(AppIdentifierPrefix)com.scunio.Chunky"
         # Sandbox e file-access sono chiavi macOS: su iOS erano rumore.
         com.apple.security.app-sandbox: true
         com.apple.security.files.user-selected.read-write: true
@@ -272,6 +282,10 @@ targets:
     entitlements:
       path: Support/Chunky-tvOS.entitlements
       properties:
+        # Vedi commento gemello in Chunky_iOS: senza keychain-access-groups le
+        # password non vengono salvate sull'Apple TV vera (errSecMissingEntitlement).
+        keychain-access-groups:
+          - "$(AppIdentifierPrefix)com.scunio.Chunky"
         # Niente app-sandbox/network.client/network.server: sono chiavi macOS-only (il
         # sandboxing su tvOS non passa da un entitlement esplicito), Xcode le scarta in
         # fase di firma — verificato: restavano fuori dal binario firmato comunque.

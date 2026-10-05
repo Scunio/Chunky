@@ -111,8 +111,24 @@ struct KeychainStoreTests {
         }
     }
 
-    @Test("La migrazione avviene una volta sola")
-    func migratesOnce() {
+    /// Se la riscrittura fallisce, la password moderna esistente deve restare:
+    /// cancellarla prima di scrivere (come faceva il vecchio codice) faceva
+    /// perdere la password buona a ogni Modifica+Salva con rilettura fallita.
+    @Test("Una riscrittura fallita non distrugge la password esistente")
+    func failedOverwriteKeepsModernCopy() {
+        withFakeKeychain { fake in
+            let id = UUID()
+            fake.seedModern(service: service, account: id.uuidString, password: "buona")
+            fake.addStatusOverride = errSecMissingEntitlement
+
+            KeychainStore.savePassword("nuova", forAccount: id)
+
+            fake.addStatusOverride = nil
+            #expect(KeychainStore.password(forAccount: id) == "buona")
+        }
+    }
+
+    @Test("La migrazione avviene una volta sola")    func migratesOnce() {
         withFakeKeychain { fake in
             let id = UUID()
             fake.seedLegacy(service: service, account: id.uuidString, password: "vecchia")

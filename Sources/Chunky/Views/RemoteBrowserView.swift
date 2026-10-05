@@ -1,10 +1,5 @@
 import SwiftUI
 import CoreData
-#if os(iOS)
-import UIKit
-#elseif os(macOS)
-import AppKit
-#endif
 
 struct RemoteBrowserView: View {
     let account: RemoteAccountEntity
@@ -23,10 +18,6 @@ struct RemoteBrowserView: View {
     @State private var downloadingEntryIDs: Set<RemoteEntry.ID> = []
     @State private var searchText = ""
     @State private var isRefreshingLibrary = false
-    /// Ultimo caricamento fallito con EPERM: SOSPETTO blocco "Rete locale",
-    /// non conferma (può essere rifiuto del server). La conferma arriva solo dal
-    /// preflight sotto; il testo dell'errore cita già entrambe le cause.
-    @State private var localNetworkBlocked = false
     /// Preflight "Rete locale" per gli account SMB: conferma il blocco privacy
     /// (PolicyDenied) invece di dedurlo dal solo EPERM del server (TN3179).
     @StateObject private var localNetwork = LocalNetworkPermission()
@@ -111,17 +102,20 @@ struct RemoteBrowserView: View {
             ContentUnavailableView {
                 Label("Impossibile caricare", systemImage: "exclamationmark.triangle")
             } description: {
+                // Niente tasti qui di proposito: "Riprova" duplicherebbe il refresh
+                // già sopra (toolbar/pull-to-refresh), e il deep-link alle
+                // Impostazioni apre la pagina vuota dell'app — il toggle sta sotto
+                // Privacy e sicurezza, raggiungibile solo a mano (vedi nota sotto).
                 Text(errorMessage)
-            } actions: {
-                #if !os(tvOS)
-                // Secondario in entrambi i casi (confermato o sospetto): con EPERM
-                // ambiguo il testo spiega già di controllare prima credenziali e
-                // condivisione, questo è solo la scorciatoia se serve davvero.
-                if localNetworkBlocked || localNetwork.status == .denied {
-                    Button("Apri Impostazioni", action: openSystemSettings)
+                if localNetwork.status == .denied {
+                    #if os(tvOS)
+                    Text("Percorso: Impostazioni → App → Chunky → \"Rete locale\".")
+                    #elseif os(iOS)
+                    Text("Percorso: Impostazioni → Privacy e sicurezza → Rete locale → Chunky.")
+                    #elseif os(macOS)
+                    Text("Percorso: Impostazioni di Sistema → Privacy e sicurezza → Rete locale → Chunky.")
+                    #endif
                 }
-                #endif
-                Button("Riprova", action: load)
             }
         } else if entries.isEmpty {
             ContentUnavailableView("Nessun contenuto qui.", systemImage: "folder")
@@ -183,10 +177,20 @@ struct RemoteBrowserView: View {
     }
 
     private func reload() async {
+        // Snapshot dei valori salvati sul MainActor PRIMA della chiamata di rete:
+        // leggere un NSManagedObject dopo un await (altro executor) è unsafe e
+        // senza questi il log non distinguerebbe "test OK" da "salvato diverso".
+        // Mai la password, solo se presente o no.
+        let savedDesc: String = await MainActor.run {
+            let host = account.serverURL?.host ?? "?"
+            let share = account.shareName ?? "?"
+            let userDesc = (account.username?.isEmpty ?? true) ? "no" : (account.username ?? "si")
+            let passDesc = (account.password?.isEmpty ?? true) ? "no" : "si"
+            return "host=\(host) share=\(share) port=\(account.portNumber) user=\(userDesc) pass=\(passDesc)"
+        }
         await MainActor.run {
             isLoading = true
             errorMessage = nil
-            localNetworkBlocked = false
         }
         do {
             let loaded = try await browser.listEntries(at: url, account: account)
@@ -195,10 +199,10 @@ struct RemoteBrowserView: View {
                 isLoading = false
             }
         } catch {
+            let preflight = await MainActor.run { localNetwork.status }
+            DiagnosticLog.log("SMB browse saved[\(savedDesc)] EPERM=\(error.isLocalNetworkDenied) preflight=\(preflight) err=\(error.localizedDescription)")
             await MainActor.run {
                 errorMessage = error.chunkyFriendlyDescription
-                localNetworkBlocked = error.isLocalNetworkDenied
-                DiagnosticLog.log("SMB browse account EPERM=\(error.isLocalNetworkDenied) preflight=\(localNetwork.status) err=\(error.localizedDescription)")
                 isLoading = false
             }
         }
@@ -214,18 +218,6 @@ struct RemoteBrowserView: View {
             await reload()
             await MainActor.run { isRefreshingLibrary = false }
         }
-    }
-
-    private func openSystemSettings() {
-        #if os(iOS)
-        if let url = URL(string: UIApplication.openSettingsURLString) {
-            UIApplication.shared.open(url)
-        }
-        #elseif os(macOS)
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork") {
-            NSWorkspace.shared.open(url)
-        }
-        #endif
     }
 
     private func downloadAndImport(_ entry: RemoteEntry) {

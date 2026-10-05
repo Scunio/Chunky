@@ -57,24 +57,35 @@ enum KeychainStore {
 
     static func savePassword(_ password: String, forAccount id: UUID) {
         let account = id.uuidString
-        // Delete from both keychains: if the item existed in the old one, leaving it
-        // there would create two diverging values for the same account.
-        // Order matters: first write to the modern keychain, and only if the write
-        // succeeds delete the legacy copy. Deleting first, a failed `add`
-        // (a build without the data-protection entitlement) would silently destroy
-        // the only existing copy of the password or of the parental passcode.
-        _ = backend.delete(baseQuery(account: account, useDataProtection: true))
-
         var attributes = baseQuery(account: account, useDataProtection: true)
         attributes[kSecValueData as String] = Data(password.utf8)
         attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
 
+        // Mai cancellare prima di scrivere: se `add` fallisce (es. build senza
+        // l'entitlement data-protection → errSecMissingEntitlement, come in un
+        // TestFlight senza keychain-access-groups) la copia esistente deve
+        // restare intatta, altrimenti una Modifica con rilettura fallita
+        // cancellerebbe la password buona al Salva successivo.
         let status = backend.add(attributes)
-        guard status == errSecSuccess else {
-            DiagnosticLog.log("Keychain: salvataggio fallito (OSStatus \(status)); copia storica conservata")
+        if status == errSecSuccess {
+            // Solo a scrittura riuscita si rimuove l'eventuale copia storica:
+            // era l'unica rimasta e ora è duplicata.
+            _ = backend.delete(baseQuery(account: account, useDataProtection: false))
             return
         }
-        _ = backend.delete(baseQuery(account: account, useDataProtection: false))
+        if status == errSecDuplicateItem {
+            // Sostituzione: l'item esiste già, quindi ricrealo. Se anche il
+            // secondo tentativo fallisce, resta il log diagnostico.
+            _ = backend.delete(baseQuery(account: account, useDataProtection: true))
+            let retry = backend.add(attributes)
+            guard retry == errSecSuccess else {
+                DiagnosticLog.log("Keychain: sostituzione fallita (OSStatus \(retry))")
+                return
+            }
+            _ = backend.delete(baseQuery(account: account, useDataProtection: false))
+            return
+        }
+        DiagnosticLog.log("Keychain: salvataggio fallito (OSStatus \(status)); copie esistenti conservate")
     }
 
     static func password(forAccount id: UUID) -> String? {

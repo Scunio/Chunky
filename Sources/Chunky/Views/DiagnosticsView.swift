@@ -1,5 +1,10 @@
 import SwiftUI
 import CoreData
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 struct DiagnosticsView: View {
     var body: some View {
@@ -37,12 +42,26 @@ struct DiagnosticsSections: View {
                     Text(logText.isEmpty ? "Nessun log ancora." : logText)
                         .font(.system(.caption, design: .monospaced))
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelectableCompat()
                 }
                 .frame(height: 240)
 
                 Button("Aggiorna", action: refresh)
+                #if !os(tvOS)
+                Button(action: copyLog) {
+                    Label("Copia log", systemImage: "doc.on.doc")
+                }
+                .disabled(logText.isEmpty)
+                if #available(iOS 16, macOS 13, *) {
+                    ShareLink(item: logText.isEmpty ? "Nessun log." : logText, preview: SharePreview("chunky-log.txt"))
+                        .disabled(logText.isEmpty)
+                }
+                #endif
                 Button("Svuota log", action: clear)
                     .foregroundColor(.red)
+                Text("Tocca Copia e incollalo in chat, oppure usa Condividi.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
             }
         }
         .onAppear(perform: refresh)
@@ -50,6 +69,18 @@ struct DiagnosticsSections: View {
 
     private func refresh() {
         logText = DiagnosticLog.readAll()
+    }
+
+    /// Copia negli appunti di sistema (best practice per target vecchi: ShareLink
+    /// richiede iOS 16+, la copia funziona ovunque e basta per incollare in chat).
+    private func copyLog() {
+        let text = logText.isEmpty ? "Nessun log." : logText
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #elseif os(iOS)
+        UIPasteboard.general.string = text
+        #endif
     }
 
     private func clear() {
@@ -60,4 +91,22 @@ struct DiagnosticsSections: View {
 
 #Preview {
     DiagnosticsView()
+}
+
+/// `.textSelection(.enabled)` esiste solo da iOS 15 / macOS 12: questo wrapper lo
+/// applica dove disponibile e non fa nulla sul target minimo (iOS 14) così il
+/// progetto compila ovunque; lì resta il tasto Copia.
+private extension View {
+    @ViewBuilder
+    func textSelectableCompat() -> some View {
+        #if os(tvOS)
+        self
+        #else
+        if #available(iOS 15, macOS 12, *) {
+            self.textSelection(.enabled)
+        } else {
+            self
+        }
+        #endif
+    }
 }

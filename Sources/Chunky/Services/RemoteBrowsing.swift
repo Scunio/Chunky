@@ -126,22 +126,15 @@ extension Error {
         if let posixError = self as? POSIXError {
             switch posixError.code {
             case .EPERM:
-                // EPERM dai socket SMB diretti è AMBIGUO (TN3179): può essere il
-                // blocco privacy "Rete locale" di iOS/tvOS, ma anche un rifiuto del
-                // server (credenziali, diritti sulla condivisione, guest disabilitato).
-                // Non affermare mai solo da qui che è la privacy: la conferma arriva
-                // solo dal preflight `LocalNetworkPermission` (PolicyDenied -65570).
-                // Il testo cita entrambe le cause così un EPERM del server non porta
-                // fuori strada ("attiva Rete locale" anche se è già attiva).
-                #if os(tvOS)
-                return "Operazione non permessa (controlla credenziali e condivisione). Se sono giusti, apri Impostazioni → App → Chunky e attiva \"Rete locale\", poi riprova."
-                #elseif os(iOS)
-                return "Operazione non permessa (controlla credenziali e condivisione). Se sono giusti, apri Impostazioni → Privacy e sicurezza → Rete locale e attiva Chunky, poi riprova."
-                #elseif os(macOS)
-                return "Operazione non permessa (controlla credenziali e condivisione). Se sono giusti, apri Impostazioni di Sistema → Privacy e sicurezza → Rete locale e attiva Chunky, poi riprova."
-                #else
-                return "Operazione non permessa (controlla credenziali e condivisione). Se sono giusti, attiva l'accesso alla rete locale per Chunky nelle impostazioni, poi riprova."
-                #endif
+                // EPERM dai socket SMB diretti vuol dire solo "il NAS ha detto no"
+                // (TN3179): quasi sempre condivisione/utente/password sbagliati o
+                // senza diritti, NON la privacy di sistema. Niente tasti né menzioni
+                // alle Impostazioni qui: il blocco Rete locale ha già il suo banner
+                // dedicato quando il preflight lo conferma, e il deep-link aprirebbe
+                // comunque la pagina vuota dell'app (il toggle sta sotto Privacy
+                // e sicurezza, non raggiungibile via API). Si punta a Modifica
+                // account, l'unica azione davvero utile.
+                return "Accesso negato dal NAS. Controlla condivisione, nome utente e password (Account → Modifica)."
             case .ETIMEDOUT:
                 return "Il server non ha risposto in tempo. Verifica che sia acceso e sulla stessa rete."
             case .ECONNREFUSED:
@@ -168,11 +161,9 @@ extension Error {
     }
 
     /// SOSPETTO blocco privacy "Rete locale", non conferma: EPERM dai socket SMB
-    /// diretti è ambiguo (blocco di sistema OPPURE rifiuto del server). La UI deve
-    /// mostrarlo come banner "Apri Impostazioni" solo se anche il preflight
-    /// `LocalNetworkPermission.status == .denied` lo conferma; altrimenti mostra
-    /// l'errore del server con il suggerimento secondario sulla Rete locale
-    /// (vedi `chunkyFriendlyDescription`).
+    /// diretti è ambiguo (blocco di sistema OPPURE rifiuto del server). Usato solo
+    /// per il flag EPERM= nei log diagnostici; la UI non ci costruisce più banner
+    /// né tasti (vedi `chunkyFriendlyDescription`).
     var isLocalNetworkDenied: Bool {
         (self as? POSIXError)?.code == .EPERM
     }
