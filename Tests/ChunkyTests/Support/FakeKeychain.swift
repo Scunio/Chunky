@@ -21,8 +21,19 @@ final class FakeKeychain: KeychainAccessing {
     /// writes there report success but reads find nothing.
     var plainWriteBlackhole = false
     var plainAddStatusOverride: OSStatus?
+    /// Simulates iOS, where `kSecUseDataProtectionKeychain` is ignored and flagged
+    /// and unflagged queries address the SAME item. This is the behavior that caught
+    /// a real bug: deleting the "other" copy after a verified write deleted the
+    /// just-written item itself.
+    var ignoreDataProtectionFlag = false
 
     private func key(from dictionary: [String: Any]) -> Key {
+        var k = keyParts(from: dictionary)
+        if ignoreDataProtectionFlag { k = Key(service: k.service, account: k.account, dataProtection: false) }
+        return k
+    }
+
+    private func keyParts(from dictionary: [String: Any]) -> Key {
         Key(
             service: dictionary[kSecAttrService as String] as? String ?? "",
             account: dictionary[kSecAttrAccount as String] as? String ?? "",

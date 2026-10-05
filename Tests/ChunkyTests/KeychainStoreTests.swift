@@ -86,11 +86,26 @@ struct KeychainStoreTests {
             fake.seedModern(service: service, account: id.uuidString, password: "vecchia")
 
             #expect(KeychainStore.password(forAccount: id) == "vecchia")
-            // After migration the value lives in the plain keychain...
+            // After migration the value lives in the plain keychain; the modern
+            // orphan is left alone on purpose (deleting it is what killed passwords
+            // on iOS, where both queries address the same item).
             #expect(fake.value(service: service, account: id.uuidString, dataProtection: false) == "vecchia")
-            // ...and no duplicate is left in the modern one.
-            #expect(fake.value(service: service, account: id.uuidString, dataProtection: true) == nil)
         }
+    }
+
+    @Test("Su iOS (flag ignorato) la password sopravvive al salvataggio e alla rilettura")
+    func survivesSaveAndRereadWhenFlagIsIgnored() {
+        let fake = FakeKeychain()
+        fake.ignoreDataProtectionFlag = true // come iOS: un solo store reale
+        let previous = KeychainStore.backend
+        KeychainStore.backend = fake
+        defer { KeychainStore.backend = previous }
+        let id = UUID()
+        #expect(KeychainStore.savePassword("Lorenzo98", forAccount: id).ok)
+        #expect(KeychainStore.password(forAccount: id) == "Lorenzo98")
+        // Un secondo salvataggio (sostituzione) non deve distruggere niente.
+        #expect(KeychainStore.savePassword("nuova-pass", forAccount: id).ok)
+        #expect(KeychainStore.password(forAccount: id) == "nuova-pass")
     }
 
     /// If writing fails, the modern copy must remain: it's the only one the user has.

@@ -75,8 +75,9 @@ enum KeychainStore {
         let account = id.uuidString
         let plain = upsertVerified(password, account: account, modern: false)
         if plain.ok {
-            // Solo a scrittura verificata si rimuove l'eventuale copia moderna.
-            _ = backend.delete(query(account: account, modern: true))
+            // MAI cancellare la copia moderna qui: su iOS il flag data-protection
+            // è ignorato e le due query puntano allo STESSO item — cancellarla
+            // significherebbe cancellare la password appena verificata.
             return plain
         }
         AppLog.log("Keychain: canonico non verificabile (scrittura \(plain.writeStatus), lettura \(plain.readStatus)), provo moderno")
