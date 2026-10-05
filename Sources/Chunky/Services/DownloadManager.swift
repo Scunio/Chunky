@@ -48,6 +48,10 @@ final class DownloadManager: ObservableObject {
     /// the same comic while it's downloading must hook into the download in progress, not
     /// start a second one with a second row in the Downloads screen.
     private var itemsByKey: [String: DownloadItem] = [:]
+    /// `register` può arrivare da thread qualsiasi (scan in background, tap in UI):
+    /// senza lock due tap ravvicinati sullo stesso placeholder bucano entrambi il
+    /// controllo `itemsByKey` e avviano due download (era il "Topolino 1").
+    private let lock = NSLock()
 
     private init() {}
 
@@ -56,23 +60,38 @@ final class DownloadManager: ObservableObject {
     /// key is already in progress, the existing one is returned. With `key` nil there's no
     /// deduplication (two distinct downloads without a key stay as two separate entries).
     func register(title: String, task: URLSessionTask? = nil, key: String? = nil) -> DownloadItem {
+        lock.lock()
         if let key = key, let existing = itemsByKey[key] {
+            lock.unlock()
             return existing
         }
         let item = DownloadItem(title: title, task: task)
-        activeDownloads.append(item)
         if let key = key {
             itemsByKey[key] = item
+        }
+        lock.unlock()
+        // La Published va toccata sul main; la mappa sopra è già a posto, quindi
+        // un secondo tap immediato ritrova l'item esistente e non duplica.
+        if Thread.isMainThread {
+            activeDownloads.append(item)
+        } else {
+            DispatchQueue.main.async { self.activeDownloads.append(item) }
         }
         return item
     }
 
     func remove(_ item: DownloadItem) {
-        activeDownloads.removeAll { $0.id == item.id }
+        lock.lock()
+        itemsByKey = itemsByKey.filter { $0.value.id != item.id }
+        lock.unlock()
         // It also needs to be removed from the map, otherwise a cancelled download would stay
         // cached and the next time the same comic is opened it would receive an item already
         // `isCancelled`, failing immediately without ever restarting the download.
-        itemsByKey = itemsByKey.filter { $0.value.id != item.id }
+        if Thread.isMainThread {
+            activeDownloads.removeAll { $0.id == item.id }
+        } else {
+            DispatchQueue.main.async { self.activeDownloads.removeAll { $0.id == item.id } }
+        }
     }
 
     func stopAll() {

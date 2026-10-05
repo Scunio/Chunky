@@ -218,6 +218,20 @@ struct AddAccountView: View {
                 #endif
             }
 
+            // Errore in alto, non in fondo: dopo un Salva fallito deve vedersi
+            // senza scorrere tutto il form.
+            if let validationError {
+                Section {
+                    Text(validationError)
+                        .foregroundColor(.red)
+                        .font(.footnote)
+                }
+            }
+
+            Section(header: Text("Nome")) {
+                TextField("Nome account", text: $name)
+            }
+
             if kind == .smb {
                 if !discovery.servers.isEmpty {
                     Section(header: Text("Trovati in rete")) {
@@ -235,10 +249,9 @@ struct AddAccountView: View {
                 }
 
                 Section(
-                    header: Text("1. NAS in rete"),
+                    header: Text("1. Server NAS"),
                     footer: Text("Tocca il NAS se compare sopra, altrimenti scrivi l'indirizzo a mano (es. 192.168.1.10). Alla prima ricerca l'iPhone chiede \"Rete locale\": serve Consenti, altrimenti blocca tutto qui.")
                 ) {
-                    TextField("Nome account", text: $name)
                     TextField("Indirizzo", text: $smbHost)
                         #if os(iOS)
                         .keyboardType(.URL)
@@ -276,7 +289,6 @@ struct AddAccountView: View {
                     }
                 }
 
-                advancedSMBSection
             } else {
                 Section(
                     header: Text("Server"),
@@ -284,7 +296,6 @@ struct AddAccountView: View {
                         ? "L'indirizzo del catalogo OPDS, es. http://192.168.1.10:8080/opds"
                         : "L'indirizzo del server WebDAV, es. https://miocloud.example.com/remote.php/dav/files/utente/")
                 ) {
-                    TextField("Nome account", text: $name)
                     TextField("URL del server", text: $serverURLString)
                         #if os(iOS)
                         .keyboardType(.URL)
@@ -294,13 +305,24 @@ struct AddAccountView: View {
                 }
             }
 
-            Section(header: Text(kind == .smb ? "3. Credenziali (servono quasi sempre)" : "Credenziali (opzionali)")) {
+            Section(
+                header: Text(kind == .smb ? "3. Credenziali" : "Credenziali (opzionali)"),
+                footer: Group {
+                    if kind == .smb { Text("Quasi tutti i NAS richiedono nome utente e password: senza, il server nega l'accesso. La password non si può rileggere, ma resta salvata nel portachiavi.") }
+                }
+            ) {
                 TextField("Nome utente", text: $username)
                     #if os(iOS)
                     .autocapitalization(.none)
                     #endif
                     .disableAutocorrection(true)
                 SecureField("Password", text: $password)
+            }
+
+            // Dopo le credenziali: "Sfoglia condivisioni" le usa, quindi le
+            // Avanzate stanno qui e non prima della condivisione.
+            if kind == .smb {
+                advancedSMBSection
             }
 
             Section(
@@ -316,14 +338,6 @@ struct AddAccountView: View {
                 Toggle("Pre-cache (dettagli e copertine)", isOn: precacheBinding)
             }
 
-            if let validationError = validationError {
-                Section {
-                    Text(validationError)
-                        .foregroundColor(.red)
-                        .font(.footnote)
-                }
-            }
-
             if isEditing {
                 Section {
                     Button("Elimina account", role: .destructive, action: { isConfirmingDelete = true })
@@ -334,7 +348,7 @@ struct AddAccountView: View {
             Button("Elimina", role: .destructive, action: deleteEditingAccount)
             Button("Annulla", role: .cancel) {}
         } message: {
-            Text("Viene rimossa solo la connessione con le sue credenziali: i fumetti già scaricati restano in libreria.")
+            Text("Viene rimossa solo la connessione con le sue credenziali: i fumetti già scaricati restano in libreria, quelli mai scaricati spariscono dall'elenco.")
         }
     }
     #endif
@@ -403,6 +417,14 @@ struct AddAccountView: View {
                     .foregroundColor(.secondary)
             }
 
+            if let validationError {
+                Text(validationError)
+                    .foregroundColor(.red)
+                    .font(.footnote)
+            }
+
+            TVFormFieldRow(label: "Nome") { TextField("es. Il mio NAS", text: $name) }
+
             if kind == .smb {
                 if !discovery.servers.isEmpty {
                     TVFormSectionLabel(title: "Trovati in rete")
@@ -423,7 +445,6 @@ struct AddAccountView: View {
                         .foregroundColor(.red)
                 }
 
-                TVFormFieldRow(label: "1. Nome") { TextField("es. Il mio NAS", text: $name) }
                 TVFormFieldRow(label: "1. Indirizzo") { TextField("es. 192.168.1.10", text: $smbHost).disableAutocorrection(true) }
                 TVFormFieldRow(label: "2. Condivisione") { TextField("es. Video", text: $smbShare).disableAutocorrection(true) }
                 Text("Tocca il NAS in \"Trovati in rete\" se compare, altrimenti scrivi l'indirizzo a mano. Poi premi \"Sfoglia condivisioni\" e scegli dall'elenco reale del NAS.")
@@ -466,7 +487,6 @@ struct AddAccountView: View {
                     }
                 }
             } else {
-                TVFormFieldRow(label: "Nome") { TextField("es. La mia libreria", text: $name) }
                 TVFormFieldRow(label: "URL del server") {
                     TextField(kind == .opds ? "es. http://192.168.1.10:8080/opds" : "es. https://miocloud.example.com/…", text: $serverURLString)
                         .disableAutocorrection(true)
@@ -478,9 +498,14 @@ struct AddAccountView: View {
                     .foregroundColor(.secondary)
             }
 
-            TVFormSectionLabel(title: kind == .smb ? "3. Credenziali (servono quasi sempre)" : "Credenziali (opzionali)")
+            TVFormSectionLabel(title: kind == .smb ? "3. Credenziali" : "Credenziali (opzionali)")
             TVFormFieldRow(label: "Nome utente") { TextField("opzionale", text: $username).disableAutocorrection(true) }
             TVFormFieldRow(label: "Password") { SecureField("opzionale", text: $password) }
+            if kind == .smb {
+                Text("Quasi tutti i NAS richiedono nome utente e password: senza, il server nega l'accesso. La password non si può rileggere, ma resta salvata nel portachiavi.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
 
             TVFormSectionLabel(title: "Automazione")
             TVFormToggleRow(label: "Scansione automatica", isOn: $autoScanEnabled)
@@ -489,12 +514,6 @@ struct AddAccountView: View {
             Text("Con \"Pre-cache\" attivo, ogni fumetto nuovo trovato viene scaricato subito per intero, invece di aspettare che lo apri: non esiste un modo per leggere solo titolo/copertina senza scaricare tutto il file, quindi su librerie grandi può consumare parecchia banda.")
                 .font(.footnote)
                 .foregroundColor(.secondary)
-
-            if let validationError {
-                Text(validationError)
-                    .foregroundColor(.red)
-                    .font(.footnote)
-            }
 
             TVFormPrimaryButton(title: "Salva", action: save)
                 .padding(.top, 12)
@@ -534,7 +553,7 @@ struct AddAccountView: View {
             Button("Elimina", role: .destructive, action: deleteEditingAccount)
             Button("Annulla", role: .cancel) {}
         } message: {
-            Text("Viene rimossa solo la connessione con le sue credenziali: i fumetti già scaricati restano in libreria.")
+            Text("Viene rimossa solo la connessione con le sue credenziali: i fumetti già scaricati restano in libreria, quelli mai scaricati spariscono dall'elenco.")
         }
         .navigationTitle("")
         .toolbar(.hidden, for: .navigationBar)
@@ -550,6 +569,7 @@ struct AddAccountView: View {
     /// quindi libreria e file scaricati restano intatti.
     private func deleteEditingAccount() {
         guard let existing = editingAccount else { return }
+        ComicEntity.deleteOrphanPlaceholders(ofAccountID: existing.stableID, in: context)
         KeychainStore.deletePassword(forAccount: existing.stableID)
         context.delete(existing)
         try? context.save()
@@ -737,8 +757,6 @@ struct AddAccountView: View {
 
         if let existing = editingAccount {
             AppLog.log("Salva Modifica id=\(existing.stableID.uuidString) host=\(trimmedHost) share=\(trimmedShare) userPresente=\(!username.isEmpty) passLen=\(password.count)")
-            // TODO(debug): rimuovere prima della release — solo console, mai file.
-            AppLog.secret("Salva Modifica user=\(username) password=\(password)")
             existing.name = trimmedName.isEmpty ? trimmedHost : trimmedName
             existing.serverURLString = url.absoluteString
             existing.username = username.isEmpty ? nil : username
@@ -767,13 +785,6 @@ struct AddAccountView: View {
                 AppLog.log("Salva Modifica id=\(existing.stableID.uuidString): Core Data ok")
             } catch {
                 AppLog.log("Salva Modifica id=\(existing.stableID.uuidString): Core Data FALLITO: \(error.localizedDescription)")
-            }
-            // Sorveglianza: rilegge tra 5s per beccare chi cancella dopo di noi.
-            let watchedID = existing.stableID
-            Task {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                let stillThere = KeychainStore.password(forAccount: watchedID) != nil
-                AppLog.log("Sorveglianza +5s id=\(watchedID.uuidString): password \(stillThere ? "presente" : "SPARITA")")
             }
             if let onSaved { onSaved() } else { dismiss() }
             return

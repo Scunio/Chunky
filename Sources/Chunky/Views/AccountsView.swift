@@ -404,6 +404,9 @@ struct AccountsView: View {
     private func deleteAccounts(at offsets: IndexSet) {
         for index in offsets {
             let account = accounts[index]
+            // I segnaposto mai scaricati diventerebbero orfani: via subito.
+            // I fumetti già scaricati restano in libreria, il NAS non si tocca.
+            ComicEntity.deleteOrphanPlaceholders(ofAccountID: account.stableID, in: context)
             KeychainStore.deletePassword(forAccount: account.stableID)
             context.delete(account)
         }

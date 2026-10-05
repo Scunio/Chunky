@@ -89,6 +89,40 @@ extension ComicEntity {
         return comic
     }
 
+    /// Rimuove i segnaposto mai scaricati di un account eliminato: senza più
+    /// l'account non potrebbero mai scaricarsi. I fumetti già scaricati restano
+    /// in libreria. Ritorna quanti ne ha rimossi, per il log.
+    @discardableResult
+    static func deleteOrphanPlaceholders(ofAccountID accountID: UUID, in context: NSManagedObjectContext) -> Int {
+        let request = ComicEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "sourceAccountID == %@ AND isRemotePlaceholder == YES", accountID as CVarArg)
+        guard let orphans = try? context.fetch(request), !orphans.isEmpty else { return 0 }
+        for orphan in orphans { context.delete(orphan) }
+        AppLog.log("Pulizia orfani: rimossi \(orphans.count) segnaposto mai scaricati")
+        return orphans.count
+    }
+
+    /// Come sopra ma senza sapere quale account è sparito (usato da Ricostruisci
+    /// libreria): elimina i segnaposto il cui account non esiste più, tiene quelli
+    /// degli account esistenti e tutti i fumetti scaricati.
+    @discardableResult
+    static func deletePlaceholdersWithMissingAccount(in context: NSManagedObjectContext) -> Int {
+        let request = ComicEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "isRemotePlaceholder == YES AND sourceAccountID != nil")
+        guard let placeholders = try? context.fetch(request), !placeholders.isEmpty else { return 0 }
+        let accountRequest = RemoteAccountEntity.fetchRequest()
+        let existingIDs = Set((try? context.fetch(accountRequest))?.compactMap(\RemoteAccountEntity.id) ?? [])
+        let orphans = placeholders.filter { ph in
+            guard let id = ph.sourceAccountID else { return false }
+            return !existingIDs.contains(id)
+        }
+        for orphan in orphans { context.delete(orphan) }
+        if !orphans.isEmpty {
+            AppLog.log("Ricostruisci: rimossi \(orphans.count) segnaposto di account eliminati")
+        }
+        return orphans.count
+    }
+
     private static func targetStore(isLocalOnly: Bool, in context: NSManagedObjectContext) -> NSPersistentStore? {
         guard let stores = context.persistentStoreCoordinator?.persistentStores, stores.count > 1 else {
             // A single store is unambiguous (the tests' in-memory stack, by design) — but it can

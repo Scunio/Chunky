@@ -32,10 +32,13 @@ struct DiagnosticsSections: View {
                 header: Text("Libreria"),
                 footer: Text("Rimuove i fumetti i cui file non esistono più e ritrova quelli presenti nella cartella della libreria ma non registrati (utile dopo un ripristino da backup).")
             ) {
+                // Mai disabilitato durante gli import: il rebuild va in coda seriale
+                // con gli altri lavori e parte da solo; disabilitarlo lo faceva
+                // sembrare morto proprio mentre serviva (es. pre-cache in corso).
+                // Il banner di stato conferma il tap anche se parte dopo.
                 Button(action: { viewModel.rebuildLibrary(context: context) }) {
                     Label("Ricostruisci libreria", systemImage: "arrow.triangle.2.circlepath")
                 }
-                .disabled(viewModel.isImporting)
             }
 
             Section(header: Text("Log")) {

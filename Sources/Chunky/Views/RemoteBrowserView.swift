@@ -220,20 +220,38 @@ struct RemoteBrowserView: View {
         }
     }
 
+    /// Se lo scan ha già registrato un placeholder per questo file, scarica in quello
+    /// invece di importare un secondo record (era il "Topolino 1"): tap sul browser e
+    /// pre-cache dello scan convergono sullo stesso record e non duplicano più.
     private func downloadAndImport(_ entry: RemoteEntry) {
         downloadingEntryIDs.insert(entry.id)
-        Task {
+        // `@MainActor`: `account` è del view context e `browser.download` lo legge
+        // in modo sincrono prima del primo await (stesso vincolo documentato in
+        // `ComicDownloadService.downloadRemotePlaceholder`).
+        Task { @MainActor in
+            let accountID = account.stableID
+            let sourcePath = entry.url.absoluteString
+            let request = ComicEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "sourceAccountID == %@ AND sourceRelativePath == %@", accountID as CVarArg, sourcePath)
+            request.fetchLimit = 1
+            if let placeholder = (try? context.fetch(request))?.first, placeholder.isRemotePlaceholder {
+                ComicDownloadService.downloadIfNeeded(comic: placeholder) { error in
+                    Task { @MainActor in
+                        if let error {
+                            viewModel.importError = error.chunkyFriendlyDescription
+                        }
+                        downloadingEntryIDs.remove(entry.id)
+                    }
+                }
+                return
+            }
             do {
                 let localURL = try await browser.download(entry, account: account)
-                await MainActor.run {
-                    viewModel.importFiles([localURL], into: context)
-                    downloadingEntryIDs.remove(entry.id)
-                }
+                viewModel.importFiles([localURL], into: context)
+                downloadingEntryIDs.remove(entry.id)
             } catch {
-                await MainActor.run {
-                    viewModel.importError = error.chunkyFriendlyDescription
-                    downloadingEntryIDs.remove(entry.id)
-                }
+                viewModel.importError = error.chunkyFriendlyDescription
+                downloadingEntryIDs.remove(entry.id)
             }
         }
     }

@@ -401,9 +401,13 @@ final class LibraryViewModel: ObservableObject {
     /// (e.g. deleted manually from Finder/Files), and registers files found in the library
     /// folder that aren't present yet — useful after restoring from a backup or a sync issue.
     func rebuildLibrary(context: NSManagedObjectContext) {
+        // Banner subito, lavoro in coda: se la coda è occupata (es. pre-cache),
+        // l'utente vede che il tap è stato preso invece di un bottone muto.
+        let token = beginStatus("Ricostruzione libreria…")
         let backgroundContext = sharedScanContext(for: context)
         enqueue(.rebuild) { [weak self] in
             self?.performRebuildLibrary(in: backgroundContext)
+            self?.endStatus(token: token)
         }
     }
 
@@ -411,6 +415,10 @@ final class LibraryViewModel: ObservableObject {
         var removedCount = 0
         var knownPaths: Set<String> = []
         context.performAndWait {
+            // Prima gli orfani (segnaposto di account eliminati, che il ciclo sotto
+            // salterebbe come tutti i placeholder): senza questo Ricostruisci
+            // sembrerebbe non fare niente dopo un'eliminazione account.
+            removedCount += ComicEntity.deletePlaceholdersWithMissingAccount(in: context)
             let request = ComicEntity.fetchRequest()
             guard let comics = try? context.fetch(request) else { return }
             for comic in comics {
@@ -424,6 +432,7 @@ final class LibraryViewModel: ObservableObject {
                     // and then have phase two below "discover" that same file as unregistered and
                     // import it a second time. Registering its path regardless of the flag closes
                     // that window without having to make the flag flip and the file write atomic.
+                    // (Gli orfani — account eliminato — sono già stati rimossi sopra in blocco.)
                     let path = comic.relativePath ?? ""
                     if !path.isEmpty { knownPaths.insert(path) }
                     continue
