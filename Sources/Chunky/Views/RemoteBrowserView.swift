@@ -184,7 +184,8 @@ struct RemoteBrowserView: View {
             let share = account.shareName ?? "?"
             let userDesc = (account.username?.isEmpty ?? true) ? "no" : (account.username ?? "si")
             let passDesc = (account.password?.isEmpty ?? true) ? "no" : "si"
-            return "host=\(host) share=\(share) port=\(account.portNumber) user=\(userDesc) pass=\(passDesc)"
+            let shortID = account.stableID.uuidString.prefix(8)
+            return "id=\(shortID) host=\(host) share=\(share) port=\(account.portNumber) user=\(userDesc) pass=\(passDesc)"
         }
         await MainActor.run {
             isLoading = true
@@ -198,7 +199,7 @@ struct RemoteBrowserView: View {
             }
         } catch {
             let preflight = await MainActor.run { localNetwork.status }
-            DiagnosticLog.log("SMB browse saved[\(savedDesc)] EPERM=\(error.isLocalNetworkDenied) preflight=\(preflight) err=\(error.localizedDescription)")
+            AppLog.log("SMB browse saved[\(savedDesc)] EPERM=\(error.isLocalNetworkDenied) preflight=\(preflight) err=\(error.localizedDescription)")
             await MainActor.run {
                 errorMessage = error.chunkyFriendlyDescription
                 isLoading = false
