@@ -30,6 +30,11 @@ struct AccountsView: View {
 
     @State private var isShowingAddAccount = false
     @State private var addAccountKind: RemoteAccountKind = .opds
+    /// Modifica di un account esistente (best practice: stesso form di creazione in
+    /// modalità edit, presentato come sheet; il tap sulla riga resta "Sfoglia",
+    /// la modifica è swipe-action + menu contestuale così non ruba il tap principale).
+    @State private var accountToEdit: RemoteAccountEntity?
+    @State private var isShowingEditAccount = false
     @State private var activeImporter: ActiveImporter?
     @State private var folderConversionError: String?
     /// "+" doesn't open another screen: it reveals the "Add account" section at the end of the
@@ -61,6 +66,11 @@ struct AccountsView: View {
         panel
             .sheet(isPresented: $isShowingAddAccount) {
                 AddAccountView(initialKind: addAccountKind)
+            }
+            .sheet(isPresented: $isShowingEditAccount) {
+                if let accountToEdit {
+                    AddAccountView(editing: accountToEdit)
+                }
             }
         // No system file picker on tvOS: the buttons that set `activeImporter` are hidden
         // there too (see below), so this never needs to present.
@@ -140,6 +150,21 @@ struct AccountsView: View {
                     ForEach(accounts) { account in
                         NavigationLink(destination: RemoteBrowserView(account: account)) {
                             accountRow(for: account)
+                        }
+                        #if !os(tvOS)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button("Modifica") {
+                                accountToEdit = account
+                                isShowingEditAccount = true
+                            }
+                            .tint(.blue)
+                        }
+                        #endif
+                        .contextMenu {
+                            Button("Modifica") {
+                                accountToEdit = account
+                                isShowingEditAccount = true
+                            }
                         }
                     }
                     .onDelete(perform: deleteAccounts)
@@ -269,6 +294,11 @@ struct AccountsView: View {
                                     accountRow(for: account)
                                 }
                                 .tvOSRowBackground()
+                                .contextMenu {
+                                    NavigationLink(destination: AddAccountView(editing: account)) {
+                                        Text("Modifica")
+                                    }
+                                }
                             }
                         }
                     }

@@ -37,9 +37,11 @@ struct AddAccountView: View {
     @State private var isBrowsingShares = false
     @State private var availableShares: [String] = []
     @State private var shareBrowseError: String?
-    /// Ultimo tentativo fallito per blocco privacy "Rete locale" (permesso negato
-    /// per Chunky: iOS/tvOS non ripropongono il prompt, serve il toggle manuale).
-    /// Guida la UI a mostrare il banner con "Apri Impostazioni".
+    /// Ultimo tentativo SMB fallito con EPERM: SOSPETTO blocco "Rete locale",
+    /// non conferma (può essere anche rifiuto del server: credenziali,
+    /// diritti sulla condivisione). Il banner bloccante compare solo se il
+    /// preflight lo conferma (`isBlockedBySystem`); altrimenti l'errore
+    /// specifico resta visibile sotto il campo interessato.
     @State private var localNetworkBlocked = false
     #if os(tvOS)
     @State private var isAdvancedExpanded = false
@@ -51,9 +53,48 @@ struct AddAccountView: View {
     @State private var preCacheDetailsEnabled = true
     @State private var preCacheCoversEnabled = true
 
+    /// Account esistente in modifica (`nil` = creazione). Best practice: un solo
+    /// form per crea+modifica così validazione, test velocità e gestione Rete
+    /// locale restano identici; il `kind` in modifica è bloccato (cambiare tipo
+    /// orfanerebbe i campi specifici e va fatto con elimina+ricrea).
+    private var editingAccount: RemoteAccountEntity?
+    private var isEditing: Bool { editingAccount != nil }
+
     init(initialKind: RemoteAccountKind = .opds, onSaved: (() -> Void)? = nil) {
         _kind = State(initialValue: initialKind)
+        self.editingAccount = nil
         self.onSaved = onSaved
+    }
+
+    /// Modalità modifica: pre-compila tutti i campi dall'account (password inclusa,
+    /// letta dal Keychain). L'oggetto è sullo stesso main context della vista.
+    init(editing account: RemoteAccountEntity, onSaved: (() -> Void)? = nil) {
+        let kind = account.kind
+        _kind = State(initialValue: kind)
+        self.editingAccount = account
+        self.onSaved = onSaved
+        _name = State(initialValue: account.name ?? "")
+        _username = State(initialValue: account.username ?? "")
+        _password = State(initialValue: account.password ?? "")
+        _autoScanEnabled = State(initialValue: account.autoScanEnabled)
+        _smartFoldersEnabled = State(initialValue: account.smartFoldersEnabled)
+        _preCacheDetailsEnabled = State(initialValue: account.preCacheDetailsEnabled)
+        _preCacheCoversEnabled = State(initialValue: account.preCacheCoversEnabled)
+        if kind == .smb {
+            _serverURLString = State(initialValue: "")
+            _smbHost = State(initialValue: account.serverURL?.host ?? "")
+            _smbPort = State(initialValue: account.portNumber > 0 ? String(account.portNumber) : "445")
+            _smbShare = State(initialValue: account.shareName ?? "")
+            _smbWorkgroup = State(initialValue: account.domainOrWorkgroup ?? "")
+            _smbResolvedAddressOverride = State(initialValue: account.resolvedAddressOverride ?? "")
+        } else {
+            _serverURLString = State(initialValue: account.serverURLString ?? "")
+            _smbHost = State(initialValue: "")
+            _smbPort = State(initialValue: "445")
+            _smbShare = State(initialValue: "")
+            _smbWorkgroup = State(initialValue: "")
+            _smbResolvedAddressOverride = State(initialValue: "")
+        }
     }
 
     var body: some View {
@@ -65,7 +106,7 @@ struct AddAccountView: View {
         #else
         NavigationStack {
             formContent
-                .navigationTitle("Nuovo account")
+                .navigationTitle(isEditing ? "Modifica account" : "Nuovo account")
                 .toolbar {
                     #if os(iOS)
                     ToolbarItem(placement: .navigationBarLeading) {
@@ -116,10 +157,21 @@ struct AddAccountView: View {
         }
     }
 
-    /// Il blocco privacy è confermato quando il preflight lo rileva oppure un
-    /// tentativo SMB fallisce con EPERM (il client SMB usa socket diretti).
+    /// Blocco privacy CONFERMATO: solo il preflight `NWBrowser` con
+    /// PolicyDenied (-65570) lo prova. Un EPERM SMB da solo (`localNetworkBlocked`)
+    /// è solo un sospetto — mostrarci il banner "attiva Rete locale" causava il
+    /// falso positivo "è già attiva ma dice di attivarla" quando invece erano
+    /// sbagliati credenziali/condivisione (TN3179).
     private var isBlockedBySystem: Bool {
-        localNetwork.status == .denied || localNetworkBlocked
+        localNetwork.status == .denied
+    }
+
+    /// Sospetto non confermato: un tentativo SMB è fallito con EPERM ma il
+    /// preflight non ha confermato il blocco privacy. L'errore specifico resta
+    /// sotto il campo (con suggerimento secondario sulla Rete locale); qui si
+    /// aggiunge solo un link secondario alle Impostazioni, mai il banner bloccante.
+    private var hasSMBSuspect: Bool {
+        localNetworkBlocked && localNetwork.status != .denied
     }
 
     private func retryLocalNetworkCheck() {
@@ -144,9 +196,10 @@ struct AddAccountView: View {
         #endif
     }
 
-    /// Banner mostrato quando l'accesso alla rete locale è negato a Chunky
-    /// (preflight o tentativo SMB fallito): il prompt di sistema non ricompare
-    /// da solo, serve il toggle manuale e poi "Riprova".
+    /// Banner mostrato SOLO a blocco privacy confermato dal preflight
+    /// (PolicyDenied): il prompt di sistema non ricompare da solo, serve il
+    /// toggle manuale e poi "Riprova". Per il sospetto non confermato (EPERM
+    /// SMB senza preflight denied) l'errore resta sotto il campo interessato.
     private var localNetworkHelpSection: some View {
         Section(header: Text("Serve l'accesso alla rete locale")) {
             Text("Senza questo permesso non possiamo raggiungere il NAS: attivalo per Chunky e poi premi Riprova, non serve reinserire nulla.")
@@ -172,12 +225,15 @@ struct AddAccountView: View {
     #if !os(tvOS)
     private var formContent: some View {
         Form {
-            Section(header: Text("Tipo di account")) {
+            Section(header: Text("Tipo di account"), footer: Group {
+                if isEditing { Text("Il tipo non si può cambiare in modifica: per passare a un altro tipo elimina e ricrea l'account.") }
+            }) {
                 Picker("Tipo", selection: $kind) {
                     ForEach(RemoteAccountKind.allCases) { kind in
                         Text(kind.label).tag(kind)
                     }
                 }
+                .disabled(isEditing)
                 #if os(iOS)
                 .pickerStyle(.segmented)
                 #endif
@@ -227,6 +283,10 @@ struct AddAccountView: View {
                         Text(shareBrowseError)
                             .font(.footnote)
                             .foregroundColor(.red)
+                        if hasSMBSuspect {
+                            Button("Apri Impostazioni", action: openSystemSettings)
+                                .font(.footnote)
+                        }
                     }
                 }
 
@@ -330,6 +390,10 @@ struct AddAccountView: View {
                 Text(speedTestResult)
                     .font(.footnote)
                     .foregroundColor(.secondary)
+                if hasSMBSuspect {
+                    Button("Apri Impostazioni", action: openSystemSettings)
+                        .font(.footnote)
+                }
             }
         }
     }
@@ -348,6 +412,12 @@ struct AddAccountView: View {
                     }
                 }
                 .labelsHidden()
+                .disabled(isEditing)
+            }
+            if isEditing {
+                Text("Il tipo non si può cambiare in modifica.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
             }
 
             if kind == .smb {
@@ -386,6 +456,11 @@ struct AddAccountView: View {
                     Text(shareBrowseError)
                         .font(.footnote)
                         .foregroundColor(.red)
+                    if hasSMBSuspect {
+                        Text("Se indirizzo e credenziali sono giusti, controlla anche Impostazioni → App → Chunky → \"Rete locale\".")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 if !availableShares.isEmpty {
                     TVFormSectionLabel(title: "Condivisioni trovate")
@@ -412,6 +487,11 @@ struct AddAccountView: View {
                         Text(speedTestResult)
                             .font(.footnote)
                             .foregroundColor(.secondary)
+                        if hasSMBSuspect {
+                            Text("Se indirizzo e credenziali sono giusti, controlla anche Impostazioni → App → Chunky → \"Rete locale\".")
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
             } else {
@@ -466,7 +546,7 @@ struct AddAccountView: View {
             // `TVFormPrimaryButton` at the bottom), matching Infuse's bottom-of-form
             // primary action instead of a small top-corner toolbar button.
             VStack(alignment: .leading, spacing: 24) {
-                Text("Nuovo account")
+                Text(isEditing ? "Modifica account" : "Nuovo account")
                     .font(.largeTitle.bold())
                 tvOSFormContent
             }
@@ -485,7 +565,10 @@ struct AddAccountView: View {
     private func save() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if kind == .smb {
+        // In modifica il kind è bloccato: usa quello dell'account esistente anche
+        // se lo @State fosse rimasto su un altro valore.
+        let effectiveKind = isEditing ? (editingAccount?.kind ?? kind) : kind
+        if effectiveKind == .smb {
             saveSMB(trimmedName: trimmedName)
             return
         }
@@ -494,6 +577,23 @@ struct AddAccountView: View {
 
         guard !trimmedURL.isEmpty, let url = URL(string: trimmedURL), url.scheme != nil else {
             validationError = "Inserisci un URL valido, comprensivo di http:// o https://"
+            return
+        }
+
+        if let existing = editingAccount {
+            existing.name = trimmedName.isEmpty ? (url.host ?? "Account") : trimmedName
+            existing.serverURLString = trimmedURL
+            existing.username = username.isEmpty ? nil : username
+            existing.password = password.isEmpty ? nil : password
+            existing.autoScanEnabled = autoScanEnabled
+            existing.smartFoldersEnabled = smartFoldersEnabled
+            existing.preCacheDetailsEnabled = preCacheDetailsEnabled
+            existing.preCacheCoversEnabled = preCacheCoversEnabled
+            // La configurazione è cambiata: il vecchio errore non è più valido,
+            // la prossima scansione riprova da zero.
+            existing.lastScanError = nil
+            try? context.save()
+            if let onSaved { onSaved() } else { dismiss() }
             return
         }
 
@@ -563,6 +663,7 @@ struct AddAccountView: View {
                 await MainActor.run {
                     speedTestResult = "Connessione non riuscita: \(error.chunkyFriendlyDescription)"
                     localNetworkBlocked = error.isLocalNetworkDenied
+                    DiagnosticLog.log("SMB speed test host=\(trimmedHost) EPERM=\(error.isLocalNetworkDenied) preflight=\(localNetwork.status) err=\(error.localizedDescription)")
                     isRunningSpeedTest = false
                 }
             }
@@ -606,6 +707,7 @@ struct AddAccountView: View {
                 await MainActor.run {
                     shareBrowseError = "Impossibile elencare le condivisioni: \(error.chunkyFriendlyDescription)"
                     localNetworkBlocked = error.isLocalNetworkDenied
+                    DiagnosticLog.log("SMB browse host=\(trimmedHost) EPERM=\(error.isLocalNetworkDenied) preflight=\(localNetwork.status) err=\(error.localizedDescription)")
                     isBrowsingShares = false
                 }
             }
@@ -639,6 +741,25 @@ struct AddAccountView: View {
 
         let trimmedWorkgroup = smbWorkgroup.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedOverride = smbResolvedAddressOverride.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let existing = editingAccount {
+            existing.name = trimmedName.isEmpty ? trimmedHost : trimmedName
+            existing.serverURLString = url.absoluteString
+            existing.username = username.isEmpty ? nil : username
+            existing.password = password.isEmpty ? nil : password
+            existing.portNumber = port
+            existing.shareName = trimmedShare
+            existing.domainOrWorkgroup = trimmedWorkgroup.isEmpty ? nil : trimmedWorkgroup
+            existing.resolvedAddressOverride = trimmedOverride.isEmpty ? nil : trimmedOverride
+            existing.autoScanEnabled = autoScanEnabled
+            existing.smartFoldersEnabled = smartFoldersEnabled
+            existing.preCacheDetailsEnabled = preCacheDetailsEnabled
+            existing.preCacheCoversEnabled = preCacheCoversEnabled
+            existing.lastScanError = nil
+            try? context.save()
+            if let onSaved { onSaved() } else { dismiss() }
+            return
+        }
 
         RemoteAccountEntity.create(
             kind: .smb,

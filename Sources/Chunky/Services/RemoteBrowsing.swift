@@ -126,17 +126,21 @@ extension Error {
         if let posixError = self as? POSIXError {
             switch posixError.code {
             case .EPERM:
-                // Il permesso "Rete locale" è per-app e va concesso a Chunky anche
-                // se la rete funziona. E una volta negato, iOS/tvOS non ripropone
-                // il prompt: bisogna riattivarlo a mano dalle impostazioni.
+                // EPERM dai socket SMB diretti è AMBIGUO (TN3179): può essere il
+                // blocco privacy "Rete locale" di iOS/tvOS, ma anche un rifiuto del
+                // server (credenziali, diritti sulla condivisione, guest disabilitato).
+                // Non affermare mai solo da qui che è la privacy: la conferma arriva
+                // solo dal preflight `LocalNetworkPermission` (PolicyDenied -65570).
+                // Il testo cita entrambe le cause così un EPERM del server non porta
+                // fuori strada ("attiva Rete locale" anche se è già attiva).
                 #if os(tvOS)
-                return "Connessione bloccata dal sistema. Apri Impostazioni → App → Chunky e attiva \"Rete locale\", poi riprova."
+                return "Operazione non permessa (controlla credenziali e condivisione). Se sono giusti, apri Impostazioni → App → Chunky e attiva \"Rete locale\", poi riprova."
                 #elseif os(iOS)
-                return "Connessione bloccata dal sistema. Apri Impostazioni → Privacy e sicurezza → Rete locale e attiva Chunky, poi riprova."
+                return "Operazione non permessa (controlla credenziali e condivisione). Se sono giusti, apri Impostazioni → Privacy e sicurezza → Rete locale e attiva Chunky, poi riprova."
                 #elseif os(macOS)
-                return "Connessione bloccata dal sistema. Apri Impostazioni di Sistema → Privacy e sicurezza → Rete locale e attiva Chunky, poi riprova."
+                return "Operazione non permessa (controlla credenziali e condivisione). Se sono giusti, apri Impostazioni di Sistema → Privacy e sicurezza → Rete locale e attiva Chunky, poi riprova."
                 #else
-                return "Connessione bloccata dal sistema. Attiva l'accesso alla rete locale per Chunky nelle impostazioni, poi riprova."
+                return "Operazione non permessa (controlla credenziali e condivisione). Se sono giusti, attiva l'accesso alla rete locale per Chunky nelle impostazioni, poi riprova."
                 #endif
             case .ETIMEDOUT:
                 return "Il server non ha risposto in tempo. Verifica che sia acceso e sulla stessa rete."
@@ -163,9 +167,12 @@ extension Error {
         return localizedDescription
     }
 
-    /// Vero quando l'errore è il blocco privacy "Rete locale" (permesso negato
-    /// per questa app). Serve alla UI per mostrare il banner con il pulsante
-    /// "Apri Impostazioni" invece di un generico messaggio di rete.
+    /// SOSPETTO blocco privacy "Rete locale", non conferma: EPERM dai socket SMB
+    /// diretti è ambiguo (blocco di sistema OPPURE rifiuto del server). La UI deve
+    /// mostrarlo come banner "Apri Impostazioni" solo se anche il preflight
+    /// `LocalNetworkPermission.status == .denied` lo conferma; altrimenti mostra
+    /// l'errore del server con il suggerimento secondario sulla Rete locale
+    /// (vedi `chunkyFriendlyDescription`).
     var isLocalNetworkDenied: Bool {
         (self as? POSIXError)?.code == .EPERM
     }

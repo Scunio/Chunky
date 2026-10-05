@@ -23,9 +23,17 @@ struct RemoteBrowserView: View {
     @State private var downloadingEntryIDs: Set<RemoteEntry.ID> = []
     @State private var searchText = ""
     @State private var isRefreshingLibrary = false
-    /// L'ultimo caricamento è fallito per blocco privacy "Rete locale": serve
-    /// il toggle manuale, "Riprova" da solo non basta (vedi banner sotto).
+    /// Ultimo caricamento fallito con EPERM: SOSPETTO blocco "Rete locale",
+    /// non conferma (può essere rifiuto del server). La conferma arriva solo dal
+    /// preflight sotto; il testo dell'errore cita già entrambe le cause.
     @State private var localNetworkBlocked = false
+    /// Preflight "Rete locale" per gli account SMB: conferma il blocco privacy
+    /// (PolicyDenied) invece di dedurlo dal solo EPERM del server (TN3179).
+    @StateObject private var localNetwork = LocalNetworkPermission()
+    /// Sheet modifica (best practice: stesso form di creazione in modalità edit).
+    /// Solo root (`startURL == nil`): le sottocartelle non offrono modifica per non
+    /// duplicare l'entry point in ogni livello di navigazione.
+    @State private var isShowingEdit = false
 
     private var browser: RemoteBrowsing { RemoteBrowsingFactory.makeBrowser(for: account.kind) }
     private var url: URL { startURL ?? account.serverURL ?? URL(string: "about:blank")! }
@@ -36,8 +44,16 @@ struct RemoteBrowserView: View {
         // unbounded. `TVPanel` puts the title in the layout instead.
         #if os(tvOS)
         TVPanel(title: title ?? account.name ?? "Sfoglia") {
-            Button("Aggiorna", action: refreshLibrary)
-                .disabled(isLoading || isRefreshingLibrary)
+            HStack(spacing: 24) {
+                if startURL == nil {
+                    NavigationLink(destination: AddAccountView(editing: account)) {
+                        Text("Modifica")
+                    }
+                    .buttonStyle(.card)
+                }
+                Button("Aggiorna", action: refreshLibrary)
+                    .disabled(isLoading || isRefreshingLibrary)
+            }
         } content: {
             browserContent
         }
@@ -46,7 +62,8 @@ struct RemoteBrowserView: View {
         // instead of popping back (one level, whether that's the Account list or a parent
         // folder — recursion into a subfolder pushes another instance of this same view).
         .onExitCommand { dismiss() }
-        .onAppear(perform: load)
+        .onAppear { startPreflightIfNeeded(); load() }
+        .onDisappear { localNetwork.stop() }
         .searchable(text: $searchText, prompt: "Cerca qui")
         #else
         browserContent
@@ -61,10 +78,22 @@ struct RemoteBrowserView: View {
                     .disabled(isLoading || isRefreshingLibrary)
                     .accessibilityLabel("Aggiorna libreria da qui")
                 }
+                if startURL == nil {
+                    ToolbarItem {
+                        Button("Modifica") { isShowingEdit = true }
+                    }
+                }
             }
-            .onAppear(perform: load)
+            .sheet(isPresented: $isShowingEdit) {
+                AddAccountView(editing: account)
+            }
+            .onAppear { startPreflightIfNeeded(); load() }
+            .onDisappear { localNetwork.stop() }
         #endif
     }
+
+    /// Avvia il preflight "Rete locale" solo per SMB (unico a usare socket
+    /// diretti con EPERM ambiguo). OPDS/WebDAV usano URLSession e non ne hanno bisogno.
 
     /// Voci filtrate dalla ricerca (filtro locale sui titoli già caricati).
     private var visibleEntries: [RemoteEntry] {
@@ -85,7 +114,10 @@ struct RemoteBrowserView: View {
                 Text(errorMessage)
             } actions: {
                 #if !os(tvOS)
-                if localNetworkBlocked {
+                // Secondario in entrambi i casi (confermato o sospetto): con EPERM
+                // ambiguo il testo spiega già di controllare prima credenziali e
+                // condivisione, questo è solo la scorciatoia se serve davvero.
+                if localNetworkBlocked || localNetwork.status == .denied {
                     Button("Apri Impostazioni", action: openSystemSettings)
                 }
                 #endif
@@ -142,6 +174,14 @@ struct RemoteBrowserView: View {
         Task { await reload() }
     }
 
+    private func startPreflightIfNeeded() {
+        if account.kind == .smb {
+            localNetwork.check()
+        } else {
+            localNetwork.stop()
+        }
+    }
+
     private func reload() async {
         await MainActor.run {
             isLoading = true
@@ -158,6 +198,7 @@ struct RemoteBrowserView: View {
             await MainActor.run {
                 errorMessage = error.chunkyFriendlyDescription
                 localNetworkBlocked = error.isLocalNetworkDenied
+                DiagnosticLog.log("SMB browse account EPERM=\(error.isLocalNetworkDenied) preflight=\(localNetwork.status) err=\(error.localizedDescription)")
                 isLoading = false
             }
         }
