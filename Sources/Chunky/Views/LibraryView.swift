@@ -1094,23 +1094,49 @@ private struct RemoteDownloadControl: View {
                     LiveDownloadProgress(item: item)
                 } else {
                     Button(action: startDownload) {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                            .padding(6)
-                            .background(Color.black.opacity(0.6))
-                            .clipShape(Circle())
-                            .padding(6)
+                        downloadBadge(image: "arrow.down.circle.fill")
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Scarica senza aprire")
+                }
+            } else if let url = cloudURL, LibraryStorage.isPendingDownload(url) {
+                // Stessa UX per iCloud: prima l'avanzamento viveva solo nella
+                // schermata Download, sulla copertina restava l'icona statica.
+                if let item = downloads.item(forKey: url.path) {
+                    LiveDownloadProgress(item: item)
+                } else {
+                    Button(action: startCloudDownload) {
+                        downloadBadge(image: "icloud.and.arrow.down")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Scarica da iCloud senza aprire")
                 }
             }
         }
     }
 
+    private var cloudURL: URL? {
+        guard !comic.isRemotePlaceholder, let relativePath = comic.relativePath else { return nil }
+        return LibraryStorage.fileURL(forRelativePath: relativePath)
+    }
+
+    private func downloadBadge(image: String) -> some View {
+        Image(systemName: image)
+            .font(.title2)
+            .foregroundColor(.white)
+            .padding(6)
+            .background(Color.black.opacity(0.6))
+            .clipShape(Circle())
+            .padding(6)
+    }
+
     private func startDownload() {
         ComicDownloadService.downloadIfNeeded(comic: comic)
+    }
+
+    private func startCloudDownload() {
+        guard let url = cloudURL else { return }
+        ComicDownloadService.downloadIfNeeded(title: comic.title ?? "Fumetto", at: url)
     }
 }
 
