@@ -742,12 +742,10 @@ struct AddAccountView: View {
             if password.isEmpty {
                 KeychainStore.deletePassword(forAccount: existing.stableID)
             } else {
-                let status = KeychainStore.savePassword(password, forAccount: existing.stableID)
-                let roundTrip = KeychainStore.password(forAccount: existing.stableID)
-                if roundTrip != password {
-                    let gotDesc = roundTrip == nil ? "nil" : "len=\(roundTrip?.count ?? 0) diversa"
-                    DiagnosticLog.log("Keychain: round-trip fallito in Modifica id=\(existing.stableID.uuidString) saveStatus=\(status) expectedLen=\(password.count) got=\(gotDesc)")
-                    validationError = "Password non salvata nel portachiavi (codice \(status)). Apri Diagnostica e copia il log."
+                let report = KeychainStore.savePassword(password, forAccount: existing.stableID)
+                if !report.ok {
+                    DiagnosticLog.log("Keychain: salvataggio fallito in Modifica id=\(existing.stableID.uuidString) (scrittura \(report.writeStatus), lettura \(report.readStatus))")
+                    validationError = "Password non salvata (scrittura \(report.writeStatus), lettura \(report.readStatus))."
                     return
                 }
             }

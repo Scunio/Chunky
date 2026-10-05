@@ -1,20 +1,22 @@
 import Foundation
 import Security
 
-/// Minimal wrapper over the Keychain for remote account credentials (WebDAV, OPDS with
-/// authentication) and for the parental lock passcode. Passwords are never
-/// saved in Core Data.
+/// Password storage for remote account credentials and the parental lock passcode.
+/// Passwords are never saved in Core Data.
 ///
-/// Writes go to the plain keychain (no `kSecUseDataProtectionKeychain`), like every
-/// normal app: that flag broke reads on some devices (write reported success, read
-/// came back empty) with no benefit on iOS. The modern store is still *read* for
-/// backward compatibility and used as verified fallback. Never any secret in logs.
-/// The three Keychain operations used by the app, isolated behind a protocol.
+/// Riscritto da zero, uguale a tutte le app normali: un solo store canonico
+/// (generic-password, niente flag esotici, niente access-group esplicito).
+/// Ogni scrittura è verificata da una rilettura immediata e l'esito — entrambi
+/// i codici — torna al chiamante, così la UI mostra l'errore vero invece di far
+/// finta di aver salvato. Mai segreti nei log, solo lunghezze e status.
 ///
-/// This exists to make the migration away from the legacy keychain testable: tests can't
-/// use the real keychain, because the data-protection entitlement belongs to the host
-/// process and an unsigned test bundle doesn't have it. Without this seam, the one piece
-/// of logic that could actually regress would be left without tests.
+/// Compatibilità: le vecchie build scrivevano con `kSecUseDataProtectionKeychain`,
+/// quindi in lettura si controlla anche quello store e un item trovato lì viene
+/// importato nel canonico. Niente migrazioni differite che si riattivano a ogni lettura.
+///
+/// I test non possono usare il portachiavi vero (l'entitlement data-protection
+/// appartiene al processo host e un bundle di test non firmato non lo raggiunge),
+/// quindi le tre operazioni restano dietro un protocollo con backend sostituibile.
 protocol KeychainAccessing {
     func copyMatching(_ query: [String: Any]) -> (status: OSStatus, data: Data?)
     func add(_ attributes: [String: Any]) -> OSStatus
@@ -37,109 +39,117 @@ struct SystemKeychain: KeychainAccessing {
     }
 }
 
+/// Esito verificato di un salvataggio: `ok` solo se scrittura E rilettura tornano.
+/// I due codici finiscono nel messaggio d'errore della UI, così bastano quelli.
+struct KeychainSaveReport: Equatable {
+    let writeStatus: OSStatus
+    let readStatus: OSStatus
+    var ok: Bool { writeStatus == errSecSuccess && readStatus == errSecSuccess }
+}
+
 enum KeychainStore {
     private static let service = "com.scunio.Chunky.remoteAccounts"
 
     /// Replaceable in tests. In production it's always the system keychain.
     static var backend: KeychainAccessing = SystemKeychain()
 
-    private static func baseQuery(account: String, useDataProtection: Bool) -> [String: Any] {
+    /// Query canonica, identica in scrittura e lettura: stesa su due piedi,
+    /// senza flag che cambiano comportamento tra iOS e macOS.
+    private static func query(account: String, modern: Bool) -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
-        if useDataProtection {
+        if modern {
             query[kSecUseDataProtectionKeychain as String] = true
         }
         return query
     }
 
-    /// Ritorna l'OSStatus così il form può mostrare l'errore invece di far finta di aver salvato.
-    /// Scrive nel portachiavi semplice e verifica la rilettura; solo se quello non è
-    /// verificabile ripiega sul moderno (con flag data-protection). Mai dati sensibili
-    /// nei log, solo lunghezze e status.
+    /// Salva e verifica con rilettura immediata. Prova il canonico, poi il moderno
+    /// come ripiego verificato. Non cancella mai prima di aver scritto: una
+    /// sostituzione fallita deve lasciare intatta la password esistente.
     @discardableResult
-    static func savePassword(_ password: String, forAccount id: UUID) -> OSStatus {
+    static func savePassword(_ password: String, forAccount id: UUID) -> KeychainSaveReport {
         let account = id.uuidString
-        let plainStatus = store(password, account: account, useDataProtection: false)
-        let plainRead = readWithStatus(account: account, useDataProtection: false)
-        if plainStatus == errSecSuccess, plainRead.value == password {
-            // Solo a scrittura verificata si rimuove l'eventuale copia moderna:
-            // era l'unica rimasta e ora è duplicata.
-            _ = backend.delete(baseQuery(account: account, useDataProtection: true))
-            return errSecSuccess
+        let plain = upsertVerified(password, account: account, modern: false)
+        if plain.ok {
+            // Solo a scrittura verificata si rimuove l'eventuale copia moderna.
+            _ = backend.delete(query(account: account, modern: true))
+            return plain
         }
-        DiagnosticLog.log("Keychain: semplice non verificabile (saveStatus \(plainStatus), readStatus \(plainRead.status)), provo moderno")
-        let modernStatus = store(password, account: account, useDataProtection: true)
-        let modernRead = readWithStatus(account: account, useDataProtection: true)
-        if modernStatus == errSecSuccess, modernRead.value == password {
+        DiagnosticLog.log("Keychain: canonico non verificabile (scrittura \(plain.writeStatus), lettura \(plain.readStatus)), provo moderno")
+        let modern = upsertVerified(password, account: account, modern: true)
+        if modern.ok {
             DiagnosticLog.log("Keychain: salvato nel moderno (len=\(password.count))")
-            return errSecSuccess
+            return modern
         }
-        DiagnosticLog.log("Keychain: moderno non verificabile (saveStatus \(modernStatus), readStatus \(modernRead.status))")
-        DiagnosticLog.log("Keychain: salvataggio fallito (semplice \(plainStatus), moderno \(modernStatus)); copie esistenti conservate")
-        return modernStatus != errSecSuccess ? modernStatus : plainStatus
-    }
-
-    /// Scrive (o sostituisce) nel portachiavi indicato, senza mai cancellare prima di
-    /// aver scritto: se `add` fallisce (es. build senza l'entitlement data-protection →
-    /// errSecMissingEntitlement) la copia esistente deve restare intatta, altrimenti una
-    /// Modifica con scrittura fallita cancellerebbe la password buona al Salva successivo.
-    private static func store(_ password: String, account: String, useDataProtection: Bool) -> OSStatus {
-        var attributes = baseQuery(account: account, useDataProtection: useDataProtection)
-        attributes[kSecValueData as String] = Data(password.utf8)
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-
-        let status = backend.add(attributes)
-        if status == errSecSuccess { return errSecSuccess }
-        if status == errSecDuplicateItem {
-            // Sostituzione: l'item esiste già, quindi ricrealo.
-            _ = backend.delete(baseQuery(account: account, useDataProtection: useDataProtection))
-            let retry = backend.add(attributes)
-            guard retry == errSecSuccess else {
-                DiagnosticLog.log("Keychain: sostituzione fallita (OSStatus \(retry))")
-                return retry
-            }
-            return errSecSuccess
-        }
-        return status
+        DiagnosticLog.log("Keychain: salvataggio fallito (canonico \(plain.writeStatus)/\(plain.readStatus), moderno \(modern.writeStatus)/\(modern.readStatus))")
+        return modern
     }
 
     static func password(forAccount id: UUID) -> String? {
         let account = id.uuidString
-        if let password = read(account: account, useDataProtection: false) {
+        if let password = read(account: account, modern: false) {
             return password
         }
-        // Migration: chi aveva la password nel moderno (vecchie build) la trova qui
-        // una volta sola e viene riscritta nel semplice, altrimenti sparirebbe.
-        guard let modern = read(account: account, useDataProtection: true) else { return nil }
+        // Import una tantum dallo store delle vecchie build.
+        guard let modern = read(account: account, modern: true) else { return nil }
         savePassword(modern, forAccount: id)
         return modern
     }
 
     static func deletePassword(forAccount id: UUID) {
         let account = id.uuidString
-        _ = backend.delete(baseQuery(account: account, useDataProtection: true))
-        _ = backend.delete(baseQuery(account: account, useDataProtection: false))
+        _ = backend.delete(query(account: account, modern: false))
+        _ = backend.delete(query(account: account, modern: true))
     }
 
-    private static func read(account: String, useDataProtection: Bool) -> String? {
-        readWithStatus(account: account, useDataProtection: useDataProtection).value
+    // MARK: - Internals
+
+    /// Scrive (o sostituisce) e rilegge subito: l'unico modo per sapere che la
+    /// password è davvero lì, visto che `SecItemAdd` da solo non basta.
+    private static func upsertVerified(_ password: String, account: String, modern: Bool) -> KeychainSaveReport {
+        var attributes = query(account: account, modern: modern)
+        attributes[kSecValueData as String] = Data(password.utf8)
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+
+        let writeStatus = upsert(attributes, modern: modern, account: account)
+        let (value, readStatus) = readWithStatus(account: account, modern: modern)
+        if writeStatus == errSecSuccess, value == password {
+            return KeychainSaveReport(writeStatus: errSecSuccess, readStatus: errSecSuccess)
+        }
+        return KeychainSaveReport(writeStatus: writeStatus, readStatus: readStatus)
     }
 
-    /// Come `read`, ma riporta anche lo status così i log dicono PERCHÉ la lettura
-    /// fallisce (-25300 non trovato, -25308 bloccato, -25291 non disponibile, ...).
-    private static func readWithStatus(account: String, useDataProtection: Bool) -> (value: String?, status: OSStatus) {
-        var query = baseQuery(account: account, useDataProtection: useDataProtection)
+    private static func upsert(_ attributes: [String: Any], modern: Bool, account: String) -> OSStatus {
+        let status = backend.add(attributes)
+        if status == errSecSuccess { return errSecSuccess }
+        guard status == errSecDuplicateItem else { return status }
+        _ = backend.delete(query(account: account, modern: modern))
+        let retry = backend.add(attributes)
+        if retry != errSecSuccess {
+            DiagnosticLog.log("Keychain: sostituzione fallita (OSStatus \(retry))")
+        }
+        return retry
+    }
+
+    private static func read(account: String, modern: Bool) -> String? {
+        readWithStatus(account: account, modern: modern).value
+    }
+
+    /// Riporta anche lo status così i log dicono PERCHÉ la lettura fallisce
+    /// (-25300 non trovato, -25308 bloccato, -25291 non disponibile, ...).
+    private static func readWithStatus(account: String, modern: Bool) -> (value: String?, status: OSStatus) {
+        var query = query(account: account, modern: modern)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
         let (status, data) = backend.copyMatching(query)
-        if let data, let string = String(data: data, encoding: .utf8), status == errSecSuccess {
+        if status == errSecSuccess, let data, let string = String(data: data, encoding: .utf8) {
             return (string, errSecSuccess)
         }
         return (nil, status == errSecSuccess ? errSecItemNotFound : status)
     }
-
 }

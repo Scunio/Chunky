@@ -129,8 +129,8 @@ struct KeychainStoreTests {
         withFakeKeychain { fake in
             fake.plainWriteBlackhole = true // add ok, read vuota
             let id = UUID()
-            let status = KeychainStore.savePassword("Lorenzo98", forAccount: id)
-            #expect(status == errSecSuccess)
+            let report = KeychainStore.savePassword("Lorenzo98", forAccount: id)
+            #expect(report.ok)
             #expect(KeychainStore.password(forAccount: id) == "Lorenzo98")
             #expect(fake.value(service: service, account: id.uuidString, dataProtection: true) == "Lorenzo98")
         }
@@ -141,8 +141,8 @@ struct KeychainStoreTests {
         withFakeKeychain { fake in
             fake.plainAddStatusOverride = errSecMissingEntitlement
             let id = UUID()
-            let status = KeychainStore.savePassword("segreta", forAccount: id)
-            #expect(status == errSecSuccess)
+            let report = KeychainStore.savePassword("segreta", forAccount: id)
+            #expect(report.ok)
             #expect(KeychainStore.password(forAccount: id) == "segreta")
         }
     }
