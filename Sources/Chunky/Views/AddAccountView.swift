@@ -739,13 +739,17 @@ struct AddAccountView: View {
             existing.name = trimmedName.isEmpty ? trimmedHost : trimmedName
             existing.serverURLString = url.absoluteString
             existing.username = username.isEmpty ? nil : username
-            existing.password = password.isEmpty ? nil : password
-            // Verifica rilettura: il Keychain può fallire in silenzio (entitlement,
-            // TestFlight senza gruppi) e finora il form chiudeva come se fosse ok.
-            // Se hai digitato una password ma la rilettura è vuota, non chiudere.
-            if !password.isEmpty, existing.password != password {
-                validationError = "Password non salvata nel portachiavi di sistema. Riprova; se persiste, controlla in Diagnostica la riga Keychain."
-                return
+            if password.isEmpty {
+                KeychainStore.deletePassword(forAccount: existing.stableID)
+            } else {
+                let status = KeychainStore.savePassword(password, forAccount: existing.stableID)
+                let roundTrip = KeychainStore.password(forAccount: existing.stableID)
+                if roundTrip != password {
+                    let gotDesc = roundTrip == nil ? "nil" : "len=\(roundTrip?.count ?? 0) diversa"
+                    DiagnosticLog.log("Keychain: round-trip fallito in Modifica id=\(existing.stableID.uuidString) saveStatus=\(status) expectedLen=\(password.count) got=\(gotDesc)")
+                    validationError = "Password non salvata nel portachiavi (codice \(status)). Apri Diagnostica e copia il log."
+                    return
+                }
             }
             existing.portNumber = port
             existing.shareName = trimmedShare
@@ -778,7 +782,9 @@ struct AddAccountView: View {
             in: context
         )
         if !password.isEmpty, created.password != password {
-            validationError = "Password non salvata nel portachiavi di sistema. Riprova; se persiste, controlla in Diagnostica la riga Keychain."
+            let gotDesc = created.password == nil ? "nil" : "len=\(created.password?.count ?? 0) diversa"
+            DiagnosticLog.log("Keychain: round-trip fallito in Creazione id=\(created.stableID.uuidString) expectedLen=\(password.count) got=\(gotDesc)")
+            validationError = "Password non salvata nel portachiavi. Apri Diagnostica e copia il log."
             context.delete(created)
             try? context.save()
             return
