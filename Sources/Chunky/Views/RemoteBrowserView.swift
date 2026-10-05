@@ -185,7 +185,8 @@ struct RemoteBrowserView: View {
             let userDesc = (account.username?.isEmpty ?? true) ? "no" : (account.username ?? "si")
             let passDesc = (account.password?.isEmpty ?? true) ? "no" : "si"
             let shortID = account.stableID.uuidString.prefix(8)
-            return "id=\(shortID) host=\(host) share=\(share) port=\(account.portNumber) user=\(userDesc) pass=\(passDesc)"
+            let kr = KeychainStore.readStatus(forAccount: account.stableID)
+            return "id=\(shortID) host=\(host) share=\(share) port=\(account.portNumber) user=\(userDesc) pass=\(passDesc) kr=\(kr)"
         }
         await MainActor.run {
             isLoading = true

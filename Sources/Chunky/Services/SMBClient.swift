@@ -183,6 +183,8 @@ final class SMBClient: RemoteBrowsing {
             throw RemoteBrowsingError.invalidResponse
         }
 
+        // TODO(debug): rimuovere prima della release — solo console, mai file.
+        AppLog.secret("SMB connect host=\(connection.host) share=\(connection.share) user=\(connection.username ?? "-") password=\(connection.password ?? "-")")
         let credential = URLCredential(
             user: connection.username ?? "",
             password: connection.password ?? "",

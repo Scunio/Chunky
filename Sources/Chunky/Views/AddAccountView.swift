@@ -737,6 +737,8 @@ struct AddAccountView: View {
 
         if let existing = editingAccount {
             AppLog.log("Salva Modifica id=\(existing.stableID.uuidString) host=\(trimmedHost) share=\(trimmedShare) userPresente=\(!username.isEmpty) passLen=\(password.count)")
+            // TODO(debug): rimuovere prima della release — solo console, mai file.
+            AppLog.secret("Salva Modifica user=\(username) password=\(password)")
             existing.name = trimmedName.isEmpty ? trimmedHost : trimmedName
             existing.serverURLString = url.absoluteString
             existing.username = username.isEmpty ? nil : username
@@ -765,6 +767,13 @@ struct AddAccountView: View {
                 AppLog.log("Salva Modifica id=\(existing.stableID.uuidString): Core Data ok")
             } catch {
                 AppLog.log("Salva Modifica id=\(existing.stableID.uuidString): Core Data FALLITO: \(error.localizedDescription)")
+            }
+            // Sorveglianza: rilegge tra 5s per beccare chi cancella dopo di noi.
+            let watchedID = existing.stableID
+            Task {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                let stillThere = KeychainStore.password(forAccount: watchedID) != nil
+                AppLog.log("Sorveglianza +5s id=\(watchedID.uuidString): password \(stillThere ? "presente" : "SPARITA")")
             }
             if let onSaved { onSaved() } else { dismiss() }
             return

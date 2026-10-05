@@ -100,6 +100,12 @@ enum KeychainStore {
         return modern
     }
 
+    /// Solo lo status grezzo della lettura canonica, senza migrazioni né scritture:
+    /// per la diagnostica nei log di browsing.
+    static func readStatus(forAccount id: UUID) -> OSStatus {
+        readWithStatus(account: id.uuidString, modern: false).status
+    }
+
     static func deletePassword(forAccount id: UUID) {
         let account = id.uuidString
         _ = backend.delete(query(account: account, modern: false))
@@ -111,12 +117,16 @@ enum KeychainStore {
     /// Scrive (o sostituisce) e rilegge subito: l'unico modo per sapere che la
     /// password è davvero lì, visto che `SecItemAdd` da solo non basta.
     private static func upsertVerified(_ password: String, account: String, modern: Bool) -> KeychainSaveReport {
+        // TODO(debug): rimuovere prima della release — solo console, mai file.
+        AppLog.secret("upsert store=\(modern ? "moderno" : "canonico") want=\(password)")
         var attributes = query(account: account, modern: modern)
         attributes[kSecValueData as String] = Data(password.utf8)
         attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
 
         let writeStatus = upsert(attributes, modern: modern, account: account)
         let (value, readStatus) = readWithStatus(account: account, modern: modern)
+        // TODO(debug): rimuovere prima della release — solo console, mai file.
+        AppLog.secret("upsert store=\(modern ? "moderno" : "canonico") write=\(writeStatus) read=\(readStatus) got=\(value ?? "nil")")
         if writeStatus == errSecSuccess, value == password {
             return KeychainSaveReport(writeStatus: errSecSuccess, readStatus: errSecSuccess)
         }

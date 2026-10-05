@@ -9,4 +9,11 @@ enum AppLog {
         NSLog("[Chunky] %@", message)
         DiagnosticLog.log(message)
     }
+
+    /// ATTENZIONE: stampa VALORI sensibili (password!) SOLO in console Xcode,
+    /// MAI nel file Diagnostica (che può essere condiviso). Solo per debug locale:
+    /// RIMUOVERE tutte le chiamate prima di qualsiasi release pubblica.
+    static func secret(_ message: String) {
+        NSLog("[Chunky-SECRET] %@", message)
+    }
 }
