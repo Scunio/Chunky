@@ -47,13 +47,20 @@ extension RemoteAccountEntity {
     var stableID: UUID {
         if let id { return id }
         let new = UUID()
+        // Se questa riga si ripete per lo stesso account, l'id non persiste
+        // (save fallito) e ogni accesso usa un UUID diverso: smoking gun.
+        AppLog.log("Account senza id: generato \(new.uuidString)")
         guard let context = managedObjectContext else {
             id = new
             return new
         }
         if Thread.isMainThread {
             id = new
-            try? context.save()
+            do {
+                try context.save()
+            } catch {
+                AppLog.log("stableID: salvataggio id fallito: \(error.localizedDescription)")
+            }
         } else {
             // Assegnazione immediata (stabilizza questo object graph per l'operazione
             // in corso), persistenza accodata senza bloccare il thread chiamante.
@@ -61,7 +68,11 @@ extension RemoteAccountEntity {
                 // Un altro thread potrebbe averlo già assegnato nel frattempo.
                 if self.id == nil {
                     self.id = new
-                    try? context.save()
+                    do {
+                        try context.save()
+                    } catch {
+                        AppLog.log("stableID(bg): salvataggio id fallito: \(error.localizedDescription)")
+                    }
                 }
             }
             id = new
@@ -79,9 +90,9 @@ extension RemoteAccountEntity {
         for account in orphans { account.id = UUID() }
         do {
             try context.save()
-            DiagnosticLog.log("CoreData: backfill id per \(orphans.count) account senza id")
+            AppLog.log("CoreData: backfill id per \(orphans.count) account senza id")
         } catch {
-            DiagnosticLog.log("CoreData: backfill id fallito: \(error.localizedDescription)")
+            AppLog.log("CoreData: backfill id fallito: \(error.localizedDescription)")
         }
     }
 

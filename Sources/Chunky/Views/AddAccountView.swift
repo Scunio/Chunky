@@ -736,15 +736,17 @@ struct AddAccountView: View {
         let trimmedOverride = smbResolvedAddressOverride.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if let existing = editingAccount {
+            AppLog.log("Salva Modifica id=\(existing.stableID.uuidString) host=\(trimmedHost) share=\(trimmedShare) userPresente=\(!username.isEmpty) passLen=\(password.count)")
             existing.name = trimmedName.isEmpty ? trimmedHost : trimmedName
             existing.serverURLString = url.absoluteString
             existing.username = username.isEmpty ? nil : username
             if password.isEmpty {
+                AppLog.log("Salva Modifica: campo vuoto, cancello password id=\(existing.stableID.uuidString)")
                 KeychainStore.deletePassword(forAccount: existing.stableID)
             } else {
                 let report = KeychainStore.savePassword(password, forAccount: existing.stableID)
+                AppLog.log("Salva Modifica id=\(existing.stableID.uuidString) report ok=\(report.ok) (scrittura \(report.writeStatus), lettura \(report.readStatus))")
                 if !report.ok {
-                    DiagnosticLog.log("Keychain: salvataggio fallito in Modifica id=\(existing.stableID.uuidString) (scrittura \(report.writeStatus), lettura \(report.readStatus))")
                     validationError = "Password non salvata (scrittura \(report.writeStatus), lettura \(report.readStatus))."
                     return
                 }
@@ -758,7 +760,12 @@ struct AddAccountView: View {
             existing.preCacheDetailsEnabled = preCacheDetailsEnabled
             existing.preCacheCoversEnabled = preCacheCoversEnabled
             existing.lastScanError = nil
-            try? context.save()
+            do {
+                try context.save()
+                AppLog.log("Salva Modifica id=\(existing.stableID.uuidString): Core Data ok")
+            } catch {
+                AppLog.log("Salva Modifica id=\(existing.stableID.uuidString): Core Data FALLITO: \(error.localizedDescription)")
+            }
             if let onSaved { onSaved() } else { dismiss() }
             return
         }

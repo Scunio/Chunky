@@ -79,13 +79,13 @@ enum KeychainStore {
             _ = backend.delete(query(account: account, modern: true))
             return plain
         }
-        DiagnosticLog.log("Keychain: canonico non verificabile (scrittura \(plain.writeStatus), lettura \(plain.readStatus)), provo moderno")
+        AppLog.log("Keychain: canonico non verificabile (scrittura \(plain.writeStatus), lettura \(plain.readStatus)), provo moderno")
         let modern = upsertVerified(password, account: account, modern: true)
         if modern.ok {
-            DiagnosticLog.log("Keychain: salvato nel moderno (len=\(password.count))")
+            AppLog.log("Keychain: salvato nel moderno (len=\(password.count))")
             return modern
         }
-        DiagnosticLog.log("Keychain: salvataggio fallito (canonico \(plain.writeStatus)/\(plain.readStatus), moderno \(modern.writeStatus)/\(modern.readStatus))")
+        AppLog.log("Keychain: salvataggio fallito (canonico \(plain.writeStatus)/\(plain.readStatus), moderno \(modern.writeStatus)/\(modern.readStatus))")
         return modern
     }
 
@@ -130,7 +130,7 @@ enum KeychainStore {
         _ = backend.delete(query(account: account, modern: modern))
         let retry = backend.add(attributes)
         if retry != errSecSuccess {
-            DiagnosticLog.log("Keychain: sostituzione fallita (OSStatus \(retry))")
+            AppLog.log("Keychain: sostituzione fallita (OSStatus \(retry))")
         }
         return retry
     }
