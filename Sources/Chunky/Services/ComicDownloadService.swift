@@ -116,7 +116,14 @@ enum ComicDownloadService {
         // prevent from creeping back in.
         Task { @MainActor in
             do {
-                let tempURL = try await browser.download(entry, account: account)
+                // Solo SMB riporta l'avanzamento al badge sulla copertina: gli altri
+                // backend usano il percorso generico senza progress (spinner).
+                let tempURL: URL
+                if let smb = browser as? SMBClient, let connection = SMBConnectionInfo(account: account) {
+                    tempURL = try await smb.download(entry, connection: connection, onProgress: { item.updateProgress($0) })
+                } else {
+                    tempURL = try await browser.download(entry, account: account)
+                }
                 let destinationURL = LibraryStorage.fileURL(forRelativePath: relativePath)
                 try? FileManager.default.removeItem(at: destinationURL)
                 try FileManager.default.copyItem(at: tempURL, to: destinationURL)

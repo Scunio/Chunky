@@ -40,7 +40,10 @@ struct RemoteBrowserView: View {
                     }
                     .buttonStyle(.card)
                 }
-                Button("Aggiorna", action: refreshLibrary)
+                // Nome esplicito: qui parte la scansione del NAS (segnaposto
+                // leggeri, mai download se il pre-cache è spento), non un semplice
+                // ricaricamento della vista come il pull-to-refresh su iOS.
+                Button("Aggiorna libreria", action: refreshLibrary)
                     .disabled(isLoading || isRefreshingLibrary)
             }
         } content: {
@@ -66,6 +69,7 @@ struct RemoteBrowserView: View {
                     }
                     .disabled(isLoading || isRefreshingLibrary)
                     .accessibilityLabel("Aggiorna libreria da qui")
+                    .help("Cerca le novità sul NAS e ricarica (con il pre-cache spento non scarica niente)")
                 }
                 if startURL == nil {
                     ToolbarItem {

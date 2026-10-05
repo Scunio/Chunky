@@ -42,6 +42,9 @@ struct LibraryView: View {
     // layered on top via `effectiveSelection`.
     @State private var isFavoritesOnly = false
     #endif
+    // Nasconde i segnaposto mai scaricati (restano sul NAS e nello scan, ma non in vista).
+    // Fuori dall'#if: il toggle sta solo nella toolbar iOS, ma il filtro è condiviso.
+    @AppStorage("libraryDownloadedOnly") private var isDownloadedOnly = false
     @State private var displayMode: LibraryDisplayMode = .grouped
     @State private var searchText = ""
     @State private var isEditing = false
@@ -152,6 +155,7 @@ struct LibraryView: View {
                         newComicsButton
                         nowReadingButton
                         favoritesFilterButton
+                        downloadedFilterButton
                         if !isKioskModeEnabled {
                             accountsLink
                             toolsMenu
@@ -516,8 +520,22 @@ struct LibraryView: View {
         }
     }
 
+    /// Mostra solo i fumetti presenti sul device (niente segnaposto remoti).
+    @ViewBuilder
+    private var downloadedFilterButton: some View {
+        if isDownloadedOnly || comics.contains(where: \.isRemotePlaceholder) {
+            Button(action: { isDownloadedOnly.toggle() }) {
+                Label("Scaricati", systemImage: isDownloadedOnly ? "arrow.down.circle.fill" : "arrow.down.circle")
+            }
+            .help("Mostra solo i fumetti scaricati sul device")
+        }
+    }
+
     private var filteredComics: [ComicEntity] {
         var result = Array(comics)
+        if isDownloadedOnly {
+            result = result.filter { !$0.isRemotePlaceholder }
+        }
         if let group = effectiveSelection.groupTitle {
             result = result.filter { ($0.seriesName ?? LibraryGrouping.ungroupedTitle) == group }
         } else if effectiveSelection == .favorites {
@@ -952,9 +970,21 @@ private struct ComicCell: View {
         cellButton
             .contextMenu { cellMenu }
         #else
+        // Il controllo download sta SOPRA il bottone cella (sibling in overlay),
+        // non dentro: dentro, il gesture del bottone mangerebbe il tap.
         cellButton
+            .overlay(remoteDownloadControl, alignment: .bottomTrailing)
         #endif
     }
+
+    /// Bottone download sul segnaposto remoto: scarica senza aprire il lettore e
+    /// mostra l'avanzamento live. Su tvOS escluso (focus engine).
+    #if !os(tvOS)
+    @ViewBuilder
+    private var remoteDownloadControl: some View {
+        RemoteDownloadControl(comic: comic)
+    }
+    #endif
 
     /// Voci del menu contestuale della copertina. Su iOS il modificatore sta sul
     /// contenuto dentro il `Button`, non sul `Button` stesso: attaccato al bottone,
@@ -1049,6 +1079,62 @@ private struct ComicCell: View {
         }
     }
 }
+
+/// Bottone + avanzamento per i segnaposto remoti, isolato in vista propria così
+/// solo il badge si ridisegna ai tick di avanzamento e non tutta la cella.
+#if !os(tvOS)
+private struct RemoteDownloadControl: View {
+    @ObservedObject var comic: ComicEntity
+    @ObservedObject private var downloads = DownloadManager.shared
+
+    var body: some View {
+        Group {
+            if comic.isRemotePlaceholder, let key = comic.sourceRelativePath {
+                if let item = downloads.item(forKey: key) {
+                    LiveDownloadProgress(item: item)
+                } else {
+                    Button(action: startDownload) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .padding(6)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                            .padding(6)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Scarica senza aprire")
+                }
+            }
+        }
+    }
+
+    private func startDownload() {
+        ComicDownloadService.downloadIfNeeded(comic: comic)
+    }
+}
+
+private struct LiveDownloadProgress: View {
+    @ObservedObject var item: DownloadItem
+
+    var body: some View {
+        Group {
+            if item.fractionCompleted > 0 {
+                ProgressView(value: item.fractionCompleted)
+            } else {
+                ProgressView()
+            }
+        }
+        .progressViewStyle(.circular)
+        .tint(.white)
+        .padding(8)
+        .background(Color.black.opacity(0.6))
+        .clipShape(Circle())
+        .padding(6)
+        .accessibilityLabel("Download in corso")
+    }
+}
+#endif
 
 private struct NewGroupPromptModifier: ViewModifier {
     @Binding var isPresented: Bool

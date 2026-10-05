@@ -77,11 +77,17 @@ final class SMBClient: RemoteBrowsing {
         return try await download(entry, connection: connection)
     }
 
-    func download(_ entry: RemoteEntry, connection: SMBConnectionInfo) async throws -> URL {
+    func download(_ entry: RemoteEntry, connection: SMBConnectionInfo, onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         try await withConnectedShare(connection) { manager in
             let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             try? FileManager.default.removeItem(at: destination)
-            try await manager.downloadItem(atPath: self.smbPath(from: entry.url), to: destination, progress: nil)
+            let progress: SMB2Manager.ReadProgressHandler = onProgress.map { handler in
+                { bytes, total in
+                    if total > 0 { handler(Double(bytes) / Double(total)) }
+                    return true
+                }
+            }
+            try await manager.downloadItem(atPath: self.smbPath(from: entry.url), to: destination, progress: progress)
 
             let finalDestination = FileManager.default.temporaryDirectory.appendingPathComponent(entry.title)
             try? FileManager.default.removeItem(at: finalDestination)

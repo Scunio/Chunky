@@ -80,6 +80,14 @@ final class DownloadManager: ObservableObject {
         return item
     }
 
+    /// L'item in corso per `key`, se c'è: il badge sulla copertina lo osserva per
+    /// mostrare l'avanzamento live senza riaprire il lettore.
+    func item(forKey key: String) -> DownloadItem? {
+        lock.lock()
+        defer { lock.unlock() }
+        return itemsByKey[key]
+    }
+
     func remove(_ item: DownloadItem) {
         lock.lock()
         itemsByKey = itemsByKey.filter { $0.value.id != item.id }
