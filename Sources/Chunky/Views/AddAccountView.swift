@@ -779,13 +779,15 @@ struct AddAccountView: View {
             preCacheCoversEnabled: preCacheCoversEnabled,
             in: context
         )
-        if !password.isEmpty, created.password != password {
-            let gotDesc = created.password == nil ? "nil" : "len=\(created.password?.count ?? 0) diversa"
-            DiagnosticLog.log("Keychain: round-trip fallito in Creazione id=\(created.stableID.uuidString) expectedLen=\(password.count) got=\(gotDesc)")
-            validationError = "Password non salvata nel portachiavi. Apri Diagnostica e copia il log."
-            context.delete(created)
-            try? context.save()
-            return
+        if !password.isEmpty {
+            let report = KeychainStore.savePassword(password, forAccount: created.stableID)
+            if !report.ok {
+                DiagnosticLog.log("Keychain: salvataggio fallito in Creazione id=\(created.stableID.uuidString) (scrittura \(report.writeStatus), lettura \(report.readStatus))")
+                validationError = "Password non salvata (scrittura \(report.writeStatus), lettura \(report.readStatus))."
+                context.delete(created)
+                try? context.save()
+                return
+            }
         }
         try? context.save()
         if let onSaved { onSaved() } else { dismiss() }
