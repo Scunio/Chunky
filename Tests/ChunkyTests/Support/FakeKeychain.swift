@@ -17,12 +17,10 @@ final class FakeKeychain: KeychainAccessing {
     /// Simulates a keychain that rejects writes, as happens in a build lacking the
     /// data-protection entitlement.
     var addStatusOverride: OSStatus?
-    /// Simulates a keychain whose modern (data-protection) store is broken while the
-    /// legacy one works: writes there report success but reads find nothing.
-    /// `nil` = modern behaves normally; `.some(errSecSuccess)` = modern add succeeds
-    /// but modern reads stay empty; any other status = modern add fails with it.
-    var modernWriteBlackhole = false
-    var modernAddStatusOverride: OSStatus?
+    /// Simulates a keychain whose plain store is broken while the modern one works:
+    /// writes there report success but reads find nothing.
+    var plainWriteBlackhole = false
+    var plainAddStatusOverride: OSStatus?
 
     private func key(from dictionary: [String: Any]) -> Key {
         Key(
@@ -34,15 +32,15 @@ final class FakeKeychain: KeychainAccessing {
 
     func copyMatching(_ query: [String: Any]) -> (status: OSStatus, data: Data?) {
         let k = key(from: query)
-        if modernWriteBlackhole, k.dataProtection { return (errSecItemNotFound, nil) }
+        if plainWriteBlackhole, !k.dataProtection { return (errSecItemNotFound, nil) }
         guard let data = items[k] else { return (errSecItemNotFound, nil) }
         return (errSecSuccess, data)
     }
 
     func add(_ attributes: [String: Any]) -> OSStatus {
         if let addStatusOverride { return addStatusOverride }
-        if key(from: attributes).dataProtection, let modernAddStatusOverride {
-            return modernAddStatusOverride
+        if !key(from: attributes).dataProtection, let plainAddStatusOverride {
+            return plainAddStatusOverride
         }
         let itemKey = key(from: attributes)
         guard items[itemKey] == nil else { return errSecDuplicateItem }

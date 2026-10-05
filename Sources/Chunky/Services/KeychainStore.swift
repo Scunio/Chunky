@@ -5,10 +5,10 @@ import Security
 /// authentication) and for the parental lock passcode. Passwords are never
 /// saved in Core Data.
 ///
-/// All queries use `kSecUseDataProtectionKeychain`. Without this key, on macOS
-/// items end up in the legacy "file-based" keychain instead of the modern one
-/// shared with iOS: different behavior between the two platforms and no protection
-/// tied to device unlock. On iOS the key has no effect.
+/// Writes go to the plain keychain (no `kSecUseDataProtectionKeychain`), like every
+/// normal app: that flag broke reads on some devices (write reported success, read
+/// came back empty) with no benefit on iOS. The modern store is still *read* for
+/// backward compatibility and used as verified fallback. Never any secret in logs.
 /// The three Keychain operations used by the app, isolated behind a protocol.
 ///
 /// This exists to make the migration away from the legacy keychain testable: tests can't
@@ -56,31 +56,30 @@ enum KeychainStore {
     }
 
     /// Ritorna l'OSStatus così il form può mostrare l'errore invece di far finta di aver salvato.
-    /// Verifica la rilettura dopo la scrittura: su alcuni device il portachiavi moderno
-    /// accetta la scrittura (`errSecSuccess`) ma la rilettura torna vuota — in quel caso
-    /// ripiega sullo storico (senza `kSecUseDataProtectionKeychain`), che `password(for:)`
-    /// legge già come seconda scelta. Mai dati sensibili nei log, solo lunghezze e status.
+    /// Scrive nel portachiavi semplice e verifica la rilettura; solo se quello non è
+    /// verificabile ripiega sul moderno (con flag data-protection). Mai dati sensibili
+    /// nei log, solo lunghezze e status.
     @discardableResult
     static func savePassword(_ password: String, forAccount id: UUID) -> OSStatus {
         let account = id.uuidString
+        let plainStatus = store(password, account: account, useDataProtection: false)
+        let plainRead = readWithStatus(account: account, useDataProtection: false)
+        if plainStatus == errSecSuccess, plainRead.value == password {
+            // Solo a scrittura verificata si rimuove l'eventuale copia moderna:
+            // era l'unica rimasta e ora è duplicata.
+            _ = backend.delete(baseQuery(account: account, useDataProtection: true))
+            return errSecSuccess
+        }
+        DiagnosticLog.log("Keychain: semplice non verificabile (saveStatus \(plainStatus), readStatus \(plainRead.status)), provo moderno")
         let modernStatus = store(password, account: account, useDataProtection: true)
         let modernRead = readWithStatus(account: account, useDataProtection: true)
         if modernStatus == errSecSuccess, modernRead.value == password {
-            // Solo a scrittura verificata si rimuove l'eventuale copia storica:
-            // era l'unica rimasta e ora è duplicata.
-            _ = backend.delete(baseQuery(account: account, useDataProtection: false))
+            DiagnosticLog.log("Keychain: salvato nel moderno (len=\(password.count))")
             return errSecSuccess
         }
-        DiagnosticLog.log("Keychain: moderno non verificabile (saveStatus \(modernStatus), readStatus \(modernRead.status)), provo storico")
-        let legacyStatus = store(password, account: account, useDataProtection: false)
-        let legacyRead = readWithStatus(account: account, useDataProtection: false)
-        if legacyStatus == errSecSuccess, legacyRead.value == password {
-            DiagnosticLog.log("Keychain: salvato nello storico (len=\(password.count))")
-            return errSecSuccess
-        }
-        DiagnosticLog.log("Keychain: storico non verificabile (saveStatus \(legacyStatus), readStatus \(legacyRead.status))")
-        DiagnosticLog.log("Keychain: salvataggio fallito (moderno \(modernStatus), storico \(legacyStatus)); copie esistenti conservate")
-        return legacyStatus != errSecSuccess ? legacyStatus : modernStatus
+        DiagnosticLog.log("Keychain: moderno non verificabile (saveStatus \(modernStatus), readStatus \(modernRead.status))")
+        DiagnosticLog.log("Keychain: salvataggio fallito (semplice \(plainStatus), moderno \(modernStatus)); copie esistenti conservate")
+        return modernStatus != errSecSuccess ? modernStatus : plainStatus
     }
 
     /// Scrive (o sostituisce) nel portachiavi indicato, senza mai cancellare prima di
@@ -109,15 +108,14 @@ enum KeychainStore {
 
     static func password(forAccount id: UUID) -> String? {
         let account = id.uuidString
-        if let password = read(account: account, useDataProtection: true) {
+        if let password = read(account: account, useDataProtection: false) {
             return password
         }
-        // Migration: Mac users who had already saved a password find it in the
-        // legacy keychain. It's read once here and rewritten to the modern one,
-        // otherwise the update would make credentials and the parental passcode disappear.
-        guard let legacy = read(account: account, useDataProtection: false) else { return nil }
-        savePassword(legacy, forAccount: id)
-        return legacy
+        // Migration: chi aveva la password nel moderno (vecchie build) la trova qui
+        // una volta sola e viene riscritta nel semplice, altrimenti sparirebbe.
+        guard let modern = read(account: account, useDataProtection: true) else { return nil }
+        savePassword(modern, forAccount: id)
+        return modern
     }
 
     static func deletePassword(forAccount id: UUID) {

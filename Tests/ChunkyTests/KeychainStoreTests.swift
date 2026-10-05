@@ -27,13 +27,13 @@ struct KeychainStoreTests {
         }
     }
 
-    @Test("La password viene scritta nel portachiavi data-protection, non in quello storico")
-    func writesToDataProtectionKeychain() {
+    @Test("La password viene scritta nel portachiavi semplice, non in quello moderno")
+    func writesToPlainKeychain() {
         withFakeKeychain { fake in
             let id = UUID()
             KeychainStore.savePassword("segreta", forAccount: id)
-            #expect(fake.value(service: service, account: id.uuidString, dataProtection: true) == "segreta")
-            #expect(fake.value(service: service, account: id.uuidString, dataProtection: false) == nil)
+            #expect(fake.value(service: service, account: id.uuidString, dataProtection: false) == "segreta")
+            #expect(fake.value(service: service, account: id.uuidString, dataProtection: true) == nil)
         }
     }
 
@@ -77,48 +77,44 @@ struct KeychainStoreTests {
         }
     }
 
-    /// The case of a user who updates: the password only exists in the legacy keychain.
-    /// Without migration, the update would make the remote account credentials
-    /// and the parental lock passcode vanish.
-    @Test("Una password nel portachiavi storico viene letta e migrata")
-    func migratesLegacyEntry() {
+    /// Il caso di chi aggiorna: la password esiste solo nel portachiavi moderno
+    /// (vecchie build). Senza migrazione, credenziali e codice parentale sparirebbero.
+    @Test("Una password nel portachiavi moderno viene letta e migrata nel semplice")
+    func migratesModernEntry() {
         withFakeKeychain { fake in
             let id = UUID()
-            fake.seedLegacy(service: service, account: id.uuidString, password: "vecchia")
+            fake.seedModern(service: service, account: id.uuidString, password: "vecchia")
 
             #expect(KeychainStore.password(forAccount: id) == "vecchia")
-            // After migration the value lives in the modern keychain...
-            #expect(fake.value(service: service, account: id.uuidString, dataProtection: true) == "vecchia")
-            // ...and no duplicate is left in the legacy one.
-            #expect(fake.value(service: service, account: id.uuidString, dataProtection: false) == nil)
+            // After migration the value lives in the plain keychain...
+            #expect(fake.value(service: service, account: id.uuidString, dataProtection: false) == "vecchia")
+            // ...and no duplicate is left in the modern one.
+            #expect(fake.value(service: service, account: id.uuidString, dataProtection: true) == nil)
         }
     }
 
-    /// If writing to the modern keychain fails, the legacy copy must remain:
-    /// it's the only one the user still has.
-    @Test("Una scrittura fallita non distrugge la copia storica")
-    func failedWriteKeepsLegacyCopy() {
+    /// If writing fails, the modern copy must remain: it's the only one the user has.
+    @Test("Una scrittura fallita non distrugge la copia moderna")
+    func failedWriteKeepsModernCopy() {
         withFakeKeychain { fake in
             let id = UUID()
-            fake.seedLegacy(service: service, account: id.uuidString, password: "vecchia")
+            fake.seedModern(service: service, account: id.uuidString, password: "vecchia")
             fake.addStatusOverride = errSecMissingEntitlement
 
             KeychainStore.savePassword("nuova", forAccount: id)
 
-            #expect(fake.value(service: service, account: id.uuidString, dataProtection: false) == "vecchia")
+            #expect(fake.value(service: service, account: id.uuidString, dataProtection: true) == "vecchia")
             fake.addStatusOverride = nil
             #expect(KeychainStore.password(forAccount: id) == "vecchia")
         }
     }
 
-    /// Se la riscrittura fallisce, la password moderna esistente deve restare:
-    /// cancellarla prima di scrivere (come faceva il vecchio codice) faceva
-    /// perdere la password buona a ogni Modifica+Salva con rilettura fallita.
+    /// Se la riscrittura fallisce, la password semplice esistente deve restare.
     @Test("Una riscrittura fallita non distrugge la password esistente")
-    func failedOverwriteKeepsModernCopy() {
+    func failedOverwriteKeepsPlainCopy() {
         withFakeKeychain { fake in
             let id = UUID()
-            fake.seedModern(service: service, account: id.uuidString, password: "buona")
+            fake.seedLegacy(service: service, account: id.uuidString, password: "buona")
             fake.addStatusOverride = errSecMissingEntitlement
 
             KeychainStore.savePassword("nuova", forAccount: id)
@@ -128,22 +124,22 @@ struct KeychainStoreTests {
         }
     }
 
-    @Test("Se il moderno non è verificabile, ripiega sullo storico e la password si rilegge")
-    func fallsBackToLegacyWhenModernUnverifiable() {
+    @Test("Se il semplice non è verificabile, ripiega sul moderno e la password si rilegge")
+    func fallsBackToModernWhenPlainUnverifiable() {
         withFakeKeychain { fake in
-            fake.modernWriteBlackhole = true // add ok, read vuota: come il log reale saveStatus=0 got=nil
+            fake.plainWriteBlackhole = true // add ok, read vuota
             let id = UUID()
             let status = KeychainStore.savePassword("Lorenzo98", forAccount: id)
             #expect(status == errSecSuccess)
             #expect(KeychainStore.password(forAccount: id) == "Lorenzo98")
-            #expect(fake.value(service: service, account: id.uuidString, dataProtection: false) == "Lorenzo98")
+            #expect(fake.value(service: service, account: id.uuidString, dataProtection: true) == "Lorenzo98")
         }
     }
 
-    @Test("Se il moderno rifiuta la scrittura, ripiega sullo storico")
-    func fallsBackToLegacyWhenModernAddFails() {
+    @Test("Se il semplice rifiuta la scrittura, ripiega sul moderno")
+    func fallsBackToModernWhenPlainAddFails() {
         withFakeKeychain { fake in
-            fake.modernAddStatusOverride = errSecMissingEntitlement
+            fake.plainAddStatusOverride = errSecMissingEntitlement
             let id = UUID()
             let status = KeychainStore.savePassword("segreta", forAccount: id)
             #expect(status == errSecSuccess)
@@ -154,7 +150,7 @@ struct KeychainStoreTests {
     @Test("La migrazione avviene una volta sola")    func migratesOnce() {
         withFakeKeychain { fake in
             let id = UUID()
-            fake.seedLegacy(service: service, account: id.uuidString, password: "vecchia")
+            fake.seedModern(service: service, account: id.uuidString, password: "vecchia")
 
             _ = KeychainStore.password(forAccount: id)
             let addsAfterMigration = fake.addCount
