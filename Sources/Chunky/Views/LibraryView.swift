@@ -940,6 +940,7 @@ private struct ComicCell: View {
             ComicGridItemView(comic: comic)
                 .overlay(selectionBadge, alignment: .topLeading)
                 .contentShape(Rectangle())
+                .contextMenu { cellMenu }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(comic.title ?? "Fumetto")
@@ -947,8 +948,20 @@ private struct ComicCell: View {
     }
 
     var body: some View {
+        #if os(tvOS)
         cellButton
-        .contextMenu {
+            .contextMenu { cellMenu }
+        #else
+        cellButton
+        #endif
+    }
+
+    /// Voci del menu contestuale della copertina. Su iOS il modificatore sta sul
+    /// contenuto dentro il `Button`, non sul `Button` stesso: attaccato al bottone,
+    /// il gesture del bottone mangiava il primo tap sulla voce (servivano due tap
+    /// per "Rimuovi"). Su tvOS resta fuori, sul contenitore (focus engine).
+    @ViewBuilder
+    private var cellMenu: some View {
             if !isEditing {
                 Button(action: onSelect) {
                     Label("Apri", systemImage: "book")
@@ -1000,7 +1013,6 @@ private struct ComicCell: View {
                     Label("Rimuovi", systemImage: "trash")
                 }
             }
-        }
     }
 
     private func toggleFavorite() {

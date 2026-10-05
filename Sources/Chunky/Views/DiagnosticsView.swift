@@ -24,6 +24,7 @@ struct DiagnosticsSections: View {
     @Environment(\.managedObjectContext) private var context
     @EnvironmentObject private var viewModel: LibraryViewModel
     @State private var logText = DiagnosticLog.readAll()
+    @State private var didCopy = false
 
     var body: some View {
         Group {
@@ -49,7 +50,7 @@ struct DiagnosticsSections: View {
                 Button("Aggiorna", action: refresh)
                 #if !os(tvOS)
                 Button(action: copyLog) {
-                    Label("Copia log", systemImage: "doc.on.doc")
+                    Label(didCopy ? "Copiato!" : "Copia log", systemImage: didCopy ? "checkmark" : "doc.on.doc")
                 }
                 .disabled(logText.isEmpty)
                 if #available(iOS 16, macOS 13, *) {
@@ -66,10 +67,11 @@ struct DiagnosticsSections: View {
 
     private func refresh() {
         logText = DiagnosticLog.readAll()
+        didCopy = false
     }
 
     /// Copia negli appunti di sistema (best practice per target vecchi: ShareLink
-    /// richiede iOS 16+, la copia funziona ovunque e basta per incollare in chat).
+    /// richiede iOS 16+, la copia funziona ovunque).
     private func copyLog() {
         let text = logText.isEmpty ? "Nessun log." : logText
         #if os(macOS)
@@ -78,11 +80,13 @@ struct DiagnosticsSections: View {
         #elseif os(iOS)
         UIPasteboard.general.string = text
         #endif
+        didCopy = true
     }
 
     private func clear() {
         DiagnosticLog.clear()
         logText = ""
+        didCopy = false
     }
 }
 

@@ -56,38 +56,54 @@ enum KeychainStore {
     }
 
     /// Ritorna l'OSStatus così il form può mostrare l'errore invece di far finta di aver salvato.
+    /// Verifica la rilettura dopo la scrittura: su alcuni device il portachiavi moderno
+    /// accetta la scrittura (`errSecSuccess`) ma la rilettura torna vuota — in quel caso
+    /// ripiega sullo storico (senza `kSecUseDataProtectionKeychain`), che `password(for:)`
+    /// legge già come seconda scelta. Mai dati sensibili nei log, solo lunghezze e status.
     @discardableResult
     static func savePassword(_ password: String, forAccount id: UUID) -> OSStatus {
         let account = id.uuidString
-        var attributes = baseQuery(account: account, useDataProtection: true)
-        attributes[kSecValueData as String] = Data(password.utf8)
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-
-        // Mai cancellare prima di scrivere: se `add` fallisce (es. build senza
-        // l'entitlement data-protection → errSecMissingEntitlement, come in un
-        // TestFlight senza keychain-access-groups) la copia esistente deve
-        // restare intatta, altrimenti una Modifica con rilettura fallita
-        // cancellerebbe la password buona al Salva successivo.
-        let status = backend.add(attributes)
-        if status == errSecSuccess {
-            // Solo a scrittura riuscita si rimuove l'eventuale copia storica:
+        let modernStatus = store(password, account: account, useDataProtection: true)
+        let modernRead = readWithStatus(account: account, useDataProtection: true)
+        if modernStatus == errSecSuccess, modernRead.value == password {
+            // Solo a scrittura verificata si rimuove l'eventuale copia storica:
             // era l'unica rimasta e ora è duplicata.
             _ = backend.delete(baseQuery(account: account, useDataProtection: false))
             return errSecSuccess
         }
+        DiagnosticLog.log("Keychain: moderno non verificabile (saveStatus \(modernStatus), readStatus \(modernRead.status)), provo storico")
+        let legacyStatus = store(password, account: account, useDataProtection: false)
+        let legacyRead = readWithStatus(account: account, useDataProtection: false)
+        if legacyStatus == errSecSuccess, legacyRead.value == password {
+            DiagnosticLog.log("Keychain: salvato nello storico (len=\(password.count))")
+            return errSecSuccess
+        }
+        DiagnosticLog.log("Keychain: storico non verificabile (saveStatus \(legacyStatus), readStatus \(legacyRead.status))")
+        DiagnosticLog.log("Keychain: salvataggio fallito (moderno \(modernStatus), storico \(legacyStatus)); copie esistenti conservate")
+        return legacyStatus != errSecSuccess ? legacyStatus : modernStatus
+    }
+
+    /// Scrive (o sostituisce) nel portachiavi indicato, senza mai cancellare prima di
+    /// aver scritto: se `add` fallisce (es. build senza l'entitlement data-protection →
+    /// errSecMissingEntitlement) la copia esistente deve restare intatta, altrimenti una
+    /// Modifica con scrittura fallita cancellerebbe la password buona al Salva successivo.
+    private static func store(_ password: String, account: String, useDataProtection: Bool) -> OSStatus {
+        var attributes = baseQuery(account: account, useDataProtection: useDataProtection)
+        attributes[kSecValueData as String] = Data(password.utf8)
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+
+        let status = backend.add(attributes)
+        if status == errSecSuccess { return errSecSuccess }
         if status == errSecDuplicateItem {
-            // Sostituzione: l'item esiste già, quindi ricrealo. Se anche il
-            // secondo tentativo fallisce, resta il log diagnostico.
-            _ = backend.delete(baseQuery(account: account, useDataProtection: true))
+            // Sostituzione: l'item esiste già, quindi ricrealo.
+            _ = backend.delete(baseQuery(account: account, useDataProtection: useDataProtection))
             let retry = backend.add(attributes)
             guard retry == errSecSuccess else {
                 DiagnosticLog.log("Keychain: sostituzione fallita (OSStatus \(retry))")
                 return retry
             }
-            _ = backend.delete(baseQuery(account: account, useDataProtection: false))
             return errSecSuccess
         }
-        DiagnosticLog.log("Keychain: salvataggio fallito (OSStatus \(status)); copie esistenti conservate")
         return status
     }
 
@@ -111,13 +127,21 @@ enum KeychainStore {
     }
 
     private static func read(account: String, useDataProtection: Bool) -> String? {
+        readWithStatus(account: account, useDataProtection: useDataProtection).value
+    }
+
+    /// Come `read`, ma riporta anche lo status così i log dicono PERCHÉ la lettura
+    /// fallisce (-25300 non trovato, -25308 bloccato, -25291 non disponibile, ...).
+    private static func readWithStatus(account: String, useDataProtection: Bool) -> (value: String?, status: OSStatus) {
         var query = baseQuery(account: account, useDataProtection: useDataProtection)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
         let (status, data) = backend.copyMatching(query)
-        guard status == errSecSuccess, let data else { return nil }
-        return String(data: data, encoding: .utf8)
+        if let data, let string = String(data: data, encoding: .utf8), status == errSecSuccess {
+            return (string, errSecSuccess)
+        }
+        return (nil, status == errSecSuccess ? errSecItemNotFound : status)
     }
 
 }

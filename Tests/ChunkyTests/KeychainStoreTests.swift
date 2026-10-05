@@ -128,6 +128,29 @@ struct KeychainStoreTests {
         }
     }
 
+    @Test("Se il moderno non è verificabile, ripiega sullo storico e la password si rilegge")
+    func fallsBackToLegacyWhenModernUnverifiable() {
+        withFakeKeychain { fake in
+            fake.modernWriteBlackhole = true // add ok, read vuota: come il log reale saveStatus=0 got=nil
+            let id = UUID()
+            let status = KeychainStore.savePassword("Lorenzo98", forAccount: id)
+            #expect(status == errSecSuccess)
+            #expect(KeychainStore.password(forAccount: id) == "Lorenzo98")
+            #expect(fake.value(service: service, account: id.uuidString, dataProtection: false) == "Lorenzo98")
+        }
+    }
+
+    @Test("Se il moderno rifiuta la scrittura, ripiega sullo storico")
+    func fallsBackToLegacyWhenModernAddFails() {
+        withFakeKeychain { fake in
+            fake.modernAddStatusOverride = errSecMissingEntitlement
+            let id = UUID()
+            let status = KeychainStore.savePassword("segreta", forAccount: id)
+            #expect(status == errSecSuccess)
+            #expect(KeychainStore.password(forAccount: id) == "segreta")
+        }
+    }
+
     @Test("La migrazione avviene una volta sola")    func migratesOnce() {
         withFakeKeychain { fake in
             let id = UUID()
