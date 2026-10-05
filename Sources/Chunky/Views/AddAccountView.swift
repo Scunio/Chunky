@@ -740,6 +740,13 @@ struct AddAccountView: View {
             existing.serverURLString = url.absoluteString
             existing.username = username.isEmpty ? nil : username
             existing.password = password.isEmpty ? nil : password
+            // Verifica rilettura: il Keychain può fallire in silenzio (entitlement,
+            // TestFlight senza gruppi) e finora il form chiudeva come se fosse ok.
+            // Se hai digitato una password ma la rilettura è vuota, non chiudere.
+            if !password.isEmpty, existing.password != password {
+                validationError = "Password non salvata nel portachiavi di sistema. Riprova; se persiste, controlla in Diagnostica la riga Keychain."
+                return
+            }
             existing.portNumber = port
             existing.shareName = trimmedShare
             existing.domainOrWorkgroup = trimmedWorkgroup.isEmpty ? nil : trimmedWorkgroup
@@ -754,7 +761,7 @@ struct AddAccountView: View {
             return
         }
 
-        RemoteAccountEntity.create(
+        let created = RemoteAccountEntity.create(
             kind: .smb,
             name: trimmedName.isEmpty ? trimmedHost : trimmedName,
             serverURLString: url.absoluteString,
@@ -770,6 +777,12 @@ struct AddAccountView: View {
             preCacheCoversEnabled: preCacheCoversEnabled,
             in: context
         )
+        if !password.isEmpty, created.password != password {
+            validationError = "Password non salvata nel portachiavi di sistema. Riprova; se persiste, controlla in Diagnostica la riga Keychain."
+            context.delete(created)
+            try? context.save()
+            return
+        }
         try? context.save()
         if let onSaved { onSaved() } else { dismiss() }
     }

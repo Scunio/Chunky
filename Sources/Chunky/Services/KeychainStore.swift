@@ -55,7 +55,9 @@ enum KeychainStore {
         return query
     }
 
-    static func savePassword(_ password: String, forAccount id: UUID) {
+    /// Ritorna l'OSStatus così il form può mostrare l'errore invece di far finta di aver salvato.
+    @discardableResult
+    static func savePassword(_ password: String, forAccount id: UUID) -> OSStatus {
         let account = id.uuidString
         var attributes = baseQuery(account: account, useDataProtection: true)
         attributes[kSecValueData as String] = Data(password.utf8)
@@ -71,7 +73,7 @@ enum KeychainStore {
             // Solo a scrittura riuscita si rimuove l'eventuale copia storica:
             // era l'unica rimasta e ora è duplicata.
             _ = backend.delete(baseQuery(account: account, useDataProtection: false))
-            return
+            return errSecSuccess
         }
         if status == errSecDuplicateItem {
             // Sostituzione: l'item esiste già, quindi ricrealo. Se anche il
@@ -80,12 +82,13 @@ enum KeychainStore {
             let retry = backend.add(attributes)
             guard retry == errSecSuccess else {
                 DiagnosticLog.log("Keychain: sostituzione fallita (OSStatus \(retry))")
-                return
+                return retry
             }
             _ = backend.delete(baseQuery(account: account, useDataProtection: false))
-            return
+            return errSecSuccess
         }
         DiagnosticLog.log("Keychain: salvataggio fallito (OSStatus \(status)); copie esistenti conservate")
+        return status
     }
 
     static func password(forAccount id: UUID) -> String? {
