@@ -412,6 +412,9 @@ struct LibraryView: View {
             status.apply(to: comic)
         }
         try? context.save()
+        // Explicit status changes (e.g. "mark unread") must propagate cross-device too:
+        // a reset nils `dateLastOpened`, and the push carries it as newer-than-anything.
+        Task { @MainActor in RemoteProgressSync.requestPush(selectedComics) }
     }
 
     private static let autoGroupTag = "__auto__"
@@ -1053,6 +1056,7 @@ private struct ComicCell: View {
     private func markStatus(_ status: ReadStatus) {
         status.apply(to: comic)
         try? comic.managedObjectContext?.save()
+        Task { @MainActor in RemoteProgressSync.requestPush(comic) }
     }
 
     /// Downloads without opening the reader: progress can be followed from the Downloads screen. The

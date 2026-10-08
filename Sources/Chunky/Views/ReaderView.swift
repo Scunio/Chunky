@@ -44,6 +44,7 @@ struct ReaderContentView: View {
     let onSwitchComic: (ComicEntity) -> Void
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     #if os(macOS)
     // On Mac the reader lives in its own window (WindowGroup(for: ComicID.self)), not in a
     // .sheet: dismiss() there has no effect. dismissWindow() closes the window that contains
@@ -101,6 +102,19 @@ struct ReaderContentView: View {
     @AppStorage("autoTintContrastEnabled") private var isAutoTintContrastEnabled = false
     /// Index of the "main" page (the first one, leftmost in LTR) of the current spread.
     @State private var currentPage: Int = 0
+    /// Page arrived via CloudKit from another device while the reader is open and the
+    /// local page hasn't followed it. Shown as a "Vai alla pagina" banner instead of
+    /// jumping automatically — see `handleRemotePageChange`.
+    @State private var pendingRemotePage: Int?
+    /// Throttles `context.save()` while paging: every page turn updates `lastReadPage`
+    /// in memory immediately, but persisting (and therefore enqueueing a CloudKit
+    /// export transaction) happens at most every few seconds, plus a guaranteed flush
+    /// on exit/background. Rapid per-page saves coalesce in the exporter's queue and
+    /// paradoxically delay the upload — this is why progress seemed to leave only when
+    /// returning to the library.
+    @State private var pendingProgressSave: DispatchWorkItem?
+    @State private var lastProgressSave = Date.distantPast
+    private static let progressSaveInterval: TimeInterval = 5
     @State private var loadError: String?
     /// Progress (0...1) of the iCloud download of the comic being opened, nil if no download
     /// is in progress: the comic can always be opened, it's the opening itself that downloads it.
@@ -446,6 +460,11 @@ struct ReaderContentView: View {
                 nextComicConfirmation(next)
             }
 
+            if let remote = pendingRemotePage, provider != nil,
+               !isPanelSelectionPresented && !isFindPresented && pendingNextComic == nil {
+                remotePageBanner(target: remote)
+            }
+
             if isPageJumpPresented, let provider = provider {
                 pageJumpCard(provider: provider)
             }
@@ -496,6 +515,9 @@ struct ReaderContentView: View {
         }
         .onDisappear {
             idleResetWorkItem?.cancel()
+            // Guaranteed flush of the throttled progress save: exiting right after a
+            // page turn must not lose it (or leave it only in memory).
+            flushPendingProgressSave()
             // OCR scanning is the most expensive thing the reader could have in progress:
             // letting it keep running after exiting would heat up the phone for a result
             // nobody is looking at anymore.
@@ -514,7 +536,23 @@ struct ReaderContentView: View {
             guard let provider = provider else { return }
             comic.lastReadPage = Int32(min(max(newValue, 0), provider.pageCount - 1))
             comic.dateLastOpened = Date()
-            try? context.save()
+            scheduleProgressSave()
+            // Cross-device progress for remote-library comics (no-op for local ones):
+            // `Task { @MainActor in }` because `onChange` is a synchronous context.
+            Task { @MainActor in RemoteProgressSync.requestPush(comic) }
+            // The user got there on their own: a pending remote banner for the same
+            // page is now redundant.
+            if pendingRemotePage == newValue {
+                pendingRemotePage = nil
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Backgrounding without passing through `onDisappear` (e.g. Home gesture
+            // mid-reading): the throttled save may still be pending.
+            if phase != .active { flushPendingProgressSave() }
+        }
+        .onChange(of: comic.lastReadPage) { _, newRemote in
+            handleRemotePageChange(Int(newRemote))
         }
         .onChange(of: isDoublePageEnabled) { realignCurrentPageToSpreadStart() }
         .onChange(of: isDoublePageAutoMode) { realignCurrentPageToSpreadStart() }
@@ -1242,6 +1280,104 @@ struct ReaderContentView: View {
         onSwitchComic(next)
     }
 
+    /// Persists a progress change, throttled: at most one `save()` (and therefore one
+    /// CloudKit export transaction) per `progressSaveInterval`, with the trailing edge
+    /// scheduled. The in-memory `lastReadPage` is already current — this only paces the
+    /// persistence/export. Crash window: at most `progressSaveInterval` of progress.
+    private func scheduleProgressSave() {
+        if Date().timeIntervalSince(lastProgressSave) >= Self.progressSaveInterval {
+            lastProgressSave = Date()
+            try? context.save()
+            return
+        }
+        pendingProgressSave?.cancel()
+        let work = DispatchWorkItem {
+            lastProgressSave = Date()
+            try? context.save()
+        }
+        pendingProgressSave = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.progressSaveInterval, execute: work)
+    }
+
+    /// Writes any throttled progress save still pending. Called on exit/background so
+    /// the last pages are never left only in memory.
+    private func flushPendingProgressSave() {
+        pendingProgressSave?.cancel()
+        pendingProgressSave = nil
+        if context.hasChanges {
+            lastProgressSave = Date()
+            try? context.save()
+        }
+        RemoteProgressSync.flushPush()
+    }
+
+    /// A change to `comic.lastReadPage` that didn't come from `currentPage` is a remote
+    /// CloudKit import from another device (`viewContext` merges automatically — see
+    /// `PersistenceController`). `currentPage` is a local `@State` snapshot taken once in
+    /// `loadComic`, so without this the reader would keep showing the old page until
+    /// exit/reopen. Local page turns already set both to the same value, so they fall
+    /// into the `target == currentPage` early return and never raise the banner.
+    private func handleRemotePageChange(_ newRemote: Int) {
+        guard let provider else { return }
+        let clamped = min(max(newRemote, 0), provider.pageCount - 1)
+        let target = pagination(pageCount: provider.pageCount).realigned(clamped)
+        guard target != currentPage else {
+            if pendingRemotePage != nil { pendingRemotePage = nil }
+            return
+        }
+        pendingRemotePage = target
+    }
+
+    private func jumpToRemotePage() {
+        guard let target = pendingRemotePage, provider != nil else { return }
+        pendingRemotePage = nil
+        turnStyle = tapPageTurnStyle
+        turnDirection = target > currentPage ? 1 : -1
+        withAnimation(.easeInOut(duration: 0.2)) { currentPage = target }
+        #if os(tvOS)
+        readerFocus = .pager
+        isAwaitingPagerReturn = true
+        #endif
+    }
+
+    /// Floating banner for `pendingRemotePage`: deliberately not an auto-jump, which
+    /// would yank the page from under the user while they're actively reading on this
+    /// device too. Hidden while search/panel/next-comic cards are up so the cards
+    /// don't stack.
+    private func remotePageBanner(target: Int) -> some View {
+        VStack {
+            HStack(spacing: 12) {
+                Image(systemName: "icloud.and.arrow.down")
+                Text("Pagina \(target + 1) su un altro dispositivo")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Button("Vai") { jumpToRemotePage() }
+                    .font(.subheadline.bold())
+                Button(action: {
+                    pendingRemotePage = nil
+                    #if os(tvOS)
+                    readerFocus = .pager
+                    isAwaitingPagerReturn = true
+                    #endif
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.footnote.bold())
+                }
+                .accessibilityLabel("Ignora")
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color.black.opacity(0.85))
+            .cornerRadius(20)
+            .padding(.top, 8)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .allowsHitTesting(true)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
     #if os(iOS)
     /// Brightness indicator during the two-finger gesture: same role as the system HUD
     /// (which doesn't appear when the app changes the brightness), i.e. showing that the
@@ -1527,7 +1663,9 @@ struct ReaderContentView: View {
                 return
             }
             #endif
-            openProvider(at: url, format: format, startingPage: startingPage)
+            // Re-read live: a remote import may have advanced `lastReadPage` while the
+            // iCloud download was in flight, after `startingPage` was captured.
+            openProvider(at: url, format: format, startingPage: Int(comic.lastReadPage))
         }
     }
 

@@ -44,6 +44,10 @@ struct AddAccountView: View {
     @State private var smartFoldersEnabled = true
     @State private var preCacheDetailsEnabled = true
     @State private var preCacheCoversEnabled = true
+    /// Manual pairing key for cross-device progress sync (empty = derived automatically).
+    /// Staged here, persisted to UserDefaults on save (keyed by account UUID, no model
+    /// migration) — see `RemoteProgressSync`.
+    @State private var syncKeyOverride = ""
 
     /// Account esistente in modifica (`nil` = creazione). Best practice: un solo
     /// form per crea+modifica così validazione, test velocità e gestione Rete
@@ -73,6 +77,7 @@ struct AddAccountView: View {
         _name = State(initialValue: account.name ?? "")
         _username = State(initialValue: account.username ?? "")
         _password = State(initialValue: account.password ?? "")
+        _syncKeyOverride = State(initialValue: account.id.map(RemoteProgressSync.syncKeyOverride(forAccountID:)) ?? "")
         _autoScanEnabled = State(initialValue: account.autoScanEnabled)
         _smartFoldersEnabled = State(initialValue: account.smartFoldersEnabled)
         _preCacheDetailsEnabled = State(initialValue: account.preCacheDetailsEnabled)
@@ -129,6 +134,44 @@ struct AddAccountView: View {
         .onAppear { updateDiscovery(kind) }
         .onDisappear { discovery.stop(); localNetwork.stop() }
         #endif
+    }
+
+    /// Descriptor built from the live form fields (not the saved account): the sync-key
+    /// preview below shows the key that *will* be used on save, including unsaved edits.
+    /// Mirrors the resolution rules in `RemoteProgressSyncKey.descriptor(for:)` (override
+    /// wins for SMB, https→443 default port); the authoritative key is always recomputed
+    /// from the saved entity by `RemoteProgressSync.effectiveSyncKey(for:)`.
+    private var formSyncDescriptor: RemoteProgressSyncKey.AccountDescriptor? {
+        let trimmedUser = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch kind {
+        case .smb:
+            let trimmedOverride = smbResolvedAddressOverride.trimmingCharacters(in: .whitespacesAndNewlines)
+            let host = (trimmedOverride.isEmpty ? smbHost : trimmedOverride)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let share = smbShare.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !host.isEmpty, !share.isEmpty else { return nil }
+            return RemoteProgressSyncKey.AccountDescriptor(
+                kind: .smb, host: host,
+                port: Int32(smbPort.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 445,
+                rootPath: share, username: trimmedUser.isEmpty ? nil : trimmedUser
+            )
+        case .webdav, .opds:
+            guard let url = URL(string: serverURLString.trimmingCharacters(in: .whitespacesAndNewlines)),
+                  let host = url.host, !host.isEmpty
+            else { return nil }
+            let port = Int32(url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80))
+            return RemoteProgressSyncKey.AccountDescriptor(
+                kind: kind, host: host, port: port,
+                rootPath: url.path, username: trimmedUser.isEmpty ? nil : trimmedUser
+            )
+        }
+    }
+
+    /// Effective sync key for the current form content (nil while host/share are still
+    /// empty). Same function the engine uses, so preview and behavior can't diverge.
+    private var previewSyncKey: String? {
+        guard let descriptor = formSyncDescriptor else { return nil }
+        return RemoteProgressSyncKey.effectiveAccountSyncKey(descriptor: descriptor, override: syncKeyOverride)
     }
 
     /// Both underlying flags always move together (see the comment on the "Pre-cache" toggle) —
@@ -338,6 +381,23 @@ struct AddAccountView: View {
                 Toggle("Pre-cache (dettagli e copertine)", isOn: precacheBinding)
             }
 
+            Section(
+                header: Text("Sincronizzazione progressi"),
+                footer: Text("Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati. La struttura delle cartelle dentro lo share deve comunque coincidere.")
+            ) {
+                TextField("Chiave di abbinamento (opzionale)", text: $syncKeyOverride)
+                    #if os(iOS)
+                    .autocapitalization(.none)
+                    #endif
+                    .disableAutocorrection(true)
+                if let previewSyncKey {
+                    Text(previewSyncKey)
+                        .font(.footnote.monospaced())
+                        .foregroundColor(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
             if isEditing {
                 Section {
                     Button("Elimina account", role: .destructive, action: { isConfirmingDelete = true })
@@ -515,6 +575,17 @@ struct AddAccountView: View {
                 .font(.footnote)
                 .foregroundColor(.secondary)
 
+            TVFormSectionLabel(title: "Sincronizzazione progressi")
+            TVFormFieldRow(label: "Chiave") { TextField("opzionale", text: $syncKeyOverride).disableAutocorrection(true) }
+            if let previewSyncKey {
+                Text(previewSyncKey)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+            Text("Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+
             TVFormPrimaryButton(title: "Salva", action: save)
                 .padding(.top, 12)
 
@@ -571,6 +642,7 @@ struct AddAccountView: View {
         guard let existing = editingAccount else { return }
         ComicEntity.deleteOrphanPlaceholders(ofAccountID: existing.stableID, in: context)
         KeychainStore.deletePassword(forAccount: existing.stableID)
+        RemoteProgressSync.clearSyncKeyOverride(forAccountID: existing.stableID)
         context.delete(existing)
         try? context.save()
         // Prima chiude Modifica, poi il chiamante chiude l'eventuale browser sopra
@@ -609,12 +681,13 @@ struct AddAccountView: View {
             // La configurazione è cambiata: il vecchio errore non è più valido,
             // la prossima scansione riprova da zero.
             existing.lastScanError = nil
+            RemoteProgressSync.setSyncKeyOverride(syncKeyOverride, forAccountID: existing.stableID)
             try? context.save()
             if let onSaved { onSaved() } else { dismiss() }
             return
         }
 
-        RemoteAccountEntity.create(
+        let created = RemoteAccountEntity.create(
             kind: kind,
             name: trimmedName.isEmpty ? url.host ?? "Account" : trimmedName,
             serverURLString: trimmedURL,
@@ -626,6 +699,7 @@ struct AddAccountView: View {
             preCacheCoversEnabled: preCacheCoversEnabled,
             in: context
         )
+        RemoteProgressSync.setSyncKeyOverride(syncKeyOverride, forAccountID: created.stableID)
         try? context.save()
         if let onSaved { onSaved() } else { dismiss() }
     }
@@ -780,6 +854,7 @@ struct AddAccountView: View {
             existing.preCacheDetailsEnabled = preCacheDetailsEnabled
             existing.preCacheCoversEnabled = preCacheCoversEnabled
             existing.lastScanError = nil
+            RemoteProgressSync.setSyncKeyOverride(syncKeyOverride, forAccountID: existing.stableID)
             do {
                 try context.save()
                 AppLog.log("Salva Modifica id=\(existing.stableID.uuidString): Core Data ok")
@@ -816,6 +891,7 @@ struct AddAccountView: View {
                 return
             }
         }
+        RemoteProgressSync.setSyncKeyOverride(syncKeyOverride, forAccountID: created.stableID)
         try? context.save()
         if let onSaved { onSaved() } else { dismiss() }
     }

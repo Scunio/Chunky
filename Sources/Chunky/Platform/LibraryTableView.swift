@@ -104,6 +104,7 @@ struct LibraryTableView: View {
     private func markStatus(_ status: ReadStatus, for comic: ComicEntity) {
         status.apply(to: comic)
         try? comic.managedObjectContext?.save()
+        Task { @MainActor in RemoteProgressSync.requestPush(comic) }
     }
 
     private func downloadFromICloud(_ comic: ComicEntity) {

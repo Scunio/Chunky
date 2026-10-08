@@ -109,6 +109,8 @@ private struct TVSettingsView: View {
                 .tvOSRowBackground()
             NavigationLink("Blocco genitori") { ParentalLockSettingsView() }
                 .tvOSRowBackground()
+            RemoteProgressSyncToggle()
+                .tvOSRowBackground()
         }
         .scrollClipDisabled(true)
         .navigationTitle("Impostazioni")

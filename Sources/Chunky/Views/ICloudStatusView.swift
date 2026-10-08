@@ -43,7 +43,23 @@ struct ICloudStatusSections: View {
                         : "Attiva iCloud Drive nelle Impostazioni di sistema per sincronizzare la libreria tra i tuoi dispositivi. I fumetti restano comunque salvati localmente su questo dispositivo."
                 )
             ) { EmptyView() }
+            Section(
+                footer: Text("Solo i progressi di lettura viaggiano via iCloud (i file restano sul server): funziona anche su Apple TV e senza iCloud Drive, basta l'account iCloud.")
+            ) {
+                RemoteProgressSyncToggle()
+            }
         }
+    }
+}
+
+/// Shared toggle for remote-library progress sync (Infuse-style): one component used by
+/// iOS/macOS (`ICloudStatusSections` above) and tvOS (`TVSettingsView`), so the setting
+/// can't drift between platforms. Reads the same key as `RemoteProgressSync.isEnabled`.
+struct RemoteProgressSyncToggle: View {
+    @AppStorage(RemoteProgressSync.enabledDefaultsKey) private var isEnabled = true
+
+    var body: some View {
+        Toggle("Sincronizza progressi remoti", isOn: $isEnabled)
     }
 }
 

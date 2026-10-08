@@ -82,6 +82,8 @@ struct ContentView: View {
                 adoptFilesDroppedInDocuments()
                 viewModel.deduplicateLibrary(context: context)
                 viewModel.backfillPlaceholderMetadata(context: context)
+                // Progress made on other devices while away (throttled internally).
+                RemoteProgressSync.fetchAndApply(in: context)
             }
     }
 
@@ -148,6 +150,9 @@ struct ContentView: View {
                 // accounts (SMB/WebDAV/OPDS) only get scanned while the app is open and in the
                 // foreground, same limitation as the rest of this loop.
                 await RemoteAccountScanner.scanAllEnabledAccounts(context: context)
+                // Freshly scanned library = the right moment to match fetched progress
+                // records against local comics (forced: scans run at most every ~3 min).
+                RemoteProgressSync.fetchAndApply(in: context, force: true)
             }
         }
     }
