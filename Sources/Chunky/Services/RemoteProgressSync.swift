@@ -1,6 +1,9 @@
 import CloudKit
 import CoreData
 import Foundation
+#if os(macOS)
+import Security
+#endif
 
 #if canImport(UIKit)
 import UIKit
@@ -200,6 +203,8 @@ enum RemoteProgressSync {
             label: "com.scunio.Chunky.remoteProgress", qos: .utility
         )
         private static let lock = NSLock()
+        /// Cached result of `checkCloudKitUsable` (entitlements don't change at runtime).
+        nonisolated(unsafe) private static var cachedUsable: Bool?
         /// Latest requested snapshot per record: `pushLatest` pops it, so `flush()`
         /// pushes exactly the not-yet-pushed values and nothing stale.
         nonisolated(unsafe) private static var latest: [String: RemoteProgressSync.Snapshot] = [:]
@@ -208,6 +213,42 @@ enum RemoteProgressSync {
         nonisolated(unsafe) private static var lastFetch = Date.distantPast
         private static let pushDebounce: TimeInterval = 10
         private static let fetchThrottle: TimeInterval = 60
+
+        /// False when this build cannot use CloudKit at all — ad-hoc signing without
+        /// the iCloud entitlement (UI tests, sideloaded builds with stripped
+        /// entitlements). `CKContainer(identifier:)` doesn't fail gracefully there: it
+        /// traps (EXC_BREAKPOINT) instead of returning errors, so every entry point
+        /// bails out before touching it. Production builds (App Store/TestFlight/dev
+        /// signed, entitlement present) are unaffected.
+        static var cloudKitUsable: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            if let cachedUsable { return cachedUsable }
+            let usable = checkCloudKitUsable()
+            cachedUsable = usable
+            return usable
+        }
+
+        private static func checkCloudKitUsable() -> Bool {
+            #if os(macOS)
+            // SecTask is macOS-only (unavailable on iOS/tvOS): verified by probe that
+            // `CKContainer(identifier:)` traps (SIGTRAP) instead of failing when the
+            // entitlement is missing, so an explicit check is mandatory here.
+            guard let task = SecTaskCreateFromSelf(nil),
+                  let value = SecTaskCopyValueForEntitlement(
+                      task,
+                      "com.apple.developer.icloud-container-identifiers" as CFString,
+                      nil
+                  ) as? [String]
+            else { return false }
+            return value.contains(RemoteProgressSync.containerIdentifier)
+            #else
+            // No public entitlement-introspection API on iOS/tvOS; failures there surface
+            // as regular CloudKit errors (handled per-operation), never traps — observed
+            // on ad-hoc-signed simulator builds. If that ever changes, gate like above.
+            return true
+            #endif
+        }
 
         private static var database: CKDatabase {
             CKContainer(identifier: RemoteProgressSync.containerIdentifier).privateCloudDatabase
@@ -220,6 +261,7 @@ enum RemoteProgressSync {
         // MARK: Push
 
         static func requestPush(_ snapshot: RemoteProgressSync.Snapshot) {
+            guard cloudKitUsable else { return }
             lock.lock()
             latest[snapshot.recordName] = snapshot
             if Date().timeIntervalSince(lastPush[snapshot.recordName] ?? .distantPast) >= pushDebounce {
@@ -246,6 +288,7 @@ enum RemoteProgressSync {
         }
 
         static func flush() {
+            guard cloudKitUsable else { return }
             lock.lock()
             let snaps = latest
             latest = [:]
@@ -449,6 +492,7 @@ enum RemoteProgressSync {
         // MARK: Fetch
 
         static func fetchAndApply(in context: NSManagedObjectContext, force: Bool) {
+            guard cloudKitUsable else { return }
             lock.lock()
             if !force, Date().timeIntervalSince(lastFetch) < fetchThrottle {
                 lock.unlock()
