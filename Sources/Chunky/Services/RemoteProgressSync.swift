@@ -500,8 +500,17 @@ enum RemoteProgressSync {
             }
             lastFetch = Date()
             lock.unlock()
-            queue.async {
-                fetchPage(accumulated: [], thenApplyIn: context)
+            // No remote accounts → no local comics can ever match a record: skip before
+            // touching CloudKit at all. Besides saving pointless traffic for account-less
+            // libraries, this keeps entitlement-less builds (UI tests) off CloudKit APIs
+            // entirely — `CKContainer(identifier:)` traps instead of failing there.
+            // `perform` (not `performAndWait`): safe from any thread, no deadlock risk.
+            context.perform {
+                let accountCount = (try? context.count(for: RemoteAccountEntity.fetchRequest())) ?? 0
+                guard accountCount > 0 else { return }
+                queue.async {
+                    fetchPage(accumulated: [], thenApplyIn: context)
+                }
             }
         }
 
