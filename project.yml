@@ -14,16 +14,22 @@ configFiles:
   Debug: Config/Signing.xcconfig
   Release: Config/Signing.xcconfig
 
+# Versioni esatte, non intervalli: senza Package.resolved committato (il
+# .xcodeproj è gitignorato e rigenerato, quindi non c'è dove metterlo),
+# `from:` faceva flottare le dipendenze a ogni resolve pulito (Unrar visto
+# risolvere 0.5.4 partendo da 0.3.15) — build non riproducibili e crash nativi
+# intermittenti impossibili da attribuire. `exact:` congela quanto validato
+# dalla suite; gli aggiornamenti si fanno qui, in un commit dedicato.
 packages:
   ZIPFoundation:
     url: https://github.com/weichsel/ZIPFoundation.git
-    from: 0.9.19
+    exactVersion: 0.9.20
   Unrar:
     url: https://github.com/mtgto/Unrar.swift.git
-    from: 0.3.15
+    exactVersion: 0.5.4
   AMSMB2:
     url: https://github.com/amosavian/AMSMB2.git
-    from: 4.0.0
+    exactVersion: 4.0.3
 
 # ---------------------------------------------------------------------------
 # Due target espliciti invece di un unico target multipiattaforma: è l'unico modo
