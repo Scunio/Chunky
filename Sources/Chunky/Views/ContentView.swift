@@ -1,3 +1,4 @@
+import CoreData
 import SwiftUI
 
 /// Root of the app. It's the only place where navigation diverges between platforms:
@@ -59,6 +60,29 @@ struct ContentView: View {
             // disabled, so hooking into `rebuildLibrary` alone isn't enough.
             .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
                 scheduleDebouncedDeduplication()
+            }
+            // CloudKit import/export lifecycle (mirrored store): the only visibility into
+            // whether progress actually leaves/enters this device. Logged (end events only,
+            // not begins) so Diagnostica can tell "never sent" apart from "never received".
+            .onReceive(NotificationCenter.default.publisher(
+                for: NSPersistentCloudKitContainer.eventChangedNotification
+            )) { notification in
+                guard let event = notification.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
+                    as? NSPersistentCloudKitContainer.Event,
+                    event.endDate != nil
+                else { return }
+                let kind: String
+                switch event.type {
+                case .setup: kind = "setup"
+                case .import: kind = "import"
+                case .export: kind = "export"
+                @unknown default: kind = "sconosciuto"
+                }
+                if event.succeeded {
+                    DiagnosticLog.log("CloudKit \(kind) riuscito")
+                } else {
+                    DiagnosticLog.log("CloudKit \(kind) fallito: \(event.error?.localizedDescription ?? "?")")
+                }
             }
             // ContentView is the root that's always alive for the whole session: updates to
             // `allRelativePaths` trigger the rescan here regardless of what the user
