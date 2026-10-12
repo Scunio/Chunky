@@ -53,6 +53,11 @@ enum RemoteProgressSync {
     static let recordType = "RemoteReadingProgress"
     static let defaultsTokenKey = "ckRemoteProgressZoneToken"
     static let enabledDefaultsKey = "remoteProgressSyncEnabled"
+    /// Flag: la `CKRecordZoneSubscription` è già stata salvata lato server (una volta
+    /// basta, resta lì finché la zona esiste).
+    static let subscriptionSavedKey = "ckRemoteProgressSubscriptionSaved"
+    /// ID fisso della subscription: ri-salvarla è un upsert idempotente.
+    static let pushSubscriptionID = "remote-progress-changes"
     /// Sync key for iCloud-library comics (see the enum docs). Disjoint by construction
     /// from every remote key: derived ones start with `smb/`, `webdav/` or `opds/`,
     /// manual overrides with `custom/`.
@@ -207,10 +212,32 @@ enum RemoteProgressSync {
 
     /// Pulls remote changes and applies last-writer-wins. Foreground-triggered calls are
     /// throttled (~60s); post-scan calls pass `force: true` (scans already run at most
-    /// every ~3 minutes, plus manual scans).
-    static func fetchAndApply(in context: NSManagedObjectContext, force: Bool = false) {
-        guard isEnabled else { return }
-        Engine.fetchAndApply(in: context, force: force)
+    /// every ~3 minutes, plus manual scans). Push-triggered calls always pass `force: true`
+    /// with a completion so the AppDelegate can answer the system. `completion` reports
+    /// how many comics were updated (0 also when the fetch found nothing or failed).
+    static func fetchAndApply(in context: NSManagedObjectContext, force: Bool = false, completion: ((Int) -> Void)? = nil) {
+        guard isEnabled else { completion?(0); return }
+        Engine.fetchAndApply(in: context, force: force, completion: completion)
+    }
+
+    /// Creates the server-side zone subscription once, so zone changes arrive as silent
+    /// pushes instead of only via polling. Cheap to call on every launch: gated by the
+    /// saved flag, CloudKit untouched otherwise. No-op on tvOS (no push delivery there).
+    static func ensurePushSubscription() {
+        #if os(tvOS)
+        return
+        #else
+        Engine.ensureSubscription()
+        #endif
+    }
+
+    /// Entry point for the AppDelegate silent-push callbacks (iOS/macOS). Parses the
+    /// payload, ignores anything not from our zone, and fetches immediately instead of
+    /// waiting for the next poll. The fetch runs on the shared view context directly so
+    /// it works even with no UI mounted (background wake). `completion` reports how many
+    /// comics were updated.
+    static func handlePushNotification(_ userInfo: [AnyHashable: Any], completion: @escaping (Int) -> Void) {
+        Engine.handlePushNotification(userInfo, completion: completion)
     }
 
     /// Drops the zone change token so the next fetch is a full one. Recovery path for
@@ -534,13 +561,78 @@ enum RemoteProgressSync {
             database.add(operation)
         }
 
+        // MARK: Push subscription (realtime async)
+
+        /// Saves the server-side `CKRecordZoneSubscription` once, so zone changes arrive
+        /// as silent pushes instead of only via polling. Gated by the saved flag: the
+        /// launch-time call costs nothing once subscribed. Ensures the zone first —
+        /// saving the zone is idempotent, so this also heals the "zone never created"
+        /// state without a separate code path.
+        static func ensureSubscription() {
+            guard cloudKitUsable else { return }
+            guard !UserDefaults.standard.bool(forKey: RemoteProgressSync.subscriptionSavedKey) else { return }
+            let zone = CKRecordZone(zoneName: RemoteProgressSync.zoneName)
+            let operation = CKModifyRecordZonesOperation(recordZonesToSave: [zone], recordZoneIDsToDelete: nil)
+            operation.modifyRecordZonesResultBlock = { _ in saveSubscription() }
+            database.add(operation)
+        }
+
+        private static func saveSubscription() {
+            let info = CKSubscription.NotificationInfo()
+            // Solo content-available: nessun alert/suono/badge, wake silenzioso.
+            info.shouldSendContentAvailable = true
+            let subscription = CKRecordZoneSubscription(
+                zoneID: zoneID, subscriptionID: RemoteProgressSync.pushSubscriptionID
+            )
+            subscription.notificationInfo = info
+            let operation = CKModifySubscriptionsOperation(
+                subscriptionsToSave: [subscription], subscriptionIDsToDelete: nil
+            )
+            operation.modifySubscriptionsResultBlock = { result in
+                switch result {
+                case .success:
+                    UserDefaults.standard.set(true, forKey: RemoteProgressSync.subscriptionSavedKey)
+                case .failure(let error as CKError) where error.code == .serverRecordChanged:
+                    // Già esistente (es. flag perso): la si considera valida.
+                    UserDefaults.standard.set(true, forKey: RemoteProgressSync.subscriptionSavedKey)
+                case .failure(let error):
+                    DiagnosticLog.log("RemoteProgress subscription non creata: \(error.localizedDescription)")
+                }
+            }
+            database.add(operation)
+        }
+
+        /// Handles an incoming silent push: parses the payload, ignores anything not
+        /// from our zone, and fetches immediately. Runs on the shared view context
+        /// directly (via `perform`, as the polled path does) so it works with no UI
+        /// mounted, e.g. on background wake. `completion` reports applied comics.
+        static func handlePushNotification(_ userInfo: [AnyHashable: Any], completion: @escaping (Int) -> Void) {
+            guard cloudKitUsable else { completion(0); return }
+            var dict: [String: NSObject] = [:]
+            for (key, value) in userInfo {
+                guard let key = key as? String, let value = value as? NSObject else { continue }
+                dict[key] = value
+            }
+            // `note as?` senza optional binding: l'inizializer è failable solo su alcuni
+            // SDK, il cast condizionale funziona in entrambi i casi.
+            let note = CKNotification(fromRemoteNotificationDictionary: dict)
+            guard let zoneNote = note as? CKRecordZoneNotification,
+                  zoneNote.recordZoneID?.zoneName == RemoteProgressSync.zoneName
+            else {
+                completion(0)
+                return
+            }
+            fetchAndApply(in: PersistenceController.shared.container.viewContext, force: true, completion: completion)
+        }
+
         // MARK: Fetch
 
-        static func fetchAndApply(in context: NSManagedObjectContext, force: Bool) {
-            guard cloudKitUsable else { return }
+        static func fetchAndApply(in context: NSManagedObjectContext, force: Bool, completion: ((Int) -> Void)? = nil) {
+            guard cloudKitUsable else { completion?(0); return }
             lock.lock()
             if !force, Date().timeIntervalSince(lastFetch) < fetchThrottle {
                 lock.unlock()
+                completion?(0)
                 return
             }
             lastFetch = Date()
@@ -555,9 +647,9 @@ enum RemoteProgressSync {
             context.perform {
                 let accountCount = (try? context.count(for: RemoteAccountEntity.fetchRequest())) ?? 0
                 let comicCount = (try? context.count(for: ComicEntity.fetchRequest())) ?? 0
-                guard accountCount > 0 || comicCount > 0 else { return }
+                guard accountCount > 0 || comicCount > 0 else { completion?(0); return }
                 queue.async {
-                    fetchPage(accumulated: [], thenApplyIn: context)
+                    fetchPage(accumulated: [], thenApplyIn: context, completion: completion)
                 }
             }
         }
@@ -626,7 +718,8 @@ enum RemoteProgressSync {
         /// precede its fetch-result callback, so `changed` is complete when examined.
         private static func fetchPage(
             accumulated: [CKRecord],
-            thenApplyIn context: NSManagedObjectContext
+            thenApplyIn context: NSManagedObjectContext,
+            completion: ((Int) -> Void)? = nil
         ) {
             var configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
             configuration.previousServerChangeToken = storedToken()
@@ -658,17 +751,19 @@ enum RemoteProgressSync {
                     let page = changed
                     appendLock.unlock()
                     if outcome.moreComing {
-                        fetchPage(accumulated: page, thenApplyIn: context)
+                        fetchPage(accumulated: page, thenApplyIn: context, completion: completion)
                     } else {
                         context.perform {
                             let applied = apply(records: page, in: context)
                             if applied > 0 {
                                 AppLog.log("RemoteProgress: applicati \(applied) progressi da altri dispositivi")
                             }
+                            completion?(applied)
                         }
                     }
                 case .failure(let error):
                     handleFetchError(error)
+                    completion?(0)
                 }
             }
             database.add(operation)

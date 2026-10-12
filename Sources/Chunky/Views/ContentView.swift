@@ -39,6 +39,10 @@ struct ContentView: View {
             .onAppear {
                 ICloudDownloadTracker.shared.start()
                 RemoteProgressSync.logAccountStatus()
+                // Crea una volta la subscription ai cambi della zona progressi: da qui
+                // in poi gli update dell'altro dispositivo arrivano via silent push
+                // (fetch immediato) invece che solo al poll ogni ~3 minuti.
+                RemoteProgressSync.ensurePushSubscription()
                 // Catches imports that landed while the app was closed (the remote-change
                 // notification above only fires while we're alive to observe it).
                 MirrorHistoryLogger.logNewImports(in: context)

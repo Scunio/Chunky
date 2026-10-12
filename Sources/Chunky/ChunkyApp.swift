@@ -3,6 +3,11 @@ import SwiftUI
 @main
 struct ChunkyApp: App {
     let persistenceController = PersistenceController.shared
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(ChunkyAppDelegate.self) private var appDelegate
+    #elseif os(macOS)
+    @NSApplicationDelegateAdaptor(ChunkyAppDelegate.self) private var appDelegate
+    #endif
     @StateObject private var libraryViewModel = LibraryViewModel()
     @ObservedObject private var lock = ParentalLock.shared
     @ObservedObject private var theme = AppTheme.shared

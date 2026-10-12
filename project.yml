@@ -177,6 +177,11 @@ targets:
           - CloudDocuments
           - CloudKit
         com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)com.scunio.Chunky"
+        # Silent push di CloudKit (sync progressi realtime): solo content-available,
+        # nessun alert. `development` qui, i profili di distribuzione lo ribaltano a
+        # `production` in firma. Su iOS funziona con l'UIBackgroundModes
+        # `remote-notification` già dichiarato sopra; su macOS non serve chiave plist.
+        aps-environment: development
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -244,6 +249,8 @@ targets:
           - CloudDocuments
           - CloudKit
         com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)com.scunio.Chunky"
+        # Come su iOS: silent push di CloudKit per il sync progressi realtime.
+        aps-environment: development
 
   Chunky_tvOS:
     platform: tvOS
