@@ -8,14 +8,26 @@ extension LibraryViewModel {
     /// container, and CloudKit syncs both records.
     ///
     /// NEVER touches the files: there's only one file, and it's the one the duplicate records share.
+    ///
+    /// `awaitRemoteProgress` (solo dal passo dedicato, mai da import/rebuild/test) attende in
+    /// modo limitato il sync esplicito prima di fondere, così il merge vede il progresso
+    /// fresco in volo invece di fotografare il vecchio. Sempre fuori dal main thread.
     @discardableResult
-    func deduplicateComics(in context: NSManagedObjectContext) -> Int {
+    func deduplicateComics(in context: NSManagedObjectContext, awaitRemoteProgress: Bool = false) -> Int {
+        var paths: [String] = []
+        context.performAndWait {
+            paths = duplicateRelativePaths(in: context) ?? []
+        }
+        guard !paths.isEmpty else { return 0 }
+        if awaitRemoteProgress, !Thread.isMainThread {
+            Self.waitForRemoteProgress(in: context)
+        }
         var collapsed = 0
         context.performAndWait {
-            guard let duplicatePaths = duplicateRelativePaths(in: context), !duplicatePaths.isEmpty else { return }
+            guard !paths.isEmpty else { return }
 
             let request = ComicEntity.fetchRequest()
-            request.predicate = NSPredicate(format: "relativePath IN %@", duplicatePaths)
+            request.predicate = NSPredicate(format: "relativePath IN %@", paths)
             // The scanning context lives as long as the app and may already have these objects in
             // memory from a previous pass: without forcing a refresh, the merge would read the
             // old values and throw away reading progress that arrived from CloudKit in the meantime.
@@ -23,10 +35,23 @@ extension LibraryViewModel {
             guard let comics = try? context.fetch(request) else { return }
 
             for (path, group) in Dictionary(grouping: comics, by: { $0.relativePath ?? "" }) where group.count > 1 {
+                // Grazia sui letti di recente: il mirror potrebbe stare ancora convergendo
+                // (record arrivato, progresso in volo) e fonderli ora fotograferebbe il
+                // vecchio. Solo `dateLastOpened`: un import fresco mai letto si fonde subito.
+                // Si ricontrolla al prossimo giro (import mirror, foreground, rescan).
+                if Self.hasRecentReadingActivity(group) {
+                    DiagnosticLog.log("Deduplica: rimandato per \"\(path)\" (lettura recente, si ricontrolla al prossimo giro)")
+                    continue
+                }
                 let ordered = group.sorted(by: Self.precedesAsSurvivor)
                 guard let survivor = ordered.first else { continue }
                 for loser in ordered.dropFirst() {
+                    let survivorBefore = survivor.lastReadPage
+                    let loserPage = loser.lastReadPage
                     Self.merge(loser, into: survivor)
+                    if survivor.lastReadPage != survivorBefore {
+                        DiagnosticLog.log("Deduplica: \"\(path)\" pagina \(survivorBefore + 1)->\(survivor.lastReadPage + 1) ereditata dal record scartato (aveva \(loserPage + 1))")
+                    }
                     let identifier = loser.objectID.uriRepresentation().absoluteString
                     context.delete(loser)
                     collapsed += 1
@@ -41,6 +66,29 @@ extension LibraryViewModel {
             DiagnosticLog.log("Deduplica libreria: rimossi \(collapsed) record duplicati")
         }
         return collapsed
+    }
+
+    /// Attesa limitata del sync esplicito prima di fondere: il merge deve vedere il
+    /// progresso fresco in volo, altrimenti lo fotografa vecchio e il save del dedup —
+    /// più recente — lo riesporta via mirror sopra il fresco (last-writer-wins).
+    /// Scade sempre: alla scadenza si procede comunque e il fetch in corso guarisce dopo.
+    private static let dedupRemoteFetchTimeout: TimeInterval = 12
+    /// Finestra in cui un gruppo letto di recente non si collassa: il mirror potrebbe
+    /// convergere ancora. Assorbe anche qualche minuto di sfasamento tra gli orologi.
+    private static let dedupRecentActivityGrace: TimeInterval = 5 * 60
+
+    private static func waitForRemoteProgress(in context: NSManagedObjectContext) {
+        let done = DispatchGroup()
+        done.enter()
+        RemoteProgressSync.fetchAndApply(in: context, force: true) { _ in done.leave() }
+        if done.wait(timeout: .now() + dedupRemoteFetchTimeout) == .timedOut {
+            DiagnosticLog.log("Deduplica: fetch progressi oltre i \(Int(dedupRemoteFetchTimeout))s, procedo comunque")
+        }
+    }
+
+    private static func hasRecentReadingActivity(_ group: [ComicEntity]) -> Bool {
+        let cutoff = Date().addingTimeInterval(-dedupRecentActivityGrace)
+        return group.contains { ($0.dateLastOpened ?? .distantPast) > cutoff }
     }
 
     /// Recomputes the series for comics that still lack one. `seriesName` is written only once,

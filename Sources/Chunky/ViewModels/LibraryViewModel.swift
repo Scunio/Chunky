@@ -327,7 +327,10 @@ final class LibraryViewModel: ObservableObject {
     func deduplicateLibrary(context: NSManagedObjectContext) {
         let backgroundContext = sharedScanContext(for: context)
         enqueue(.deduplicate) { [weak self] in
-            self?.deduplicateComics(in: backgroundContext)
+            // Col sync esplicito prima di fondere (vede il progresso in volo) e con la
+            // grazia sui letti di recente (il mirror potrebbe convergere ancora): senza,
+            // il merge fotografava il vecchio e lo riesportava sopra il fresco.
+            self?.deduplicateComics(in: backgroundContext, awaitRemoteProgress: true)
             self?.backfillSeriesNames(in: backgroundContext)
         }
     }
@@ -400,19 +403,23 @@ final class LibraryViewModel: ObservableObject {
     /// Recovery tool: removes from the library comics whose file no longer exists
     /// (e.g. deleted manually from Finder/Files), and registers files found in the library
     /// folder that aren't present yet — useful after restoring from a backup or a sync issue.
-    func rebuildLibrary(context: NSManagedObjectContext) {
+    /// `cloudKnownPaths` (relative paths che `NSMetadataQuery` vede nel container iCloud)
+    /// impedisce di cancellare ciò che esiste in cloud ma non (ancora/più) in locale:
+    /// durante download, eviction o riconciliazione `fileExists` mente in transitorio.
+    func rebuildLibrary(context: NSManagedObjectContext, cloudKnownPaths: Set<String> = []) {
         // Banner subito, lavoro in coda: se la coda è occupata (es. pre-cache),
         // l'utente vede che il tap è stato preso invece di un bottone muto.
         let token = beginStatus("Ricostruzione libreria…")
         let backgroundContext = sharedScanContext(for: context)
         enqueue(.rebuild) { [weak self] in
-            self?.performRebuildLibrary(in: backgroundContext)
+            self?.performRebuildLibrary(in: backgroundContext, cloudKnownPaths: cloudKnownPaths)
             self?.endStatus(token: token)
         }
     }
 
-    func performRebuildLibrary(in context: NSManagedObjectContext) {
+    func performRebuildLibrary(in context: NSManagedObjectContext, cloudKnownPaths: Set<String> = []) {
         var removedCount = 0
+        var keptCloudOnlyCount = 0
         var knownPaths: Set<String> = []
         context.performAndWait {
             // Prima gli orfani (segnaposto di account eliminati, che il ciclo sotto
@@ -439,12 +446,19 @@ final class LibraryViewModel: ObservableObject {
                 }
                 let path = comic.relativePath ?? ""
                 let url = LibraryStorage.fileURL(forRelativePath: path)
-                if path.isEmpty || !FileManager.default.fileExists(atPath: url.path) {
+                let existsLocally = !path.isEmpty && FileManager.default.fileExists(atPath: url.path)
+                // Mai cancellare ciò che esiste su iCloud ma non (ancora/più) in locale:
+                // durante download, eviction o riconciliazione `fileExists` mente in
+                // transitorio, e cancellare qui innesca il loop togli/rimetti (la fase 2
+                // ri-registra da zero appena il file ricompare, col progresso azzerato).
+                // Solo ciò che manca sia in locale che in cloud è davvero sparito.
+                if !existsLocally && (path.isEmpty || !cloudKnownPaths.contains(path)) {
                     let identifier = comic.objectID.uriRepresentation().absoluteString
                     context.delete(comic)
                     removedCount += 1
                     ComicTextIndex.deleteIndex(forComicIdentifier: identifier)
                 } else {
+                    if !existsLocally { keptCloudOnlyCount += 1 }
                     knownPaths.insert(path)
                 }
             }
@@ -480,6 +494,9 @@ final class LibraryViewModel: ObservableObject {
         if removedCount > 0 || !unknownComicFiles.isEmpty {
             let elapsed = Self.formatted(duration: Date().timeIntervalSince(startedAt))
             DiagnosticLog.log("Rebuild library: rimossi \(removedCount), ritrovati \(unknownComicFiles.count) in \(elapsed)")
+        }
+        if keptCloudOnlyCount > 0 {
+            DiagnosticLog.log("Rebuild library: tenuti \(keptCloudOnlyCount) presenti su iCloud ma non in locale (non cancellati)")
         }
 
         deduplicateComics(in: context)

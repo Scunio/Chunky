@@ -164,7 +164,9 @@ struct ContentView: View {
         viewModel.rebuildLibrary(context: context)
         #else
         guard isSyncFolderEnabled, LibraryStorage.isICloudAvailable else { return }
-        viewModel.rebuildLibrary(context: context)
+        // I path visti da `NSMetadataQuery` impediscono al rebuild di cancellare ciò che
+        // esiste su iCloud ma non (ancora/più) in locale (download/eviction in corso).
+        viewModel.rebuildLibrary(context: context, cloudKnownPaths: tracker.allRelativePaths)
         #endif
     }
 

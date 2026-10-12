@@ -119,6 +119,31 @@ struct LibraryDeduplicationTests {
         #expect(try survivorID(insertingNewerFirst: true) == older)
     }
 
+    /// Il dedup non deve fotografare un progresso in volo: un gruppo letto minuti fa
+    /// potrebbe stare ancora convergendo via mirror, e fonderlo ora congelerebbe il vecchio.
+    @Test("Il dedup rimanda i gruppi letti di recente")
+    func defersRecentlyReadGroups() throws {
+        let context = try TestStore.makeContext()
+        makeComic(in: context, path: "Topolino 3620.cbz", lastReadPage: 10, dateLastOpened: Date())
+        makeComic(in: context, path: "Topolino 3620.cbz", lastReadPage: 50, dateLastOpened: Date().addingTimeInterval(-3600))
+        try context.save()
+
+        #expect(LibraryViewModel().deduplicateComics(in: context) == 0)
+        #expect(try comics(in: context).count == 2)
+    }
+
+    @Test("Il dedup fonde i gruppi con attività vecchia")
+    func mergesStaleGroups() throws {
+        let context = try TestStore.makeContext()
+        makeComic(in: context, path: "Topolino 3620.cbz", lastReadPage: 10, dateLastOpened: Date().addingTimeInterval(-3600))
+        makeComic(in: context, path: "Topolino 3620.cbz", lastReadPage: 50, dateLastOpened: Date().addingTimeInterval(-7200))
+        try context.save()
+
+        #expect(LibraryViewModel().deduplicateComics(in: context) == 1)
+        #expect(try comics(in: context).count == 1)
+        #expect(try comics(in: context).first?.lastReadPage == 50)
+    }
+
     /// This is the guard that makes `registerComic` idempotent: a file already in the library
     /// shouldn't be registered a second time.
     @Test("Un path già registrato viene riconosciuto")
