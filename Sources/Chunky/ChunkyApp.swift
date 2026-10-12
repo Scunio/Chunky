@@ -13,6 +13,9 @@ struct ChunkyApp: App {
         let includeInBackup = UserDefaults.standard.object(forKey: "includeInBackup") as? Bool ?? false
         LibraryStorage.setExcludedFromBackup(!includeInBackup)
         CrashReportManager.configure()
+        // Off-main: the first ubiquity-daemon round-trip must not land inside a view
+        // body (see `LibraryStorage.isICloudAvailable`).
+        LibraryStorage.warmICloudAvailability()
     }
 
     var body: some Scene {

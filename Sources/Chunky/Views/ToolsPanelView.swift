@@ -16,7 +16,7 @@ struct ToolsPanelView: View {
         NavigationStack {
             List {
                 #if os(iOS)
-                Section {
+                Section("Schermo") {
                     HStack {
                         Image(systemName: "sun.min")
                             .foregroundColor(.secondary)
@@ -28,28 +28,32 @@ struct ToolsPanelView: View {
                 }
                 #endif
 
-                Section {
-                    NavigationLink("Colori", destination: ColorThemeView())
-                    NavigationLink("Impostazioni", destination: SettingsView())
-                    NavigationLink("Blocco genitori", destination: ParentalLockSettingsView())
+                Section("Personalizza") {
+                    NavigationLink(destination: ColorThemeView()) {
+                        Label("Colori", systemImage: "paintpalette")
+                    }
+                    NavigationLink(destination: SettingsView()) {
+                        Label("Impostazioni", systemImage: "gear")
+                    }
+                    NavigationLink(destination: ParentalLockSettingsView()) {
+                        Label("Blocco genitori", systemImage: "lock")
+                    }
                 }
 
                 Section {
                     Button(action: sendFeedbackEmail) {
-                        HStack {
-                            Text("Feedback / Segnala un problema")
-                            Spacer()
-                            Image(systemName: "envelope")
-                        }
+                        Label("Feedback / Segnala un problema", systemImage: "envelope")
+                            .foregroundColor(.primary)
                     }
-                    .foregroundColor(.primary)
                 }
 
-                Section {
-                    NavigationLink("Informazioni", destination: AboutView())
+                Section("Info") {
+                    NavigationLink(destination: AboutView()) {
+                        Label("Informazioni", systemImage: "info.circle")
+                    }
                 }
             }
-            .navigationTitle("Tools")
+            .navigationTitle("Strumenti")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif

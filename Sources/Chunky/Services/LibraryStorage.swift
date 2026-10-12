@@ -19,13 +19,44 @@ enum LibraryStorage {
     /// True if the user has iCloud Drive active and the app's ubiquity container is reachable:
     /// in that case imported comics automatically sync across all devices.
     ///
+    /// Cached: `url(forUbiquityContainerIdentifier:)` can block the calling thread
+    /// (IPC to the ubiquity daemon), so calling it inside a view body on every
+    /// evaluation stalled the Settings panels. Refreshed at most every minute;
+    /// availability doesn't flap faster than that in practice.
     /// Always false on tvOS: no Files app/iCloud Drive there, and the entitlements lack
     /// `CloudDocuments` — querying the container hung the main thread at launch on a real Apple TV.
     static var isICloudAvailable: Bool {
         #if os(tvOS)
         false
         #else
-        FileManager.default.url(forUbiquityContainerIdentifier: ubiquityContainerID) != nil
+        availabilityLock.lock()
+        if let cached = cachedAvailability,
+           Date().timeIntervalSince(cachedAvailabilityAt) < availabilityRefreshInterval {
+            availabilityLock.unlock()
+            return cached
+        }
+        availabilityLock.unlock()
+        let available = FileManager.default.url(forUbiquityContainerIdentifier: ubiquityContainerID) != nil
+        availabilityLock.lock()
+        cachedAvailability = available
+        cachedAvailabilityAt = Date()
+        availabilityLock.unlock()
+        return available
+        #endif
+    }
+
+    nonisolated(unsafe) private static var cachedAvailability: Bool?
+    nonisolated(unsafe) private static var cachedAvailabilityAt = Date.distantPast
+    private static let availabilityLock = NSLock()
+    private static let availabilityRefreshInterval: TimeInterval = 60
+
+    /// Warms `isICloudAvailable` off the main thread so the first panel that reads it
+    /// never pays the daemon round-trip. Safe to call repeatedly (the TTL applies).
+    static func warmICloudAvailability() {
+        #if !os(tvOS)
+        DispatchQueue.global(qos: .utility).async {
+            _ = isICloudAvailable
+        }
         #endif
     }
 
