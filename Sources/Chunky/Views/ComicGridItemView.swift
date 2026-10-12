@@ -7,10 +7,14 @@ import SwiftUI
 /// piece for callers that just need a static cover+title, e.g. `ReaderView`'s "up next" card.
 struct ComicGridItemView: View {
     @ObservedObject var comic: ComicEntity
+    /// False nella cella libreria (iOS/macOS): lì il badge iCloud statico è sostituito
+    /// dal controllo download live in overlay (`RemoteDownloadControl`), altrimenti la
+    /// nuvoletta comparirebbe due volte nello stesso angolo.
+    var showsPendingDownloadBadge = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ComicCoverView(comic: comic)
+            ComicCoverView(comic: comic, showsPendingDownloadBadge: showsPendingDownloadBadge)
             Text(comic.title ?? "Senza titolo")
                 .font(.caption.bold())
                 .lineLimit(2)
@@ -24,6 +28,8 @@ struct ComicGridItemView: View {
 /// sibling outside it. See `ComicGridItemView`'s doc comment for why.
 struct ComicCoverView: View {
     @ObservedObject var comic: ComicEntity
+    /// Vedi `ComicGridItemView.showsPendingDownloadBadge`.
+    var showsPendingDownloadBadge = true
     /// Single source of truth for the "to download" badge: a live library-level `NSMetadataQuery`,
     /// so the badge updates on its own when the download finishes instead of depending on
     /// a grid redraw triggered for other reasons.
@@ -104,7 +110,7 @@ struct ComicCoverView: View {
     /// with no clear reason why.
     @ViewBuilder
     private var pendingDownloadBadge: some View {
-        if isPendingDownload {
+        if showsPendingDownloadBadge && isPendingDownload {
             badge(systemImage: "icloud.and.arrow.down", foreground: .white, background: Color.black.opacity(0.5))
         }
     }

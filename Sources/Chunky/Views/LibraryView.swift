@@ -958,7 +958,7 @@ private struct ComicCell: View {
         }
         #else
         Button(action: onSelect) {
-            ComicGridItemView(comic: comic)
+            ComicGridItemView(comic: comic, showsPendingDownloadBadge: false)
                 .overlay(selectionBadge, alignment: .topLeading)
                 .contentShape(Rectangle())
                 .contextMenu { cellMenu }
