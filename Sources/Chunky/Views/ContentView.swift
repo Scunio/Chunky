@@ -161,12 +161,13 @@ struct ContentView: View {
     private func syncSyncFolderIfNeeded() {
         #if os(tvOS)
         // No ubiquity container on tvOS, so synced-but-fileless comics would linger forever.
-        viewModel.rebuildLibrary(context: context)
+        viewModel.rebuildLibrary(context: context, cloudKnownPaths: [])
         #else
         guard isSyncFolderEnabled, LibraryStorage.isICloudAvailable else { return }
-        // I path visti da `NSMetadataQuery` impediscono al rebuild di cancellare ciò che
-        // esiste su iCloud ma non (ancora/più) in locale (download/eviction in corso).
-        viewModel.rebuildLibrary(context: context, cloudKnownPaths: tracker.allRelativePaths)
+        // `nil` finché la query sta ancora censendo (avvio a freddo, dopo un
+        // aggiornamento di iOS): il rebuild aggiunge soltanto, senza cancellare ciò che
+        // in cloud esiste ma in locale non si vede ancora.
+        viewModel.rebuildLibrary(context: context, cloudKnownPaths: tracker.trustedPathsForRebuild)
         #endif
     }
 

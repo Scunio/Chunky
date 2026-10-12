@@ -23,6 +23,26 @@ final class ICloudDownloadTracker: ObservableObject {
     /// "to download" badge already enumerates everything needed.
     @Published private(set) var allRelativePaths: Set<String> = []
 
+    /// True once `NSMetadataQuery` has delivered its first full gathering: before that
+    /// `allRelativePaths` is still filling up and must not be trusted for deletions —
+    /// right after an OS update or a cold start the container can take a while to
+    /// reconcile, and an empty set then means "unknown", not "nothing in the cloud".
+    @Published private(set) var hasCompletedInitialGather = false
+
+    /// Paths the rebuild may trust for deletions, or nil when the iCloud state is still
+    /// unknown: a known-empty set authorizes cleanup (local library, tvOS), nil forces
+    /// the rebuild into add-only mode. Callers must use this, never `allRelativePaths`
+    /// directly.
+    var trustedPathsForRebuild: Set<String>? {
+        #if os(tvOS)
+        return []
+        #else
+        guard LibraryStorage.isICloudAvailable else { return [] }
+        guard hasCompletedInitialGather else { return nil }
+        return allRelativePaths
+        #endif
+    }
+
     private let query = NSMetadataQuery()
     private var isRunning = false
 
@@ -39,7 +59,7 @@ final class ICloudDownloadTracker: ObservableObject {
         query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
         query.operationQueue = .main
         NotificationCenter.default.addObserver(self, selector: #selector(handleUpdate), name: .NSMetadataQueryDidUpdate, object: query)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleUpdate), name: .NSMetadataQueryDidFinishGathering, object: query)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleFinishGathering), name: .NSMetadataQueryDidFinishGathering, object: query)
         query.start()
     }
 
@@ -52,6 +72,13 @@ final class ICloudDownloadTracker: ObservableObject {
         // observations registered elsewhere on the same object.
         NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidUpdate, object: query)
         NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidFinishGathering, object: query)
+    }
+
+    @objc private func handleFinishGathering() {
+        if !hasCompletedInitialGather {
+            hasCompletedInitialGather = true
+        }
+        handleUpdate()
     }
 
     @objc private func handleUpdate() {

@@ -23,6 +23,7 @@ struct DiagnosticsView: View {
 struct DiagnosticsSections: View {
     @Environment(\.managedObjectContext) private var context
     @EnvironmentObject private var viewModel: LibraryViewModel
+    @ObservedObject private var tracker = ICloudDownloadTracker.shared
     /// Tail shown on screen: laying out the full (up to 512KB) log as one `Text`
     /// stalled opening and scrolling the panel. Copy/Share still use the full log.
     @State private var logText = DiagnosticLog.tail()
@@ -34,13 +35,13 @@ struct DiagnosticsSections: View {
         Group {
             Section(
                 header: Text("Libreria"),
-                footer: Text("Rimuove i fumetti i cui file non esistono più e ritrova quelli presenti nella cartella della libreria ma non registrati (utile dopo un ripristino da backup).")
+                footer: Text("Rimuove i fumetti i cui file non esistono più e ritrova quelli presenti nella cartella della libreria ma non registrati (utile dopo un ripristino da backup). Se iCloud sta ancora sincronizzando, rimuove solo ciò che è certo e si limita ad aggiungere.")
             ) {
                 // Mai disabilitato durante gli import: il rebuild va in coda seriale
                 // con gli altri lavori e parte da solo; disabilitarlo lo faceva
                 // sembrare morto proprio mentre serviva (es. pre-cache in corso).
                 // Il banner di stato conferma il tap anche se parte dopo.
-                Button(action: { viewModel.rebuildLibrary(context: context) }) {
+                Button(action: { viewModel.rebuildLibrary(context: context, cloudKnownPaths: tracker.trustedPathsForRebuild) }) {
                     Label("Ricostruisci libreria", systemImage: "arrow.triangle.2.circlepath")
                 }
             }

@@ -353,6 +353,33 @@ final class LibraryViewModel: ObservableObject {
         }
     }
 
+    /// Like `enqueue`, but also raises the loading banner atomically with the queueing.
+    /// A trigger coalesced while one is already waiting must not create a banner of its
+    /// own: its `endStatus` would never run and the label would stay on screen forever —
+    /// that's how "Ricostruzione libreria…" got stuck after resync bursts (foreground +
+    /// periodic rescan + tracker updates) piled onto a busy queue.
+    private func enqueueShowingStatus(_ kind: ScanKind, _ text: String, _ work: @escaping () -> Void) {
+        pendingLock.lock()
+        guard !pendingScans.contains(kind) else {
+            pendingLock.unlock()
+            return
+        }
+        pendingScans.insert(kind)
+        nextStatusToken += 1
+        let token = nextStatusToken
+        statusStack.append((token: token, text: text))
+        pendingLock.unlock()
+        publishStatus(text)
+
+        workQueue.async { [weak self] in
+            self?.pendingLock.lock()
+            self?.pendingScans.remove(kind)
+            self?.pendingLock.unlock()
+            work()
+            self?.endStatus(token: token)
+        }
+    }
+
     /// Registers in the library the comics dropped into the app's Documents folder from the
     /// Finder (`UIFileSharingEnabled`, device connected via USB → "Files" tab) or from Files.
     ///
@@ -406,21 +433,27 @@ final class LibraryViewModel: ObservableObject {
     /// `cloudKnownPaths` (relative paths che `NSMetadataQuery` vede nel container iCloud)
     /// impedisce di cancellare ciò che esiste in cloud ma non (ancora/più) in locale:
     /// durante download, eviction o riconciliazione `fileExists` mente in transitorio.
-    func rebuildLibrary(context: NSManagedObjectContext, cloudKnownPaths: Set<String> = []) {
+    /// `nil` (default) = stato iCloud ancora sconosciuto (query in gathering dopo un
+    /// aggiornamento o un avvio a freddo): le cancellazioni si saltano, solo aggiunte.
+    /// Usare `tracker.trustedPathsForRebuild`, mai `allRelativePaths` direttamente: un set
+    /// vuoto significa "noto vuoto", `nil` "sconosciuto, non cancellare".
+    func rebuildLibrary(context: NSManagedObjectContext, cloudKnownPaths: Set<String>? = nil) {
         // Banner subito, lavoro in coda: se la coda è occupata (es. pre-cache),
         // l'utente vede che il tap è stato preso invece di un bottone muto.
-        let token = beginStatus("Ricostruzione libreria…")
+        // Atomico con l'accodamento (vedi `enqueueShowingStatus`): un banner creato
+        // per un trigger poi accorpato non verrebbe mai spento.
         let backgroundContext = sharedScanContext(for: context)
-        enqueue(.rebuild) { [weak self] in
+        enqueueShowingStatus(.rebuild, "Ricostruzione libreria…") { [weak self] in
             self?.performRebuildLibrary(in: backgroundContext, cloudKnownPaths: cloudKnownPaths)
-            self?.endStatus(token: token)
         }
     }
 
-    func performRebuildLibrary(in context: NSManagedObjectContext, cloudKnownPaths: Set<String> = []) {
+    func performRebuildLibrary(in context: NSManagedObjectContext, cloudKnownPaths: Set<String>? = nil) {
         var removedCount = 0
         var keptCloudOnlyCount = 0
         var knownPaths: Set<String> = []
+        // Solo un set noto autorizza le cancellazioni; con `nil` è censimento soltanto.
+        let deletionsAllowed = cloudKnownPaths != nil
         context.performAndWait {
             // Prima gli orfani (segnaposto di account eliminati, che il ciclo sotto
             // salterebbe come tutti i placeholder): senza questo Ricostruisci
@@ -445,6 +478,12 @@ final class LibraryViewModel: ObservableObject {
                     continue
                 }
                 let path = comic.relativePath ?? ""
+                // Stato cloud sconosciuto: censimento soltanto, mai cancellare — cancellare
+                // qui svuoterebbe la libreria a ogni avvio a freddo finché iCloud riconcilia.
+                guard deletionsAllowed else {
+                    knownPaths.insert(path)
+                    continue
+                }
                 let url = LibraryStorage.fileURL(forRelativePath: path)
                 let existsLocally = !path.isEmpty && FileManager.default.fileExists(atPath: url.path)
                 // Mai cancellare ciò che esiste su iCloud ma non (ancora/più) in locale:
@@ -452,7 +491,7 @@ final class LibraryViewModel: ObservableObject {
                 // transitorio, e cancellare qui innesca il loop togli/rimetti (la fase 2
                 // ri-registra da zero appena il file ricompare, col progresso azzerato).
                 // Solo ciò che manca sia in locale che in cloud è davvero sparito.
-                if !existsLocally && (path.isEmpty || !cloudKnownPaths.contains(path)) {
+                if !existsLocally && (path.isEmpty || !(cloudKnownPaths?.contains(path) ?? false)) {
                     let identifier = comic.objectID.uriRepresentation().absoluteString
                     context.delete(comic)
                     removedCount += 1
@@ -491,6 +530,9 @@ final class LibraryViewModel: ObservableObject {
             context.performAndWait { try? context.save() }
         }
 
+        if !deletionsAllowed {
+            DiagnosticLog.log("Rebuild library: stato iCloud sconosciuto, nessuna cancellazione (solo aggiunte)")
+        }
         if removedCount > 0 || !unknownComicFiles.isEmpty {
             let elapsed = Self.formatted(duration: Date().timeIntervalSince(startedAt))
             DiagnosticLog.log("Rebuild library: rimossi \(removedCount), ritrovati \(unknownComicFiles.count) in \(elapsed)")

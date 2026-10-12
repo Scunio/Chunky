@@ -556,6 +556,11 @@ enum RemoteProgressSync {
                     DiagnosticLog.log("RemoteProgress zona non creata: \(error.localizedDescription)")
                     return
                 }
+                // Ricreare la zona invalida anche la subscription ai suoi cambi (es. zona
+                // persa dopo un aggiornamento di iOS o un ripristino): la si ricrea, così
+                // i push realtime ripartono invece di restare muti col flag già salvato.
+                UserDefaults.standard.set(false, forKey: RemoteProgressSync.subscriptionSavedKey)
+                saveSubscription()
                 completion()
             }
             database.add(operation)
