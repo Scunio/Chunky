@@ -536,7 +536,7 @@ struct ReaderContentView: View {
             guard let provider = provider else { return }
             comic.lastReadPage = Int32(min(max(newValue, 0), provider.pageCount - 1))
             comic.dateLastOpened = Date()
-            scheduleProgressSave()
+            scheduleProgressSave(page: Int(comic.lastReadPage))
             // Cross-device progress for remote-library comics (no-op for local ones):
             // `Task { @MainActor in }` because `onChange` is a synchronous context.
             Task { @MainActor in RemoteProgressSync.requestPush(comic) }
@@ -1284,16 +1284,19 @@ struct ReaderContentView: View {
     /// CloudKit export transaction) per `progressSaveInterval`, with the trailing edge
     /// scheduled. The in-memory `lastReadPage` is already current — this only paces the
     /// persistence/export. Crash window: at most `progressSaveInterval` of progress.
-    private func scheduleProgressSave() {
+    /// Each actual save is logged so Diagnostica can show who wrote which page last.
+    private func scheduleProgressSave(page: Int) {
         if Date().timeIntervalSince(lastProgressSave) >= Self.progressSaveInterval {
             lastProgressSave = Date()
             try? context.save()
+            DiagnosticLog.log("Progresso salvato: pagina \(page + 1) (\(comic.title ?? "fumetto"))")
             return
         }
         pendingProgressSave?.cancel()
         let work = DispatchWorkItem {
             lastProgressSave = Date()
             try? context.save()
+            DiagnosticLog.log("Progresso salvato: pagina \(page + 1) (\(self.comic.title ?? "fumetto"))")
         }
         pendingProgressSave = work
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.progressSaveInterval, execute: work)
@@ -1307,6 +1310,7 @@ struct ReaderContentView: View {
         if context.hasChanges {
             lastProgressSave = Date()
             try? context.save()
+            DiagnosticLog.log("Progresso salvato all'uscita: pagina \(Int(comic.lastReadPage) + 1) (\(comic.title ?? "fumetto"))")
         }
         RemoteProgressSync.flushPush()
     }
@@ -1325,6 +1329,7 @@ struct ReaderContentView: View {
             if pendingRemotePage != nil { pendingRemotePage = nil }
             return
         }
+        DiagnosticLog.log("Progresso remoto ricevuto: pagina \(target + 1) (\(comic.title ?? "fumetto"))")
         pendingRemotePage = target
     }
 
@@ -1689,6 +1694,7 @@ struct ReaderContentView: View {
                     if comic.pageCount == 0 {
                         comic.pageCount = Int32(loaded.pageCount)
                         try? context.save()
+                        DiagnosticLog.log("Metadati completati: \(loaded.pageCount) pagine, posizione salvata \(Int(comic.lastReadPage) + 1) (\(comic.title ?? "fumetto"))")
                     }
                 }
             } catch {

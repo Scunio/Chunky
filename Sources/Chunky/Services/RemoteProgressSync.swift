@@ -533,7 +533,8 @@ enum RemoteProgressSync {
                 DiagnosticLog.log("CloudKit account: non verificabile (build senza entitlement)")
                 return
             }
-            CKContainer(identifier: RemoteProgressSync.containerIdentifier).accountStatus { status, error in
+            let container = CKContainer(identifier: RemoteProgressSync.containerIdentifier)
+            container.accountStatus { status, error in
                 if let error {
                     DiagnosticLog.log("CloudKit account: errore verifica (\(error.localizedDescription))")
                     return
@@ -543,12 +544,25 @@ enum RemoteProgressSync {
                     DiagnosticLog.log("CloudKit account: disponibile")
                 case .noAccount:
                     DiagnosticLog.log("CloudKit account: nessun account iCloud su questo device")
+                    return
                 case .restricted:
                     DiagnosticLog.log("CloudKit account: con restrizioni")
+                    return
                 case .couldNotDetermine:
                     DiagnosticLog.log("CloudKit account: non determinabile")
+                    return
                 @unknown default:
                     DiagnosticLog.log("CloudKit account: stato sconosciuto")
+                    return
+                }
+                // Opaque per-account identifier (local log only): equal on two devices
+                // means the same iCloud account, which is what mirrored sync requires.
+                container.fetchUserRecordID { recordID, error in
+                    if let recordID {
+                        DiagnosticLog.log("CloudKit utente: \(recordID.recordName)")
+                    } else if let error {
+                        DiagnosticLog.log("CloudKit utente: non leggibile (\(error.localizedDescription))")
+                    }
                 }
             }
         }
