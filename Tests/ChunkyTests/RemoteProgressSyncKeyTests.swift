@@ -124,6 +124,31 @@ struct RemoteProgressSyncKeyTests {
         #expect(RemoteProgressSyncKey.recordName(forProgressKey: key + "x") != first)
     }
 
+    @Test("Chiave libreria iCloud: disgiunta dalle chiavi remote")
+    func localLibraryKeyIsDisjoint() throws {
+        let context = try TestStore.makeContext()
+        let remote = try #require(RemoteProgressSyncKey.descriptor(for: smbAccount(in: context)))
+        let remoteProgress = RemoteProgressSyncKey.progressKey(
+            accountSyncKey: RemoteProgressSyncKey.accountSyncKey(for: remote),
+            serverPath: "/Topolino.cbz"
+        )
+        let localProgress = RemoteProgressSyncKey.progressKey(
+            accountSyncKey: RemoteProgressSync.localLibrarySyncKey, serverPath: "Topolino.cbz"
+        )
+        #expect(localProgress != remoteProgress)
+        #expect(
+            RemoteProgressSyncKey.recordName(forProgressKey: localProgress)
+                != RemoteProgressSyncKey.recordName(forProgressKey: remoteProgress)
+        )
+        #expect(
+            RemoteProgressSyncKey.recordName(
+                forProgressKey: RemoteProgressSyncKey.progressKey(
+                    accountSyncKey: RemoteProgressSync.localLibrarySyncKey, serverPath: "Topolino.cbz"
+                )
+            ) == RemoteProgressSyncKey.recordName(forProgressKey: localProgress)
+        )
+    }
+
     @Test("Override vuoto o assente: vale la chiave derivata")
     func emptyOverrideFallsBackToDerived() throws {
         let context = try TestStore.makeContext()

@@ -18,6 +18,7 @@ struct ICloudStatusView: View {
 /// tab of Mac Preferences as well as shown standalone on iOS (`ICloudStatusView` above).
 struct ICloudStatusSections: View {
     @FetchRequest(sortDescriptors: []) private var comics: FetchedResults<ComicEntity>
+    @Environment(\.managedObjectContext) private var context
 
     private var isActive: Bool { LibraryStorage.isICloudAvailable }
 
@@ -44,22 +45,27 @@ struct ICloudStatusSections: View {
                 )
             ) { EmptyView() }
             Section(
-                footer: Text("Solo i progressi di lettura viaggiano via iCloud (i file restano sul server): funziona anche su Apple TV e senza iCloud Drive, basta l'account iCloud.")
+                footer: Text("Invia subito i progressi di questo device e scarica quelli degli altri (anche i fumetti iCloud, non solo remoti).")
             ) {
                 RemoteProgressSyncToggle()
+                Button("Sincronizza ora") {
+                    RemoteProgressSync.flushPush()
+                    RemoteProgressSync.fetchAndApply(in: context, force: true)
+                }
             }
         }
     }
 }
 
-/// Shared toggle for remote-library progress sync (Infuse-style): one component used by
-/// iOS/macOS (`ICloudStatusSections` above) and tvOS (`TVSettingsView`), so the setting
-/// can't drift between platforms. Reads the same key as `RemoteProgressSync.isEnabled`.
+/// Shared toggle for progress sync (remote-library and iCloud-library alike): one
+/// component used by iOS/macOS (`ICloudStatusSections` above) and tvOS
+/// (`TVSettingsView`), so the setting can't drift between platforms. Reads the same
+/// key as `RemoteProgressSync.isEnabled`.
 struct RemoteProgressSyncToggle: View {
     @AppStorage(RemoteProgressSync.enabledDefaultsKey) private var isEnabled = true
 
     var body: some View {
-        Toggle("Sincronizza progressi remoti", isOn: $isEnabled)
+        Toggle("Sincronizza progressi di lettura", isOn: $isEnabled)
     }
 }
 

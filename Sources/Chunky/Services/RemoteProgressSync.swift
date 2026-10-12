@@ -9,11 +9,18 @@ import Security
 import UIKit
 #endif
 
-/// Syncs reading progress of remote-library comics (SMB/WebDAV/OPDS) across devices,
-/// Infuse-style: files stay on the share, only lightweight progress records travel via
-/// the app's CloudKit private database.
+/// Syncs reading progress across devices, Infuse-style: only lightweight progress
+/// records travel via the app's CloudKit private database.
+/// Two populations share this engine and its zone:
+/// - remote-library comics (SMB/WebDAV/OPDS): files stay on the share, keyed by
+///   `RemoteProgressSyncKey` (deterministic on every device);
+/// - iCloud-library comics: files already sync via Drive in the shared ubiquity
+///   container, so `relativePath` is identical on every device and needs no pairing —
+///   the key is `localLibrarySyncKey` + `relativePath`. This covers what the Core Data
+///   mirror can't: near-realtime progress (~10s + manual flush/fetch) instead of
+///   Apple's opaque minute-scale latency, with logs showing who wrote which page last.
 ///
-/// Why a separate mechanism instead of the existing Core Data mirroring:
+/// Why a separate mechanism instead of relying on the existing Core Data mirroring:
 /// remote-sourced comics live in the local-only store that is never mirrored
 /// (`ComicEntity.create`), and their `sourceAccountID` is a per-device random UUID that
 /// cannot match anywhere else. So progress travels as explicit `CKRecord`s keyed by
@@ -46,6 +53,10 @@ enum RemoteProgressSync {
     static let recordType = "RemoteReadingProgress"
     static let defaultsTokenKey = "ckRemoteProgressZoneToken"
     static let enabledDefaultsKey = "remoteProgressSyncEnabled"
+    /// Sync key for iCloud-library comics (see the enum docs). Disjoint by construction
+    /// from every remote key: derived ones start with `smb/`, `webdav/` or `opds/`,
+    /// manual overrides with `custom/`.
+    static let localLibrarySyncKey = "icloud-library"
 
     /// Manual pairing-key override, stored in UserDefaults per account UUID — deliberately
     /// *not* a Core Data attribute, so adding it needs no model migration (and it never
@@ -107,10 +118,35 @@ enum RemoteProgressSync {
         let deviceName: String
     }
 
-    /// Builds a pushable snapshot, or nil when this comic must not sync (not from a
-    /// remote account, account gone, or unresolvable server path — all fail-closed).
+    /// Builds a pushable snapshot, or nil when this comic must not sync (remote comic
+    /// with gone account or unresolvable server path — all fail-closed).
     @MainActor
     static func snapshot(of comic: ComicEntity) -> Snapshot? {
+        if comic.sourceAccountID != nil {
+            return remoteSnapshot(of: comic)
+        }
+        // iCloud-library comic: no account to resolve, `relativePath` is the key.
+        guard let relativePath = comic.relativePath, !relativePath.isEmpty else { return nil }
+        let progressKey = RemoteProgressSyncKey.progressKey(accountSyncKey: localLibrarySyncKey, serverPath: relativePath)
+        return Snapshot(
+            recordName: RemoteProgressSyncKey.recordName(forProgressKey: progressKey),
+            accountSyncKey: localLibrarySyncKey,
+            serverPath: relativePath,
+            lastReadPage: Int(comic.lastReadPage),
+            pageCount: Int(comic.pageCount),
+            // `dateLastOpened` is the local progress clock (touched on every page turn):
+            // an explicit "mark unread" nils it, and `Date()` then propagates the reset
+            // as newer than any previous record instead of losing to it.
+            updatedAt: comic.dateLastOpened ?? Date(),
+            title: comic.title ?? "",
+            deviceName: currentDeviceName
+        )
+    }
+
+    /// Snapshot for a remote-account comic (see the enum docs for why these need
+    /// a derived account identity instead of `relativePath`).
+    @MainActor
+    private static func remoteSnapshot(of comic: ComicEntity) -> Snapshot? {
         guard let context = comic.managedObjectContext,
               let sourceAccountID = comic.sourceAccountID,
               let sourceAbsoluteString = comic.sourceRelativePath,
@@ -142,7 +178,8 @@ enum RemoteProgressSync {
         )
     }
 
-    /// Enqueues a push for remote comics (silently ignores anything else). Debounced per
+    /// Enqueues a push for comics with syncable progress (remote and iCloud-library;
+    /// anything else is silently ignored). Debounced per
     /// record (~10s): page turns already arrive throttled from the reader, this only
     /// coalesces bursts (bulk status changes, multi-window Mac).
     @MainActor
@@ -508,14 +545,17 @@ enum RemoteProgressSync {
             }
             lastFetch = Date()
             lock.unlock()
-            // No remote accounts → no local comics can ever match a record: skip before
-            // touching CloudKit at all. Besides saving pointless traffic for account-less
+            // No remote accounts and no local comics → no record can ever match: skip
+            // before touching CloudKit at all. Besides saving pointless traffic for empty
             // libraries, this keeps entitlement-less builds (UI tests) off CloudKit APIs
             // entirely — `CKContainer(identifier:)` traps instead of failing there.
+            // (iCloud-library comics match by filename with no account involved, so the
+            // gate must count them too, not just remote accounts.)
             // `perform` (not `performAndWait`): safe from any thread, no deadlock risk.
             context.perform {
                 let accountCount = (try? context.count(for: RemoteAccountEntity.fetchRequest())) ?? 0
-                guard accountCount > 0 else { return }
+                let comicCount = (try? context.count(for: ComicEntity.fetchRequest())) ?? 0
+                guard accountCount > 0 || comicCount > 0 else { return }
                 queue.async {
                     fetchPage(accumulated: [], thenApplyIn: context)
                 }
@@ -653,6 +693,35 @@ enum RemoteProgressSync {
             }
         }
 
+        /// Matches one iCloud-library record to local comics by `relativePath` (identical
+        /// on every device sharing the ubiquity container) and applies last-writer-wins.
+        /// Remote-account comics are skipped even on a path hit: their progress flows
+        /// through their own account key, never the shared filename.
+        /// Returns the number of comics updated. Runs on the context's queue.
+        @discardableResult
+        private static func applyLocalRecord(
+            recordPath: String, remotePage: Int, remoteUpdatedAt: Date,
+            in context: NSManagedObjectContext
+        ) -> Int {
+            let request = ComicEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "relativePath == %@", recordPath)
+            guard let comics = try? context.fetch(request), !comics.isEmpty else { return 0 }
+            var applied = 0
+            for comic in comics {
+                guard comic.sourceAccountID == nil,
+                      RemoteProgressSyncKey.shouldApply(remoteUpdatedAt: remoteUpdatedAt, localDateLastOpened: comic.dateLastOpened)
+                else { continue }
+                if comic.pageCount > 0 {
+                    comic.lastReadPage = Int32(min(max(remotePage, 0), Int(comic.pageCount) - 1))
+                } else {
+                    comic.lastReadPage = Int32(max(remotePage, 0))
+                }
+                comic.dateLastOpened = remoteUpdatedAt
+                applied += 1
+            }
+            return applied
+        }
+
         /// Matches fetched records to local comics and applies last-writer-wins.
         /// Runs on the context's queue. Returns the number of comics updated.
         @discardableResult
@@ -660,8 +729,10 @@ enum RemoteProgressSync {
             guard !records.isEmpty else { return 0 }
             // Accounts indexed by sync key (computed once): the stored per-device UUIDs
             // can never match across devices, so this is the only join that works.
+            // Empty when there are no remote accounts — iCloud-library records below
+            // don't need accounts, so that's not an early return.
             let accountRequest = RemoteAccountEntity.fetchRequest()
-            guard let accounts = try? context.fetch(accountRequest), !accounts.isEmpty else { return 0 }
+            let accounts = (try? context.fetch(accountRequest)) ?? []
             var accountsByKey: [String: RemoteAccountEntity] = [:]
             var rootsByAccountID: [UUID: String] = [:]
             for account in accounts {
@@ -676,8 +747,18 @@ enum RemoteProgressSync {
             var applied = 0
             for record in records {
                 guard let recordKey = record["accountSyncKey"] as? String,
-                      let recordPath = record["serverPath"] as? String,
-                      let account = accountsByKey[recordKey],
+                      let recordPath = record["serverPath"] as? String
+                else { continue }
+                let remotePage = (record["lastReadPage"] as? NSNumber)?.intValue ?? 0
+                let remoteUpdatedAt = record["updatedAt"] as? Date ?? .distantPast
+                if recordKey == RemoteProgressSync.localLibrarySyncKey {
+                    applied += applyLocalRecord(
+                        recordPath: recordPath, remotePage: remotePage,
+                        remoteUpdatedAt: remoteUpdatedAt, in: context
+                    )
+                    continue
+                }
+                guard let account = accountsByKey[recordKey],
                       let accountID = account.id,
                       let root = rootsByAccountID[accountID]
                 else { continue }
@@ -686,8 +767,6 @@ enum RemoteProgressSync {
                     comicRequest.predicate = NSPredicate(format: "sourceAccountID == %@", accountID as CVarArg)
                     comicsByAccount[accountID] = (try? context.fetch(comicRequest)) ?? []
                 }
-                let remotePage = (record["lastReadPage"] as? NSNumber)?.intValue ?? 0
-                let remoteUpdatedAt = record["updatedAt"] as? Date ?? .distantPast
                 for comic in comicsByAccount[accountID] ?? [] {
                     guard let source = comic.sourceRelativePath,
                           RemoteProgressSyncKey.serverPath(rootAbsoluteString: root, sourceAbsoluteString: source) == recordPath,
