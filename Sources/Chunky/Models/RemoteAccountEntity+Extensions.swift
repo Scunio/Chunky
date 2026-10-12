@@ -124,7 +124,10 @@ extension RemoteAccountEntity {
         preCacheCoversEnabled: Bool = true,
         in context: NSManagedObjectContext
     ) -> RemoteAccountEntity {
-        let account = RemoteAccountEntity(context: context)
+        // Come in `ComicEntity.create`: risoluzione nel modello del context, mai globale.
+        guard let account = NSEntityDescription.insertNewObject(forEntityName: "RemoteAccountEntity", into: context) as? RemoteAccountEntity else {
+            fatalError("RemoteAccountEntity non trovata nel modello del context")
+        }
         let newID = UUID()
         account.id = newID
         account.kindRawValue = kind.rawValue

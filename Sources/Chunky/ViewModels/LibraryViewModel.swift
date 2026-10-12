@@ -61,10 +61,48 @@ final class LibraryViewModel: ObservableObject {
                 self.importSingleFile(url, into: backgroundContext, saveImmediately: urls.count == 1)
             }
             if urls.count > 1 {
-                backgroundContext.performAndWait { try? backgroundContext.save() }
+                Self.saveBatchResolvingConflicts(in: backgroundContext)
             }
             self.deduplicateComics(in: backgroundContext)
             self.backfillSeriesNames(in: backgroundContext)
+        }
+    }
+
+    /// Batch save that survives a `relativePath` uniqueness conflict (modello v3): a CloudKit import
+    /// may have registered the same path while the batch was being analyzed. Without this, one
+    /// conflict fails the whole batch — and the conflicting inserts stay in the context, failing
+    /// every later save too. Drops our still-unsaved inserts shadowed by a persisted record (temporary
+    /// vs permanent `objectID` tells them apart) and retries once.
+    static func saveBatchResolvingConflicts(in context: NSManagedObjectContext) {
+        context.performAndWait {
+            do {
+                try context.save()
+                return
+            } catch {
+                let inserted = context.insertedObjects.compactMap { $0 as? ComicEntity }
+                guard !inserted.isEmpty else {
+                    DiagnosticLog.log("Salvataggio batch fallito: \(error.localizedDescription)")
+                    return
+                }
+                let paths = Set(inserted.compactMap(\.relativePath))
+                let request = ComicEntity.fetchRequest()
+                request.predicate = NSPredicate(format: "relativePath IN %@", Array(paths))
+                request.shouldRefreshRefetchedObjects = true
+                let persistedPaths = Set((try? context.fetch(request))?.filter { !$0.objectID.isTemporaryID }.compactMap(\.relativePath) ?? [])
+                var dropped = 0
+                for comic in inserted where persistedPaths.contains(comic.relativePath ?? "") {
+                    context.delete(comic)
+                    dropped += 1
+                }
+                do {
+                    try context.save()
+                    if dropped > 0 {
+                        DiagnosticLog.log("Batch: scartati \(dropped) doppioni in conflitto di unicità col mirror")
+                    }
+                } catch {
+                    DiagnosticLog.log("Salvataggio batch fallito: \(error.localizedDescription)")
+                }
+            }
         }
     }
 
@@ -200,7 +238,20 @@ final class LibraryViewModel: ObservableObject {
             comic.pageCount = Int32(pageCount)
             comic.coverImageData = coverData
             if saveImmediately {
-                try? context.save()
+                do {
+                    try context.save()
+                } catch {
+                    // Vincolo di unicità (modello v3): il mirror può aver registrato lo stesso path
+                    // tra il controllo e il save. L'oggetto appena creato è il doppione: va scartato,
+                    // non lasciato nel context — un insert non salvato resterebbe lì a far fallire ogni
+                    // save successivo, oltre a comparire nelle fetch come fantasma.
+                    context.delete(comic)
+                    if isRegisteredWithinContext(relativePath: relativePath, in: context) {
+                        DiagnosticLog.log("Registrazione \"\(title)\": path già presente (conflitto di unicità), scarto il doppione")
+                    } else {
+                        DiagnosticLog.log("Registrazione \"\(title)\" fallita: \(error.localizedDescription)")
+                    }
+                }
             }
             if isPlaceholder {
                 DiagnosticLog.log("Registrato \"\(title)\" (\(format.rawValue), da scaricare da iCloud)")
@@ -421,7 +472,7 @@ final class LibraryViewModel: ObservableObject {
             registerComic(relativePath: relativePath, format: format, into: context, saveImmediately: newPaths.count == 1)
         }
         if newPaths.count > 1 {
-            context.performAndWait { try? context.save() }
+            Self.saveBatchResolvingConflicts(in: context)
         }
         DiagnosticLog.log("File Sharing: aggiunti \(newPaths.count) fumetti dalla cartella Documents in \(Self.formatted(duration: Date().timeIntervalSince(startedAt)))")
         deduplicateComics(in: context)
@@ -528,7 +579,7 @@ final class LibraryViewModel: ObservableObject {
             registerComic(relativePath: url.lastPathComponent, format: format, into: context, saveImmediately: unknownComicFiles.count == 1)
         }
         if unknownComicFiles.count > 1 {
-            context.performAndWait { try? context.save() }
+            Self.saveBatchResolvingConflicts(in: context)
         }
 
         if !deletionsAllowed {

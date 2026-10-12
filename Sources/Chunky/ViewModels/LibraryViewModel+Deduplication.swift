@@ -10,11 +10,15 @@ extension LibraryViewModel {
     /// NEVER touches the files: there's only one file, and it's the one the duplicate records share.
     ///
     /// Convergenza deterministica, non finestra temporale: il superstite è scelto con
-    /// `precedesAsSurvivor` (identico su ogni device) e il progresso con last-writer-wins su
-    /// `dateLastOpened` (vedi `merge`) — a parità di orologio vince la pagina più avanzata, così
+    /// `ComicEntity.precedesAsSurvivor` (identico su ogni device) e il progresso con last-writer-wins su
+    /// `dateLastOpened` (vedi `absorbLoser`) — a parità di orologio vince la pagina più avanzata, così
     /// due device convergono allo stesso valore anche con gli orologi sfasati. Fondere subito è
     /// sicuro proprio perché il merge è LWW: un progresso più fresco che arriva dopo dal mirror
     /// vince comunque al giro successivo, invece di restare schiacciato da un `max()`.
+    ///
+    /// Backstop, non più prima linea: dal modello v3 `relativePath` ha un vincolo di unicità, quindi
+    /// i duplicati non possono più nascere in locale — resta per i record arrivati via CloudKit
+    /// prima della migrazione e per le convergenze del mirror.
     ///
     /// `awaitRemoteProgress` (solo dal passo dedicato, mai da import/rebuild/test) attende in
     /// modo limitato il sync esplicito prima di fondere, così il merge vede il progresso
@@ -47,12 +51,12 @@ extension LibraryViewModel {
                 // gruppo risultava "recente" per sempre e non si fondeva mai. La freschezza è già
                 // garantita da `waitForRemoteProgress` qui sopra, e il merge LWW sotto rende sicura
                 // la fusione immediata (il più fresco vince comunque, anche se arriva dopo).
-                let ordered = group.sorted(by: Self.precedesAsSurvivor)
+                let ordered = group.sorted(by: ComicEntity.precedesAsSurvivor)
                 guard let survivor = ordered.first else { continue }
                 for loser in ordered.dropFirst() {
                     let survivorBefore = survivor.lastReadPage
                     let loserPage = loser.lastReadPage
-                    Self.merge(loser, into: survivor)
+                    survivor.absorbLoser(loser)
                     if survivor.lastReadPage != survivorBefore {
                         DiagnosticLog.log("Deduplica: \"\(path)\" pagina \(survivorBefore + 1)->\(survivor.lastReadPage + 1) ereditata dal record scartato (aveva \(loserPage + 1))")
                     }
@@ -132,39 +136,5 @@ extension LibraryViewModel {
         }
         return counts.filter { $0.value > 1 }.map(\.key)
     }
-
-    /// Deterministic ordering: `dateAdded` and `id` are synced attributes, so iPad and Mac see
-    /// the same values and pick the same survivor. If they picked different records, each would
-    /// delete the one the other keeps, and the comic would disappear from both.
-    private static func precedesAsSurvivor(_ lhs: ComicEntity, _ rhs: ComicEntity) -> Bool {
-        let leftDate = lhs.dateAdded ?? .distantFuture
-        let rightDate = rhs.dateAdded ?? .distantFuture
-        if leftDate != rightDate { return leftDate < rightDate }
-        return (lhs.id?.uuidString ?? "") < (rhs.id?.uuidString ?? "")
-    }
-
-    /// Merges into the survivor with last-writer-wins on `dateLastOpened`: the freshest read wins,
-    /// even when it's on an earlier page (going back a few pages must not resurrect page 115 over
-    /// page 10). `max()` here was the bug that kept old pages alive: the dedup save — newer as a
-    /// write — was then re-exported by the mirror over the fresh progress. On equal clocks the most
-    /// advanced page wins, so two devices with skewed clocks still converge to the same value.
-    /// Page count, cover, favorite, series and title keep union semantics (worth keeping from either).
-    private static func merge(_ source: ComicEntity, into target: ComicEntity) {
-        let sourceDate = source.dateLastOpened ?? .distantPast
-        let targetDate = target.dateLastOpened ?? .distantPast
-        if sourceDate > targetDate {
-            target.lastReadPage = source.lastReadPage
-            target.dateLastOpened = source.dateLastOpened
-        } else if sourceDate == targetDate {
-            target.lastReadPage = max(target.lastReadPage, source.lastReadPage)
-        }
-        if target.pageCount <= 0 { target.pageCount = source.pageCount }
-        // Safe accessors: a direct `coverImageData` read on a row whose external
-        // sidecar file is missing raises an uncatchable NSException (see
-        // `ComicEntity.safeCoverImageData`) instead of returning nil.
-        if target.safeCoverImageData == nil { target.coverImageData = source.safeCoverImageData }
-        if source.isFavorite { target.isFavorite = true }
-        if (target.seriesName ?? "").isEmpty { target.seriesName = source.seriesName }
-        if (target.title ?? "").isEmpty { target.title = source.title }
-    }
 }
+

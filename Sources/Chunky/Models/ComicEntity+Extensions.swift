@@ -49,6 +49,49 @@ extension ComicEntity {
         pageCount > 0 && lastReadPage >= pageCount - 1
     }
 
+    /// Deterministic survivor ordering, shared by deduplication, progress sync and the
+    /// pre-migration cleanup: `dateAdded` and `id` are synced attributes, so every device
+    /// (and the offline cleanup below) picks the same survivor. If devices picked different
+    /// records, each would delete the one the other keeps and the comic would vanish from both.
+    static func precedesAsSurvivor(_ lhs: ComicEntity, _ rhs: ComicEntity) -> Bool {
+        let leftDate = lhs.dateAdded ?? .distantFuture
+        let rightDate = rhs.dateAdded ?? .distantFuture
+        if leftDate != rightDate { return leftDate < rightDate }
+        return (lhs.id?.uuidString ?? "") < (rhs.id?.uuidString ?? "")
+    }
+
+    /// The survivor of a same-file group, or nil when empty.
+    static func survivor(of comics: [ComicEntity]) -> ComicEntity? {
+        comics.sorted(by: precedesAsSurvivor).first
+    }
+
+    /// Absorbs a same-file duplicate with last-writer-wins on `dateLastOpened`: the freshest read
+    /// wins even on an earlier page (going back must not resurrect old pages). On equal clocks the
+    /// most advanced page wins, so skewed clocks still converge. Count, cover, favorite, series
+    /// and title keep union semantics. Callers delete the loser afterwards.
+    ///
+    /// Single implementation for the live dedup pass and the pre-migration cleanup
+    /// (see `PersistenceController`): both must resolve the same way, or two devices
+    /// collapse the same group differently.
+    func absorbLoser(_ loser: ComicEntity) {
+        let loserDate = loser.dateLastOpened ?? .distantPast
+        let ownDate = dateLastOpened ?? .distantPast
+        if loserDate > ownDate {
+            lastReadPage = loser.lastReadPage
+            dateLastOpened = loser.dateLastOpened
+        } else if loserDate == ownDate {
+            lastReadPage = max(lastReadPage, loser.lastReadPage)
+        }
+        if pageCount <= 0 { pageCount = loser.pageCount }
+        // Safe accessors: a direct `coverImageData` read on a row whose external
+        // sidecar file is missing raises an uncatchable NSException (see
+        // `ComicEntity.safeCoverImageData`) instead of returning nil.
+        if safeCoverImageData == nil { coverImageData = loser.safeCoverImageData }
+        if loser.isFavorite { isFavorite = true }
+        if (seriesName ?? "").isEmpty { seriesName = loser.seriesName }
+        if (title ?? "").isEmpty { title = loser.title }
+    }
+
     @discardableResult
     static func create(
         title: String,
@@ -61,7 +104,13 @@ extension ComicEntity {
         sourceRelativePath: String? = nil,
         in context: NSManagedObjectContext
     ) -> ComicEntity {
-        let comic = ComicEntity(context: context)
+        // `insertNewObject(forEntityName:into:)` invece di `ComicEntity(context:)`: risolve l'entity
+        // nel modello del context, non nel registro globale delle classi — con due versioni del
+        // modello caricate (migrazione v2→v3, test) la risoluzione globale è ambigua
+        // ("Failed to find a unique match") e può legare l'oggetto all'entity sbagliata.
+        guard let comic = NSEntityDescription.insertNewObject(forEntityName: "ComicEntity", into: context) as? ComicEntity else {
+            fatalError("ComicEntity non trovata nel modello del context")
+        }
         comic.id = UUID()
         comic.title = title
         comic.seriesName = seriesName

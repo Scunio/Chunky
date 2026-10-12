@@ -1,4 +1,5 @@
 import CoreData
+import Foundation
 
 struct PersistenceController {
     static let shared = PersistenceController()
@@ -53,6 +54,14 @@ struct PersistenceController {
             let localStoreURL = NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("ChunkyLocal.sqlite")
             localDescription.url = localStoreURL
         }
+        // Migrazione leggera esplicita (v2→v3: vincolo di unicità su `ComicEntity.relativePath`):
+        // i default sarebbero già `true`, ma la migrazione è esattamente ciò da cui dipende
+        // l'avvio dopo questo aggiornamento, quindi meglio non affidarla a un default implicito.
+        // Il vincolo non tocca lo schema CloudKit (è solo locale): nessun passaggio lato server.
+        cloudDescription.shouldMigrateStoreAutomatically = true
+        cloudDescription.shouldInferMappingModelAutomatically = true
+        localDescription.shouldMigrateStoreAutomatically = true
+        localDescription.shouldInferMappingModelAutomatically = true
 
         container.persistentStoreDescriptions.append(localDescription)
 
@@ -111,24 +120,30 @@ struct PersistenceController {
                 continue
             }
 
-            try? FileManager.default.removeItem(at: url)
-            try? FileManager.default.removeItem(at: url.appendingPathExtension("shm"))
-            try? FileManager.default.removeItem(at: url.appendingPathExtension("wal"))
-
-            container.persistentStoreDescriptions = [description]
-            var retryError: Error?
-            let retryGroup = DispatchGroup()
-            retryGroup.enter()
-            container.loadPersistentStores { _, error in
-                retryError = error
-                retryGroup.leave()
+            // Rete di sicurezza prima del fallback distruttivo qui sotto: uno store v2 con duplicati
+            // preesistenti fallisce la migrazione v3 (vincolo di unicità su `relativePath`) e senza
+            // questo passaggio verrebbe cancellato con tutto il progresso. Collassa i duplicati col
+            // modello legacy — stesso LWW della dedup, quindi ogni device sceglie lo stesso superstite —
+            // e riprova: se lo store non è v2 o la causa è un'altra, il cleanup non fa nulla e si
+            // prosegue col fallback esistente.
+            if collapseDuplicatesWithLegacyModel(storeURL: url) {
+                let retryError = scopedLoad(container: container, description: description)
+                if retryError == nil {
+                    DiagnosticLog.log("Migrazione riuscita dopo la pulizia dei duplicati preesistenti")
+                    continue
+                }
+                // Timeout, non fallimento: come nel codice originale, niente cancellazione —
+                // lo store è intatto, è solo la rete/CloudKit ad essere lenta.
+                // (`PersistenceLoadError` ha il solo caso `.timedOut`.)
+                if let retryError, retryError is PersistenceLoadError {
+                    if firstError == nil { firstError = retryError }
+                    continue
+                }
             }
-            if retryGroup.wait(timeout: .now() + loadTimeout) == .timedOut {
-                if firstError == nil { firstError = PersistenceLoadError.timedOut }
-                continue
-            }
 
-            if let retryError {
+            deleteStoreFiles(at: url)
+
+            if let retryError = scopedLoad(container: container, description: description) {
                 DiagnosticLog.log("Retry after deleting store also failed: \((retryError as NSError).localizedDescription)")
                 if firstError == nil { firstError = retryError }
             }
@@ -136,6 +151,91 @@ struct PersistenceController {
         container.persistentStoreDescriptions = allDescriptions
 
         return firstError
+    }
+
+    /// Carica la sola `description` (gli store già caricati non vengono ritentati) e ritorna
+    /// l'eventuale errore. Usato sia dal retry post-cleanup che dal fallback post-cancellazione.
+    private static func scopedLoad(
+        container: NSPersistentCloudKitContainer,
+        description: NSPersistentStoreDescription
+    ) -> Error? {
+        container.persistentStoreDescriptions = [description]
+        var retryError: Error?
+        let retryGroup = DispatchGroup()
+        retryGroup.enter()
+        container.loadPersistentStores { _, error in
+            retryError = error
+            retryGroup.leave()
+        }
+        if retryGroup.wait(timeout: .now() + loadTimeout) == .timedOut {
+            return PersistenceLoadError.timedOut
+        }
+        return retryError
+    }
+
+    private static func deleteStoreFiles(at url: URL) {
+        try? FileManager.default.removeItem(at: url)
+        try? FileManager.default.removeItem(at: url.appendingPathExtension("shm"))
+        try? FileManager.default.removeItem(at: url.appendingPathExtension("wal"))
+    }
+
+    /// Collassa i duplicati per `relativePath` aprendo `storeURL` col modello v2 (senza vincolo di
+    /// unicità) e applicando lo stesso last-writer-wins della dedup (`ComicEntity.absorbLoser`).
+    /// Ritorna true se il cleanup è stato eseguito (store apribile come v2), false se non applicabile
+    /// (store già migrato, corrotto o inesistente: il chiamante prosegue per la sua strada).
+    /// Idempotente e sicuro: senza duplicati apre, non trova nulla e salva niente.
+    @discardableResult
+    static func collapseDuplicatesWithLegacyModel(storeURL: URL) -> Bool {
+        guard let momd = Bundle(for: BundleToken.self).url(forResource: "Chunky", withExtension: "momd"),
+              let legacyModel = NSManagedObjectModel(contentsOf: momd.appendingPathComponent("Chunky 2.mom"))
+        else { return false }
+        let container = NSPersistentContainer(name: "Chunky", managedObjectModel: legacyModel)
+        // Senza migrazione, di proposito: deve aprire solo uno store già v2.
+        // Uno store v3 o corrotto fallisce qui e il cleanup è correttamente non applicabile.
+        let description = NSPersistentStoreDescription(url: storeURL)
+        description.shouldMigrateStoreAutomatically = false
+        description.shouldInferMappingModelAutomatically = false
+        container.persistentStoreDescriptions = [description]
+        // Niente CloudKit: tocca solo righe `ComicEntity`, i metadati del mirror restano intatti
+        // e al prossimo avvio riuscito esportano le tombstone dei perdenti.
+        var loadError: Error?
+        container.loadPersistentStores { _, error in loadError = error }
+        guard loadError == nil else { return false }
+
+        let context = container.viewContext
+        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        var collapsed = 0
+        context.performAndWait {
+            let pathsRequest = NSFetchRequest<NSDictionary>(entityName: "ComicEntity")
+            pathsRequest.resultType = .dictionaryResultType
+            pathsRequest.propertiesToFetch = ["relativePath"]
+            guard let rows = try? context.fetch(pathsRequest) else { return }
+            var counts: [String: Int] = [:]
+            for row in rows {
+                guard let path = row["relativePath"] as? String, !path.isEmpty else { continue }
+                counts[path, default: 0] += 1
+            }
+            let dupPaths = counts.filter { $0.value > 1 }.map(\.key)
+            guard !dupPaths.isEmpty else { return }
+
+            let request = ComicEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "relativePath IN %@", dupPaths)
+            guard let comics = try? context.fetch(request) else { return }
+            for (_, group) in Dictionary(grouping: comics, by: { $0.relativePath ?? "" }) where group.count > 1 {
+                let ordered = group.sorted(by: ComicEntity.precedesAsSurvivor)
+                guard let survivor = ordered.first else { continue }
+                for loser in ordered.dropFirst() {
+                    survivor.absorbLoser(loser)
+                    let identifier = loser.objectID.uriRepresentation().absoluteString
+                    context.delete(loser)
+                    collapsed += 1
+                    ComicTextIndex.deleteIndex(forComicIdentifier: identifier)
+                }
+            }
+            if collapsed > 0 { try? context.save() }
+        }
+        DiagnosticLog.log("Pulizia pre-migrazione: collassati \(collapsed) record duplicati")
+        return true
     }
 }
 

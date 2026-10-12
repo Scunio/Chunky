@@ -20,7 +20,8 @@ struct StableAccountIDTests {
 
     /// Simula un account storico: creato senza passare da `create(...)`, quindi con `id` nil.
     private func legacyAccount(in context: NSManagedObjectContext) -> RemoteAccountEntity {
-        let account = RemoteAccountEntity(context: context)
+        // Insert contestuale (mai `RemoteAccountEntity(context:)`): vedi `ComicEntity.create`.
+        let account = NSEntityDescription.insertNewObject(forEntityName: "RemoteAccountEntity", into: context) as! RemoteAccountEntity
         account.name = "NAS"
         account.serverURLString = "smb://192.168.1.10"
         return account

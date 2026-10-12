@@ -811,17 +811,9 @@ enum RemoteProgressSync {
             request.predicate = NSPredicate(format: "relativePath == %@", recordPath)
             guard let comics = try? context.fetch(request), !comics.isEmpty else { return 0 }
             // I duplicati condividono lo stesso file: ne resta uno solo dopo la dedup, e il
-            // superstite è deterministico (stesso ordinamento di `precedesAsSurvivor`).
+            // superstite è deterministico (`ComicEntity.precedesAsSurvivor`, lo stesso della dedup).
             // `dateAdded` e `id` sono attributi sincronizzati, quindi ogni device sceglie lo stesso.
-            let survivor = comics
-                .filter { $0.sourceAccountID == nil }
-                .sorted {
-                    let leftDate = $0.dateAdded ?? .distantFuture
-                    let rightDate = $1.dateAdded ?? .distantFuture
-                    if leftDate != rightDate { return leftDate < rightDate }
-                    return ($0.id?.uuidString ?? "") < ($1.id?.uuidString ?? "")
-                }
-                .first
+            let survivor = ComicEntity.survivor(of: comics.filter { $0.sourceAccountID == nil })
             guard let comic = survivor,
                   RemoteProgressSyncKey.shouldApply(remoteUpdatedAt: remoteUpdatedAt, localDateLastOpened: comic.dateLastOpened)
             else { return 0 }
