@@ -18,7 +18,9 @@ struct StorageErrorView: View {
             Text("Si è verificato un problema con l'archivio dati locale. Prova a toccare Riprova (spesso basta, se era la rete); se il problema persiste, condividi il log per l'assistenza: la libreria potrebbe dover essere ricreata.")
             Text(detailsText)
                 .font(.caption.monospaced())
+                #if !os(tvOS)
                 .textSelection(.enabled)
+                #endif
                 .frame(maxWidth: .infinity, alignment: .leading)
         } actions: {
             if isRetrying {
@@ -38,11 +40,14 @@ struct StorageErrorView: View {
                 }
                 .buttonStyle(.borderedProminent)
             }
+            // ShareLink non esiste su tvOS: lì resta il dettaglio leggibile qui sopra.
+            #if !os(tvOS)
             if let logURL = DiagnosticLog.logFileURLForSharing {
                 ShareLink(item: logURL, subject: Text("Chunky log diagnostico"), message: Text(detailsText)) {
                     Label("Condividi log", systemImage: "square.and.arrow.up")
                 }
             }
+            #endif
         }
         .padding()
     }
