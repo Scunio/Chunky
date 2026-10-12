@@ -2,7 +2,9 @@ import SwiftUI
 
 @main
 struct ChunkyApp: App {
-    let persistenceController = PersistenceController.shared
+    // `@State` (non `let`) per il ripristino dalla schermata d'errore: "Riprova" riassegna
+    // l'istanza ricreata e la schermata rivaluta `loadError` (errore di nuovo vs libreria aperta).
+    @State private var persistenceController = PersistenceController.shared
     #if os(iOS)
     @UIApplicationDelegateAdaptor(ChunkyAppDelegate.self) private var appDelegate
     #elseif os(macOS)
@@ -26,7 +28,9 @@ struct ChunkyApp: App {
     var body: some Scene {
         WindowGroup {
             if let loadError = persistenceController.loadError {
-                StorageErrorView(error: loadError)
+                StorageErrorView(error: loadError) {
+                    persistenceController = PersistenceController.shared
+                }
             } else {
                 ZStack {
                     ContentView()

@@ -112,6 +112,28 @@ struct UniquenessConstraintTests {
         #expect(comics.first?.lastReadPage == 42)
     }
 
+    @Test("Store v1 (vecchia installazione) migra a v3")
+    func migratesV1Store() throws {
+        let (legacyContext, storeURL, cleanup) = try TestStore.makeSQLiteStore(modelVersion: "Chunky")
+        defer { cleanup() }
+        // Insert con sole chiavi v1: `ComicEntity.create` imposta attributi v2 e qui crasherebbe.
+        let obj = NSEntityDescription.insertNewObject(forEntityName: "ComicEntity", into: legacyContext)
+        obj.setValue(UUID(), forKey: "id")
+        obj.setValue("Topolino 3620", forKey: "title")
+        obj.setValue("Topolino 3620.cbz", forKey: "relativePath")
+        obj.setValue("cbz", forKey: "formatRawValue")
+        obj.setValue(Int32(100), forKey: "pageCount")
+        obj.setValue(Int32(7), forKey: "lastReadPage")
+        obj.setValue("leftToRight", forKey: "readingDirectionRawValue")
+        obj.setValue(Date(), forKey: "dateAdded")
+        try legacyContext.save()
+
+        let context = try openMigratedStore(at: storeURL)
+        let comics = try context.fetch(ComicEntity.fetchRequest())
+        #expect(comics.count == 1)
+        #expect(comics.first?.lastReadPage == 7)
+    }
+
     @Test("Il cleanup è no-op su store già v3")
     func cleanupSkipsCurrentStores() throws {
         let (_, storeURL, cleanup) = try TestStore.makeSQLiteStore()

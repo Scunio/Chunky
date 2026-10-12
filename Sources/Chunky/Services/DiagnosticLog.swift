@@ -33,6 +33,12 @@ enum DiagnosticLog {
         (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
     }
 
+    /// L'URL del file di log, per condividerlo dalla schermata d'errore anche quando lo store
+    /// non si apre (e le Impostazioni con la Diagnostica sono irraggiungibili). `nil` se non esiste ancora.
+    static var logFileURLForSharing: URL? {
+        FileManager.default.fileExists(atPath: fileURL.path) ? fileURL : nil
+    }
+
     /// Last lines of the log for on-screen display: the full file (up to 512KB) as a
     /// single `Text` stalls panel opening and scrolling, so the viewer only lays out
     /// this tail while copy/share keep using `readAll()`.

@@ -2,7 +2,16 @@ import CoreData
 import Foundation
 
 struct PersistenceController {
-    static let shared = PersistenceController()
+    /// `var` (non `let`) per il ripristino dalla schermata d'errore: `resetShared()` lo ricrea
+    /// senza rilanciare l'app. Chi legge `.shared` al momento dell'uso (es. i push di
+    /// `RemoteProgressSync`) vede sempre l'istanza corrente.
+    static var shared = PersistenceController()
+
+    /// Ricrea da zero container e store (rilancia caricamento ed eventuale migrazione).
+    /// Pesante e bloccante: chiamare fuori dal main (lo fa `StorageErrorView`).
+    static func resetShared() {
+        shared = PersistenceController()
+    }
 
     let container: NSPersistentCloudKitContainer
     private(set) var loadError: Error?
