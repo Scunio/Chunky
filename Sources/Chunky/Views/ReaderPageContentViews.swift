@@ -228,6 +228,22 @@ private struct SpreadPairView: View {
 }
 #endif
 
+#if os(macOS)
+/// Applica il blur solo quando il raggio è > 0: il modificatore `.blur`, anche a raggio
+/// zero, forza un passaggio CoreImage sull'intera pagina a ogni frame su macOS — ed è
+/// sempre attaccato durante lo scroll/pan della pagina zoomata.
+private extension View {
+    @ViewBuilder
+    func conditionalMotionBlur(radius: CGFloat) -> some View {
+        if radius > 0 {
+            self.blur(radius: radius)
+        } else {
+            self
+        }
+    }
+}
+#endif
+
 private struct PageView: View {
     let provider: ComicPageProvider
     let index: Int
@@ -318,7 +334,7 @@ private struct PageView: View {
                                 .frame(width: proxy.size.width, height: proxy.size.height)
                                 .scaleEffect(scale)
                                 .offset(offset)
-                                .blur(radius: motionBlurRadius)
+                                .conditionalMotionBlur(radius: motionBlurRadius)
                                 .overlay(tintOverlay)
                                 .gesture(magnifyGesture)
                                 // Active only when zoomed in: at scale 1 it must not intercept the
@@ -377,7 +393,7 @@ private struct PageView: View {
                     .frame(height: height)
                     .scaleEffect(scale)
                     .offset(offset)
-                    .blur(radius: motionBlurRadius)
+                    .conditionalMotionBlur(radius: motionBlurRadius)
                     .overlay(tintOverlay)
                     .gesture(magnifyGesture)
                     .gesture(dragGesture, including: scale > 1 ? .all : .subviews)

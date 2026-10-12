@@ -7,15 +7,29 @@ import SwiftUI
 struct LibraryTableView: View {
     let comics: [ComicEntity]
     let allowsDeletion: Bool
+    /// Passato da `LibraryView` (unica osservatrice di `ICloudDownloadTracker` per la
+    /// libreria): la tabella legge il Set senza sottoscriversi al singleton per riga.
+    let pendingRelativePaths: Set<String>
     let onSelect: (ComicEntity) -> Void
     let onDelete: (ComicEntity) -> Void
+
+    init(
+        comics: [ComicEntity],
+        allowsDeletion: Bool,
+        pendingRelativePaths: Set<String> = [],
+        onSelect: @escaping (ComicEntity) -> Void,
+        onDelete: @escaping (ComicEntity) -> Void
+    ) {
+        self.comics = comics
+        self.allowsDeletion = allowsDeletion
+        self.pendingRelativePaths = pendingRelativePaths
+        self.onSelect = onSelect
+        self.onDelete = onDelete
+    }
 
     @State private var sortOrder: [KeyPathComparator<ComicEntity>] = [
         .init(\.wrappedTitle, order: .forward)
     ]
-    /// Same source as the grid's cover badge: the download command must appear and disappear
-    /// together with the badge, not depending on when the row was last redrawn.
-    @ObservedObject private var downloadTracker = ICloudDownloadTracker.shared
 
     private var sortedComics: [ComicEntity] {
         comics.sorted(using: sortOrder)
@@ -93,7 +107,7 @@ struct LibraryTableView: View {
 
     private func isPendingDownload(_ comic: ComicEntity) -> Bool {
         guard let relativePath = comic.relativePath else { return false }
-        return downloadTracker.pendingRelativePaths.contains(relativePath)
+        return pendingRelativePaths.contains(relativePath)
     }
 
     private func toggleFavorite(_ comic: ComicEntity) {

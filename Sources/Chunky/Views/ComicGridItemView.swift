@@ -11,10 +11,13 @@ struct ComicGridItemView: View {
     /// dal controllo download live in overlay (`RemoteDownloadControl`), altrimenti la
     /// nuvoletta comparirebbe due volte nello stesso angolo.
     var showsPendingDownloadBadge = true
+    /// Passato dal genitore (che osserva `ICloudDownloadTracker` una sola volta per
+    /// tutta la griglia) — vedi `ComicCoverView.isPendingDownload`.
+    var isPendingDownload = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ComicCoverView(comic: comic, showsPendingDownloadBadge: showsPendingDownloadBadge)
+            ComicCoverView(comic: comic, showsPendingDownloadBadge: showsPendingDownloadBadge, isPendingDownload: isPendingDownload)
             Text(comic.title ?? "Senza titolo")
                 .font(.caption.bold())
                 .lineLimit(2)
@@ -30,10 +33,12 @@ struct ComicCoverView: View {
     @ObservedObject var comic: ComicEntity
     /// Vedi `ComicGridItemView.showsPendingDownloadBadge`.
     var showsPendingDownloadBadge = true
-    /// Single source of truth for the "to download" badge: a live library-level `NSMetadataQuery`,
-    /// so the badge updates on its own when the download finishes instead of depending on
-    /// a grid redraw triggered for other reasons.
-    @ObservedObject private var downloadTracker = ICloudDownloadTracker.shared
+    /// Non osservato qui dentro: `ICloudDownloadTracker` è un singleton i cui update
+    /// (`NSMetadataQuery`, molto chiacchierone su Mac nel gathering iniziale) invaliderebbero
+    /// TUTTE le celle a ogni cambiamento, anche in pieno scroll. Lo osserva una sola volta
+    /// il genitore (`LibraryView` / `LibraryTableView`) e passa qui il Bool già calcolato,
+    /// così solo le celle il cui valore cambia davvero si ridisegnano.
+    var isPendingDownload = false
 
     var body: some View {
         // .overlay(alignment:), not a ZStack with conditional children: inside a
@@ -43,21 +48,18 @@ struct ComicCoverView: View {
         coverImage
             .aspectRatio(2/3, contentMode: .fill)
             .frame(maxWidth: .infinity)
-            .clipped()
-            .cornerRadius(8)
+            // Un solo clip invece di `.clipped()` + `.cornerRadius`: due ritagli
+            // sovrapposti costano due passaggi per cella a ogni frame di scroll su macOS.
+            .clipShape(RoundedRectangle(cornerRadius: 8))
             // A comic that's already finished is visible at a glance, like a checkmark
             // ticked off a list: no need to read the badge to understand the status.
-            .saturation(comic.isFinished ? 0 : 1)
+            // Solo opacità, niente `.saturation`: desaturare costa un passaggio offscreen
+            // per cella a ogni frame su macOS, l'opacità da sola comunica già "finito".
             .opacity(comic.isFinished ? 0.55 : 1)
             .overlay(progressBar, alignment: .bottom)
             .overlay(finishedBadge, alignment: .topTrailing)
             .overlay(favoriteBadge, alignment: .topLeading)
             .overlay(pendingDownloadBadge, alignment: .bottomTrailing)
-    }
-
-    private var isPendingDownload: Bool {
-        guard let relativePath = comic.relativePath else { return false }
-        return downloadTracker.pendingRelativePaths.contains(relativePath)
     }
 
     @ViewBuilder

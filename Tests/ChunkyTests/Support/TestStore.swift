@@ -46,4 +46,31 @@ enum TestStore {
         if let loadError { throw loadError }
         return container.viewContext
     }
+
+    /// File-backed SQLite stack sharing the cached model (same instance, so no duplicate
+    /// `NSEntityDescription` risk — see `cachedModel`). Needed where the in-memory store
+    /// isn't enough: persistent history is unsupported by `NSInMemoryStoreType`.
+    /// Returns a cleanup closing over the store files; callers remove them with `defer`.
+    static func makeSQLiteContext(historyTracking: Bool = false) throws -> (NSManagedObjectContext, () -> Void) {
+        let container = NSPersistentContainer(name: "Chunky", managedObjectModel: try model())
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TestStore-\(UUID().uuidString).sqlite")
+        let description = NSPersistentStoreDescription(url: storeURL)
+        if historyTracking {
+            description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+        }
+        container.persistentStoreDescriptions = [description]
+
+        var loadError: Error?
+        container.loadPersistentStores { _, error in loadError = error }
+        if let loadError { throw loadError }
+        let cleanup = {
+            for url in [storeURL,
+                        storeURL.appendingPathExtension("shm"),
+                        storeURL.appendingPathExtension("wal")] {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+        return (container.viewContext, cleanup)
+    }
 }

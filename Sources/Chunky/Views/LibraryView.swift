@@ -23,6 +23,10 @@ struct LibraryView: View {
 
     @EnvironmentObject private var viewModel: LibraryViewModel
     @ObservedObject private var theme = AppTheme.shared
+    /// Unica osservazione di `ICloudDownloadTracker` per tutta la libreria: se ogni cella
+    /// osservasse il singleton, ogni update di `NSMetadataQuery` invaliderebbe tutte le
+    /// celle (vedi `ComicCell.isPendingDownload`, calcolato qui e passato giù come Bool).
+    @ObservedObject private var downloadTracker = ICloudDownloadTracker.shared
     @AppStorage("kioskModeEnabled") private var isKioskModeEnabled = false
     @State private var isShowingFileImporter = false
     #if os(iOS) || os(tvOS)
@@ -95,7 +99,7 @@ struct LibraryView: View {
     /// row is skipped instead of showing an empty gap — `libraryGrid`'s own top padding already
     /// clears the focus-scale/safe-area margin.
     @ViewBuilder
-    private var titledContent: some View {
+    private func titledContent(filtered: [ComicEntity]) -> some View {
         #if os(tvOS)
         // `gridColumns`' 6-column math (1760pt content + 80pt margin each side = 1920pt,
         // the full screen width) assumes that 80pt margin is the ONLY inset — but SwiftUI
@@ -110,20 +114,24 @@ struct LibraryView: View {
                     .padding(.horizontal, gridHorizontalPadding)
                     .padding(.top, 60)
                     .padding(.bottom, 8)
-                content
+                content(filtered: filtered)
             }
             .ignoresSafeArea()
         } else {
-            content
+            content(filtered: filtered)
                 .ignoresSafeArea()
         }
         #else
-        content
+        content(filtered: filtered)
         #endif
     }
 
     var body: some View {
-        titledContent
+        // Derivati calcolati una sola volta per valutazione di `body` e passati giù come
+        // valori: prima ogni sotto-vista (`content`, `libraryGrid`, ogni cella via
+        // `existingGroupNames`) li ricalcolava da sé a ogni accesso.
+        let filtered = filteredComics
+        return titledContent(filtered: filtered)
             #if os(tvOS)
             .navigationTitle("")
             .toolbar(.hidden, for: .navigationBar)
@@ -192,7 +200,7 @@ struct LibraryView: View {
             // nothing to present here.
             #if os(iOS) || os(tvOS)
             .fullScreenCover(item: $selectedComic) { comic in
-                ReaderView(comic: comic, libraryComics: filteredComics)
+                ReaderView(comic: comic, libraryComics: filtered)
             }
             #endif
             #if os(tvOS)
@@ -496,28 +504,29 @@ struct LibraryView: View {
 
     // MARK: - Content
 
-    private var content: some View {
+    private func content(filtered: [ComicEntity]) -> some View {
         Group {
             if comics.isEmpty && !viewModel.isImporting {
                 emptyState
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if filteredComics.isEmpty {
+            } else if filtered.isEmpty {
                 noResultsState
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 #if os(macOS)
                 if usesTableLayout {
                     LibraryTableView(
-                        comics: filteredComics,
+                        comics: filtered,
                         allowsDeletion: !isKioskModeEnabled,
+                        pendingRelativePaths: downloadTracker.pendingRelativePaths,
                         onSelect: openComic,
                         onDelete: { viewModel.delete($0, from: context) }
                     )
                 } else {
-                    libraryGrid
+                    libraryGrid(filtered: filtered)
                 }
                 #else
-                libraryGrid
+                libraryGrid(filtered: filtered)
                 #endif
             }
         }
@@ -551,10 +560,6 @@ struct LibraryView: View {
         }
     }
 
-    private var groupedSections: [LibraryGrouping.Section] {
-        LibraryGrouping.sections(for: filteredComics)
-    }
-
     /// Gap between whole sections (end of one section's grid, start of the next section's
     /// header) — same reasoning as `tvOSSectionHeaderSpacing`/`tvOSGridRowSpacing`: a focused
     /// card's `.card` scale needs real margin on every side, not just within one section.
@@ -568,8 +573,14 @@ struct LibraryView: View {
         #endif
     }
 
-    private var libraryGrid: some View {
-        ScrollView {
+    private func libraryGrid(filtered: [ComicEntity]) -> some View {
+        // Raggruppamento e nomi dei gruppi una sola volta per valutazione: prima erano
+        // computed ricalcolati a ogni accesso, e ogni cella pagava l'ordinamento
+        // dell'intera libreria alla propria creazione (anche quelle materializzate
+        // pigramente durante lo scroll).
+        let sections = LibraryGrouping.sections(for: filtered)
+        let names = existingGroupNames
+        return ScrollView {
             LazyVStack(alignment: .leading, spacing: tvOSSectionGap) {
                 #if os(tvOS)
                 // No separate "Novità" tab/popover on tvOS (see `TVRootTabView`): recently
@@ -580,22 +591,22 @@ struct LibraryView: View {
                 // there (confirmed live: the Preferiti tab showed non-favorite comics under
                 // "Novità" even though `filteredComics` itself was correctly favorites-only).
                 if effectiveSelection == .all && !recentComics.isEmpty {
-                    sectionView(title: "Novità", comics: recentComics)
+                    sectionView(title: "Novità", comics: recentComics, names: names)
                 }
                 #endif
                 switch displayMode {
                 case .grouped:
-                    ForEach(groupedSections) { section in
-                        sectionView(title: section.title, comics: section.comics)
+                    ForEach(sections) { section in
+                        sectionView(title: section.title, comics: section.comics, names: names)
                     }
                 case .alphabetical:
-                    Text("TUTTI I FUMETTI (\(filteredComics.count))")
+                    Text("TUTTI I FUMETTI (\(filtered.count))")
                         .font(.subheadline.bold())
                         .foregroundColor(theme.secondaryText)
                         .padding(.horizontal, gridHorizontalPadding)
                     LazyVGrid(columns: gridColumns, spacing: tvOSGridRowSpacing) {
-                        ForEach(filteredComics) { comic in
-                            cell(for: comic)
+                        ForEach(filtered) { comic in
+                            cell(for: comic, names: names)
                         }
                     }
                     .padding(.horizontal, gridHorizontalPadding)
@@ -717,7 +728,7 @@ struct LibraryView: View {
         #endif
     }
 
-    private func sectionView(title: String, comics: [ComicEntity]) -> some View {
+    private func sectionView(title: String, comics: [ComicEntity], names: [String]) -> some View {
         VStack(alignment: .leading, spacing: tvOSSectionHeaderSpacing) {
             #if os(tvOS)
             // No collapsible-section pattern on tvOS (a full-width focusable header bar
@@ -741,7 +752,7 @@ struct LibraryView: View {
             if !collapsedGroups.contains(title) {
                 LazyVGrid(columns: gridColumns, spacing: tvOSGridRowSpacing) {
                     ForEach(comics) { comic in
-                        cell(for: comic)
+                        cell(for: comic, names: names)
                     }
                 }
                 .padding(.horizontal, gridHorizontalPadding)
@@ -760,13 +771,16 @@ struct LibraryView: View {
         #endif
     }
 
-    private func cell(for comic: ComicEntity) -> some View {
+    // `names` arriva già calcolato da `libraryGrid` (una volta per valutazione di `body`),
+    // non ricalcolato qui dentro a ogni cella.
+    private func cell(for comic: ComicEntity, names: [String]) -> some View {
         ComicCell(
             comic: comic,
             isEditing: isEditing,
             isSelected: selectedIDs.contains(comic.objectID),
             allowsDeletion: !isKioskModeEnabled,
-            existingGroupNames: existingGroupNames,
+            existingGroupNames: names,
+            isPendingDownload: downloadTracker.pendingRelativePaths.contains(comic.relativePath ?? ""),
             onSelect: { handleTap(on: comic) },
             onDelete: { viewModel.delete(comic, from: context) },
             onAssignGroup: { assignGroup($0, to: comic) }
@@ -909,17 +923,13 @@ private struct ComicCell: View {
     let isSelected: Bool
     let allowsDeletion: Bool
     let existingGroupNames: [String]
+    /// Calcolato da `LibraryView` (unica osservatrice di `ICloudDownloadTracker`):
+    /// osservare il singleton in ogni cella faceva ridisegnare l'intera griglia a ogni
+    /// update di `NSMetadataQuery`, anche durante lo scroll.
+    let isPendingDownload: Bool
     let onSelect: () -> Void
     let onDelete: () -> Void
     let onAssignGroup: (String?) -> Void
-    /// Same source as the cover badge: the download command must appear and disappear
-    /// together with the badge, not depending on when the cell was last redrawn.
-    @ObservedObject private var downloadTracker = ICloudDownloadTracker.shared
-
-    private var isPendingDownload: Bool {
-        guard let relativePath = comic.relativePath else { return false }
-        return downloadTracker.pendingRelativePaths.contains(relativePath)
-    }
 
     @ViewBuilder
     private var cellButton: some View {
@@ -933,7 +943,7 @@ private struct ComicCell: View {
         // down, confirmed by an on-device photo showing the focused cover overlapping the title.
         VStack(alignment: .leading, spacing: 30) {
             Button(action: onSelect) {
-                ComicCoverView(comic: comic)
+                ComicCoverView(comic: comic, isPendingDownload: isPendingDownload)
                     .overlay(selectionBadge, alignment: .topLeading)
                     .contentShape(Rectangle())
             }
@@ -958,7 +968,7 @@ private struct ComicCell: View {
         }
         #else
         Button(action: onSelect) {
-            ComicGridItemView(comic: comic, showsPendingDownloadBadge: false)
+            ComicGridItemView(comic: comic, showsPendingDownloadBadge: false, isPendingDownload: isPendingDownload)
                 .overlay(selectionBadge, alignment: .topLeading)
                 .contentShape(Rectangle())
                 .contextMenu { cellMenu }

@@ -39,6 +39,9 @@ struct ContentView: View {
             .onAppear {
                 ICloudDownloadTracker.shared.start()
                 RemoteProgressSync.logAccountStatus()
+                // Catches imports that landed while the app was closed (the remote-change
+                // notification above only fires while we're alive to observe it).
+                MirrorHistoryLogger.logNewImports(in: context)
                 syncSyncFolderIfNeeded()
                 adoptFilesDroppedInDocuments()
                 viewModel.deduplicateLibrary(context: context)
@@ -61,6 +64,7 @@ struct ContentView: View {
             // disabled, so hooking into `rebuildLibrary` alone isn't enough.
             .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
                 scheduleDebouncedDeduplication()
+                MirrorHistoryLogger.logNewImports(in: context)
             }
             // CloudKit import/export lifecycle (mirrored store): the only visibility into
             // whether progress actually leaves/enters this device. Logged (end events only,
