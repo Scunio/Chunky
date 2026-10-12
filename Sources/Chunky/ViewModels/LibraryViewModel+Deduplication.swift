@@ -16,9 +16,9 @@ extension LibraryViewModel {
     /// sicuro proprio perché il merge è LWW: un progresso più fresco che arriva dopo dal mirror
     /// vince comunque al giro successivo, invece di restare schiacciato da un `max()`.
     ///
-    /// Backstop, non più prima linea: dal modello v3 `relativePath` ha un vincolo di unicità, quindi
-    /// i duplicati non possono più nascere in locale — resta per i record arrivati via CloudKit
-    /// prima della migrazione e per le convergenze del mirror.
+    /// Backstop contro i duplicati da mirror: senza vincolo di unicità (vietato da CloudKit,
+    /// errore 134060) due device possono registrare lo stesso file prima di vedersi via sync.
+    /// La dedup li collassa con convergenza deterministica (vedi sotto).
     ///
     /// `awaitRemoteProgress` (solo dal passo dedicato, mai da import/rebuild/test) attende in
     /// modo limitato il sync esplicito prima di fondere, così il merge vede il progresso

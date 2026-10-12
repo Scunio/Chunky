@@ -22,24 +22,9 @@ enum TestStore {
     /// `LibraryDeduplicationTests`: two comics saved to two separately-modeled contexts,
     /// visible as "should have 2 records, has fewer" rather than a crash.
     nonisolated(unsafe) private static var cachedModel: NSManagedObjectModel?
-    /// Un'istanza per versione ("Chunky 2", …): come sopra, ricaricare la stessa versione due volte
-    /// duplicherebbe le `NSEntityDescription` per `ComicEntity` ("Failed to find a unique match").
-    nonisolated(unsafe) private static var cachedVersionedModels: [String: NSManagedObjectModel] = [:]
     private static let modelLock = NSLock()
 
-    private static func model(versionName: String? = nil) throws -> NSManagedObjectModel {
-        // Versioned models bypass the current-model cache (they exist precisely to test one
-        // shape), but each version is still loaded once — see `cachedVersionedModels`.
-        if let versionName {
-            modelLock.lock()
-            defer { modelLock.unlock() }
-            if let cached = cachedVersionedModels[versionName] { return cached }
-            let bundle = Bundle(for: ComicEntity.self)
-            let versionURL = try #require(bundle.url(forResource: versionName, withExtension: "mom", subdirectory: "Chunky.momd"))
-            let versioned = try #require(NSManagedObjectModel(contentsOf: versionURL))
-            cachedVersionedModels[versionName] = versioned
-            return versioned
-        }
+    private static func model() throws -> NSManagedObjectModel {
         modelLock.lock()
         defer { modelLock.unlock() }
         if let cachedModel { return cachedModel }
@@ -50,8 +35,8 @@ enum TestStore {
         return model
     }
 
-    static func makeContext(modelVersion: String? = nil) throws -> NSManagedObjectContext {
-        let container = NSPersistentContainer(name: "Chunky", managedObjectModel: try model(versionName: modelVersion))
+    static func makeContext() throws -> NSManagedObjectContext {
+        let container = NSPersistentContainer(name: "Chunky", managedObjectModel: try model())
         let description = NSPersistentStoreDescription()
         description.type = NSInMemoryStoreType
         container.persistentStoreDescriptions = [description]
@@ -66,16 +51,8 @@ enum TestStore {
     /// `NSEntityDescription` risk — see `cachedModel`). Needed where the in-memory store
     /// isn't enough: persistent history is unsupported by `NSInMemoryStoreType`.
     /// Returns a cleanup closing over the store files; callers remove them with `defer`.
-    static func makeSQLiteContext(historyTracking: Bool = false, modelVersion: String? = nil) throws -> (NSManagedObjectContext, () -> Void) {
-        let (context, _, cleanup) = try makeSQLiteStore(historyTracking: historyTracking, modelVersion: modelVersion)
-        return (context, cleanup)
-    }
-
-    /// Come `makeSQLiteContext`, ma espone anche l'URL dello store: serve per riaprirlo con un
-    /// altro modello (test di migrazione v2→v3). Il container va buttato prima di riaprire —
-    /// SQLite permette più connessioni, ma il test deve simulare un riavvio pulito.
-    static func makeSQLiteStore(historyTracking: Bool = false, modelVersion: String? = nil) throws -> (NSManagedObjectContext, URL, () -> Void) {
-        let container = NSPersistentContainer(name: "Chunky", managedObjectModel: try model(versionName: modelVersion))
+    static func makeSQLiteContext(historyTracking: Bool = false) throws -> (NSManagedObjectContext, () -> Void) {
+        let container = NSPersistentContainer(name: "Chunky", managedObjectModel: try model())
         let storeURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("TestStore-\(UUID().uuidString).sqlite")
         let description = NSPersistentStoreDescription(url: storeURL)
@@ -94,6 +71,6 @@ enum TestStore {
                 try? FileManager.default.removeItem(at: url)
             }
         }
-        return (container.viewContext, storeURL, cleanup)
+        return (container.viewContext, cleanup)
     }
 }

@@ -70,9 +70,8 @@ extension ComicEntity {
     /// most advanced page wins, so skewed clocks still converge. Count, cover, favorite, series
     /// and title keep union semantics. Callers delete the loser afterwards.
     ///
-    /// Single implementation for the live dedup pass and the pre-migration cleanup
-    /// (see `PersistenceController`): both must resolve the same way, or two devices
-    /// collapse the same group differently.
+    /// Single implementation for the live dedup pass and the progress sync's survivor pick:
+    /// both must resolve the same way, or two devices collapse the same group differently.
     func absorbLoser(_ loser: ComicEntity) {
         let loserDate = loser.dateLastOpened ?? .distantPast
         let ownDate = dateLastOpened ?? .distantPast

@@ -4,9 +4,6 @@ import Testing
 
 @Suite("Deduplica libreria")
 struct LibraryDeduplicationTests {
-    // La dedup è il backstop per duplicati nati senza vincolo di unicità (store pre-migrazione,
-    // record arrivati via mirror da vecchie versioni): gira sul modello v2, l'unico in cui i
-    // duplicati possono esistere. Il vincolo del modello v3 è coperto da `UniquenessTests`.
     /// Duplicate records are born with the same `relativePath` (there's only one file on disk):
     /// that, not the title, is the criterion by which they must be recognized.
     @discardableResult
@@ -44,7 +41,7 @@ struct LibraryDeduplicationTests {
 
     @Test("Due record per lo stesso file diventano uno")
     func collapsesDuplicates() throws {
-        let context = try TestStore.makeContext(modelVersion: "Chunky 2")
+        let context = try TestStore.makeContext()
         makeComic(in: context, path: "Topolino 3620.cbz")
         makeComic(in: context, path: "Topolino 3620.cbz")
         try context.save()
@@ -57,7 +54,7 @@ struct LibraryDeduplicationTests {
 
     @Test("File diversi non vengono toccati")
     func keepsDistinctFiles() throws {
-        let context = try TestStore.makeContext(modelVersion: "Chunky 2")
+        let context = try TestStore.makeContext()
         makeComic(in: context, path: "Topolino 3620.cbz")
         makeComic(in: context, path: "Topolino 3621.cbz")
         try context.save()
@@ -70,7 +67,7 @@ struct LibraryDeduplicationTests {
     /// the survivor is not necessarily the one that was read the furthest.
     @Test("Il superstite eredita il progresso più avanzato e la copertina")
     func mergesProgressIntoSurvivor() throws {
-        let context = try TestStore.makeContext(modelVersion: "Chunky 2")
+        let context = try TestStore.makeContext()
         let opened = Date(timeIntervalSince1970: 90_000)
         makeComic(
             in: context,
@@ -108,7 +105,7 @@ struct LibraryDeduplicationTests {
         let newer = try uuid("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")
 
         func survivorID(insertingNewerFirst: Bool) throws -> UUID? {
-            let context = try TestStore.makeContext(modelVersion: "Chunky 2")
+            let context = try TestStore.makeContext()
             let ids = insertingNewerFirst ? [newer, older] : [older, newer]
             for id in ids {
                 makeComic(in: context, path: "Topolino 3620.cbz", id: id)
@@ -126,7 +123,7 @@ struct LibraryDeduplicationTests {
     /// precedente (tornare indietro non deve resuscitare la pagina vecchia). È il tuo caso 115 vs 10.
     @Test("Il dedup tiene il progresso più fresco anche se è più indietro")
     func keepsFreshestProgressEvenWhenBehind() throws {
-        let context = try TestStore.makeContext(modelVersion: "Chunky 2")
+        let context = try TestStore.makeContext()
         makeComic(in: context, path: "Topolino 3620.cbz", lastReadPage: 115, dateLastOpened: Date().addingTimeInterval(-7200))
         makeComic(in: context, path: "Topolino 3620.cbz", lastReadPage: 10, dateLastOpened: Date())
         try context.save()
@@ -138,7 +135,7 @@ struct LibraryDeduplicationTests {
 
     @Test("Il dedup fonde i gruppi con attività vecchia (vince il più fresco)")
     func mergesStaleGroups() throws {
-        let context = try TestStore.makeContext(modelVersion: "Chunky 2")
+        let context = try TestStore.makeContext()
         makeComic(in: context, path: "Topolino 3620.cbz", lastReadPage: 10, dateLastOpened: Date().addingTimeInterval(-3600))
         makeComic(in: context, path: "Topolino 3620.cbz", lastReadPage: 50, dateLastOpened: Date().addingTimeInterval(-7200))
         try context.save()
@@ -152,7 +149,7 @@ struct LibraryDeduplicationTests {
     /// shouldn't be registered a second time.
     @Test("Un path già registrato viene riconosciuto")
     func detectsAlreadyRegisteredPath() throws {
-        let context = try TestStore.makeContext(modelVersion: "Chunky 2")
+        let context = try TestStore.makeContext()
         makeComic(in: context, path: "Topolino 3620.cbz")
         try context.save()
 
@@ -165,7 +162,7 @@ struct LibraryDeduplicationTests {
     /// which would be left pointing at nothing and would then get removed by the next scan.
     @Test("Il file resta finché un altro record lo referenzia")
     func keepsFileWhileAnotherRecordReferencesIt() throws {
-        let context = try TestStore.makeContext(modelVersion: "Chunky 2")
+        let context = try TestStore.makeContext()
         let first = makeComic(in: context, path: "Topolino 3620.cbz")
         makeComic(in: context, path: "Topolino 3620.cbz")
         try context.save()
