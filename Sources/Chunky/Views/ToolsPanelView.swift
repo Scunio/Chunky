@@ -14,7 +14,7 @@ struct ToolsPanelView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            Form {
                 #if os(iOS)
                 Section("Schermo") {
                     HStack {
@@ -56,6 +56,10 @@ struct ToolsPanelView: View {
             .navigationTitle("Strumenti")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #elseif os(macOS)
+            // Come Impostazioni: senza stile esplicito un Form su macOS resta piatto,
+            // diverso dal grouped della pagina Impostazioni.
+            .formStyle(.grouped)
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
