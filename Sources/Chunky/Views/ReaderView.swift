@@ -115,6 +115,11 @@ struct ReaderContentView: View {
     @State private var pendingProgressSave: DispatchWorkItem?
     @State private var lastProgressSave = Date.distantPast
     private static let progressSaveInterval: TimeInterval = 5
+    /// Ultima pagina di cui si è loggato il salvataggio: il log di ogni save (ogni 5s di lettura)
+    /// seppelliva la Diagnostica — si logga ogni 10 pagine e sempre all'uscita (la posizione finale
+    /// è quella che conta per "chi ha scritto per ultimo").
+    @State private var lastLoggedProgressPage: Int?
+    private static let progressLogStride = 10
     @State private var loadError: String?
     /// Progress (0...1) of the iCloud download of the comic being opened, nil if no download
     /// is in progress: the comic can always be opened, it's the opening itself that downloads it.
@@ -1284,22 +1289,31 @@ struct ReaderContentView: View {
     /// CloudKit export transaction) per `progressSaveInterval`, with the trailing edge
     /// scheduled. The in-memory `lastReadPage` is already current — this only paces the
     /// persistence/export. Crash window: at most `progressSaveInterval` of progress.
-    /// Each actual save is logged so Diagnostica can show who wrote which page last.
+    /// Logging is sparser than saving (every `progressLogStride` pages): each actual save was
+    /// logged and reading half an hour buried Diagnostica under hundreds of lines.
     private func scheduleProgressSave(page: Int) {
         if Date().timeIntervalSince(lastProgressSave) >= Self.progressSaveInterval {
             lastProgressSave = Date()
             try? context.save()
-            DiagnosticLog.log("Progresso salvato: pagina \(page + 1) (\(comic.title ?? "fumetto"))")
+            logProgressSave(page: page)
             return
         }
         pendingProgressSave?.cancel()
         let work = DispatchWorkItem {
             lastProgressSave = Date()
             try? context.save()
-            DiagnosticLog.log("Progresso salvato: pagina \(page + 1) (\(self.comic.title ?? "fumetto"))")
+            logProgressSave(page: page)
         }
         pendingProgressSave = work
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.progressSaveInterval, execute: work)
+    }
+
+    /// Logs a progress save at most every `progressLogStride` pages (exit saves always): enough
+    /// to tell who wrote last in Diagnostica without burying it.
+    private func logProgressSave(page: Int) {
+        guard lastLoggedProgressPage.map({ abs(page - $0) >= Self.progressLogStride }) ?? true else { return }
+        lastLoggedProgressPage = page
+        DiagnosticLog.log("Progresso salvato: pagina \(page + 1) (\(comic.title ?? "fumetto"))")
     }
 
     /// Writes any throttled progress save still pending. Called on exit/background so
