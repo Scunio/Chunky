@@ -17,8 +17,10 @@ struct ICloudStatusView: View {
 /// iCloud status content without its own `Form`, so it can be embedded in the "Advanced"
 /// tab of Mac Preferences as well as shown standalone on iOS (`ICloudStatusView` above).
 struct ICloudStatusSections: View {
-    @FetchRequest(sortDescriptors: []) private var comics: FetchedResults<ComicEntity>
     @Environment(\.managedObjectContext) private var context
+    /// Count only: materializing every `ComicEntity` via `@FetchRequest` just to show
+    /// the total stalled opening this panel on large libraries.
+    @State private var comicsCount = 0
 
     private var isActive: Bool { LibraryStorage.isICloudAvailable }
 
@@ -33,7 +35,7 @@ struct ICloudStatusSections: View {
                 HStack {
                     Text("Fumetti nella libreria")
                     Spacer()
-                    Text("\(comics.count)")
+                    Text("\(comicsCount)")
                         .foregroundColor(.secondary)
                 }
             }
@@ -54,6 +56,11 @@ struct ICloudStatusSections: View {
                 }
             }
         }
+        .onAppear(perform: refreshCount)
+    }
+
+    private func refreshCount() {
+        comicsCount = (try? context.count(for: ComicEntity.fetchRequest())) ?? 0
     }
 }
 

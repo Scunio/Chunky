@@ -23,7 +23,11 @@ struct DiagnosticsView: View {
 struct DiagnosticsSections: View {
     @Environment(\.managedObjectContext) private var context
     @EnvironmentObject private var viewModel: LibraryViewModel
-    @State private var logText = DiagnosticLog.readAll()
+    /// Tail shown on screen: laying out the full (up to 512KB) log as one `Text`
+    /// stalled opening and scrolling the panel. Copy/Share still use the full log.
+    @State private var logText = DiagnosticLog.tail()
+    @State private var fullLogText = DiagnosticLog.readAll()
+    @State private var isTruncated = false
     @State private var didCopy = false
 
     var body: some View {
@@ -49,16 +53,21 @@ struct DiagnosticsSections: View {
                         .textSelectableCompat()
                 }
                 .frame(height: 240)
+                if isTruncated {
+                    Text("Mostrate le ultime righe — Copia o Condividi per il log completo.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
 
                 Button("Aggiorna", action: refresh)
                 #if !os(tvOS)
                 Button(action: copyLog) {
                     Label(didCopy ? "Copiato!" : "Copia log", systemImage: didCopy ? "checkmark" : "doc.on.doc")
                 }
-                .disabled(logText.isEmpty)
+                .disabled(fullLogText.isEmpty)
                 if #available(iOS 16, macOS 13, *) {
-                    ShareLink(item: logText.isEmpty ? "Nessun log." : logText, preview: SharePreview("chunky-log.txt"))
-                        .disabled(logText.isEmpty)
+                    ShareLink(item: fullLogText.isEmpty ? "Nessun log." : fullLogText, preview: SharePreview("chunky-log.txt"))
+                        .disabled(fullLogText.isEmpty)
                 }
                 #endif
                 Button("Svuota log", action: clear)
@@ -69,14 +78,16 @@ struct DiagnosticsSections: View {
     }
 
     private func refresh() {
-        logText = DiagnosticLog.readAll()
+        fullLogText = DiagnosticLog.readAll()
+        logText = DiagnosticLog.tail(from: fullLogText)
+        isTruncated = !fullLogText.isEmpty && logText.count < fullLogText.count
         didCopy = false
     }
 
     /// Copia negli appunti di sistema (best practice per target vecchi: ShareLink
     /// richiede iOS 16+, la copia funziona ovunque).
     private func copyLog() {
-        let text = logText.isEmpty ? "Nessun log." : logText
+        let text = fullLogText.isEmpty ? "Nessun log." : fullLogText
         #if os(macOS)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
@@ -89,6 +100,8 @@ struct DiagnosticsSections: View {
     private func clear() {
         DiagnosticLog.clear()
         logText = ""
+        fullLogText = ""
+        isTruncated = false
         didCopy = false
     }
 }

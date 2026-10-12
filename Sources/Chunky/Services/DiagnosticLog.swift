@@ -33,6 +33,18 @@ enum DiagnosticLog {
         (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
     }
 
+    /// Last lines of the log for on-screen display: the full file (up to 512KB) as a
+    /// single `Text` stalls panel opening and scrolling, so the viewer only lays out
+    /// this tail while copy/share keep using `readAll()`.
+    static let tailLineCount = 300
+
+    static func tail(from fullLog: String? = nil) -> String {
+        let full = fullLog ?? readAll()
+        let lines = full.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lines.count > tailLineCount else { return full }
+        return lines.suffix(tailLineCount).joined(separator: "\n")
+    }
+
     static func clear() {
         queue.async {
             try? FileManager.default.removeItem(at: fileURL)
