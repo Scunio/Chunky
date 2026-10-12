@@ -19,9 +19,10 @@ struct StableAccountIDTests {
     }
 
     /// Simula un account storico: creato senza passare da `create(...)`, quindi con `id` nil.
-    private func legacyAccount(in context: NSManagedObjectContext) -> RemoteAccountEntity {
+    private func legacyAccount(in context: NSManagedObjectContext) throws -> RemoteAccountEntity {
         // Insert contestuale (mai `RemoteAccountEntity(context:)`): vedi `ComicEntity.create`.
-        let account = NSEntityDescription.insertNewObject(forEntityName: "RemoteAccountEntity", into: context) as! RemoteAccountEntity
+        let object = NSEntityDescription.insertNewObject(forEntityName: "RemoteAccountEntity", into: context)
+        let account = try #require(object as? RemoteAccountEntity)
         account.name = "NAS"
         account.serverURLString = "smb://192.168.1.10"
         return account
@@ -30,7 +31,7 @@ struct StableAccountIDTests {
     @Test("Il backfill assegna e persiste un id agli account che ne sono privi")
     func backfillAssignsMissingIDs() throws {
         let context = try TestStore.makeContext()
-        let account = legacyAccount(in: context)
+        let account = try legacyAccount(in: context)
         #expect(account.id == nil)
         try context.save()
 
@@ -65,7 +66,7 @@ struct StableAccountIDTests {
     @Test("stableID restituisce sempre lo stesso valore")
     func stableIDIsStable() throws {
         let context = try TestStore.makeContext()
-        let account = legacyAccount(in: context)
+        let account = try legacyAccount(in: context)
         #expect(account.stableID == account.stableID)
     }
 
@@ -73,7 +74,7 @@ struct StableAccountIDTests {
     func passwordRoundTripWithoutID() throws {
         try withFakeKeychain { _ in
             let context = try TestStore.makeContext()
-            let account = legacyAccount(in: context)
+            let account = try legacyAccount(in: context)
             try context.save()
 
             account.password = "segreta"
