@@ -580,6 +580,12 @@ struct LibraryView: View {
         // pigramente durante lo scroll).
         let sections = LibraryGrouping.sections(for: filtered)
         let names = existingGroupNames
+        #if os(macOS)
+        // Su macOS un solo container lazy: `LazyVStack` di N `LazyVGrid` costringe ogni
+        // griglia a misurarsi da sé a ogni frame di scroll (lento su AppKit, invisibile
+        // su iOS). iOS/tvOS tengono il percorso sotto, già fluido / tarato sul focus engine.
+        return macOSFlatGrid(filtered: filtered, sections: sections, names: names)
+        #else
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: tvOSSectionGap) {
                 #if os(tvOS)
@@ -631,7 +637,62 @@ struct LibraryView: View {
         // scrollable region" shape.
         .focusSection()
         #endif
+        #endif
     }
+
+    #if os(macOS)
+    /// Griglia macOS come unico `LazyVGrid` con `Section` (gli header occupano tutta la
+    /// larghezza da sé): niente `LazyVStack` di N griglie annidate. Stessi header
+    /// comprimibili e stesse celle del percorso condiviso, solo un layout piatto che
+    /// AppKit riesce a scrollare senza rimisurare tutto a ogni frame.
+    private func macOSFlatGrid(filtered: [ComicEntity], sections: [LibraryGrouping.Section], names: [String]) -> some View {
+        ScrollView {
+            LazyVGrid(columns: gridColumns, spacing: 20) {
+                switch displayMode {
+                case .grouped:
+                    ForEach(sections) { section in
+                        Section {
+                            if !collapsedGroups.contains(section.title) {
+                                ForEach(section.comics) { comic in
+                                    cell(for: comic, names: names)
+                                }
+                            }
+                        } header: {
+                            Button {
+                                withAnimation {
+                                    if collapsedGroups.contains(section.title) {
+                                        collapsedGroups.remove(section.title)
+                                    } else {
+                                        collapsedGroups.insert(section.title)
+                                    }
+                                }
+                            } label: {
+                                // Senza inset proprio: l'header occupa già la larghezza del
+                                // contenuto (dentro il padding della griglia) e il padding di
+                                // default lo disallineerebbe dalle celle di 16pt.
+                                sectionHeaderContent(title: section.title, comics: section.comics, horizontalPadding: 0)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                case .alphabetical:
+                    Section {
+                        ForEach(filtered) { comic in
+                            cell(for: comic, names: names)
+                        }
+                    } header: {
+                        Text("TUTTI I FUMETTI (\(filtered.count))")
+                            .font(.subheadline.bold())
+                            .foregroundColor(theme.secondaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .padding(.horizontal, gridHorizontalPadding)
+            .padding(.vertical)
+        }
+    }
+    #endif
 
     /// Comics imported in the last 7 days and not yet "unmarked" with Clear: feed
     /// the "New" popover, not a fixed section in the library.
@@ -681,7 +742,7 @@ struct LibraryView: View {
         #endif
     }
 
-    private func sectionHeaderContent(title: String, comics: [ComicEntity]) -> some View {
+    private func sectionHeaderContent(title: String, comics: [ComicEntity], horizontalPadding: CGFloat? = nil) -> some View {
         HStack {
             #if !os(tvOS)
             Image(systemName: collapsedGroups.contains(title) ? "chevron.right" : "chevron.down")
@@ -712,7 +773,7 @@ struct LibraryView: View {
                 .foregroundColor(theme.secondaryText)
             #endif
         }
-        .padding(.horizontal, gridHorizontalPadding)
+        .padding(.horizontal, horizontalPadding ?? gridHorizontalPadding)
     }
 
     /// `.card`'s tvOS focus-scale is a transform, not a layout change: a focused card in the

@@ -46,14 +46,15 @@ struct DiagnosticsSections: View {
             }
 
             Section(header: Text("Log")) {
-                // Niente `ScrollView` innestata nel `Form`: su macOS due scroll innestati
-                // rendono lo scorrimento del pannello scattoso e l'hit-testing ambiguo.
-                // La coda resta leggibile qui troncata, il log completo resta via Copia/Condividi.
-                Text(logText.isEmpty ? "Nessun log ancora." : logText)
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(maxWidth: .infinity, maxHeight: 240, alignment: .topLeading)
-                    .clipped()
-                    .textSelectableCompat()
+                // ScrollView ripristinata: senza, su iPhone la coda non si scorre più.
+                // Resta leggera perché mostra solo la coda (300 righe), non il file intero.
+                ScrollView {
+                    Text(logText.isEmpty ? "Nessun log ancora." : logText)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelectableCompat()
+                }
+                .frame(height: 240)
                 if isTruncated {
                     Text("Mostrate le ultime righe — Copia o Condividi per il log completo.")
                         .font(.caption)
