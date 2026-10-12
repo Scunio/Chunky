@@ -797,6 +797,10 @@ enum RemoteProgressSync {
         /// on every device sharing the ubiquity container) and applies last-writer-wins.
         /// Remote-account comics are skipped even on a path hit: their progress flows
         /// through their own account key, never the shared filename.
+        /// Applies to the deterministic survivor only (oldest `dateAdded`, then `id` — the same
+        /// order deduplication uses to pick who stays): updating every duplicate would stamp a
+        /// fresh `dateLastOpened` on records about to be collapsed, and touching a loser the other
+        /// device just deleted re-exports it via the mirror, resurrecting the duplicate.
         /// Returns the number of comics updated. Runs on the context's queue.
         @discardableResult
         private static func applyLocalRecord(
@@ -806,20 +810,28 @@ enum RemoteProgressSync {
             let request = ComicEntity.fetchRequest()
             request.predicate = NSPredicate(format: "relativePath == %@", recordPath)
             guard let comics = try? context.fetch(request), !comics.isEmpty else { return 0 }
-            var applied = 0
-            for comic in comics {
-                guard comic.sourceAccountID == nil,
-                      RemoteProgressSyncKey.shouldApply(remoteUpdatedAt: remoteUpdatedAt, localDateLastOpened: comic.dateLastOpened)
-                else { continue }
-                if comic.pageCount > 0 {
-                    comic.lastReadPage = Int32(min(max(remotePage, 0), Int(comic.pageCount) - 1))
-                } else {
-                    comic.lastReadPage = Int32(max(remotePage, 0))
+            // I duplicati condividono lo stesso file: ne resta uno solo dopo la dedup, e il
+            // superstite è deterministico (stesso ordinamento di `precedesAsSurvivor`).
+            // `dateAdded` e `id` sono attributi sincronizzati, quindi ogni device sceglie lo stesso.
+            let survivor = comics
+                .filter { $0.sourceAccountID == nil }
+                .sorted {
+                    let leftDate = $0.dateAdded ?? .distantFuture
+                    let rightDate = $1.dateAdded ?? .distantFuture
+                    if leftDate != rightDate { return leftDate < rightDate }
+                    return ($0.id?.uuidString ?? "") < ($1.id?.uuidString ?? "")
                 }
-                comic.dateLastOpened = remoteUpdatedAt
-                applied += 1
+                .first
+            guard let comic = survivor,
+                  RemoteProgressSyncKey.shouldApply(remoteUpdatedAt: remoteUpdatedAt, localDateLastOpened: comic.dateLastOpened)
+            else { return 0 }
+            if comic.pageCount > 0 {
+                comic.lastReadPage = Int32(min(max(remotePage, 0), Int(comic.pageCount) - 1))
+            } else {
+                comic.lastReadPage = Int32(max(remotePage, 0))
             }
-            return applied
+            comic.dateLastOpened = remoteUpdatedAt
+            return 1
         }
 
         /// Matches fetched records to local comics and applies last-writer-wins.

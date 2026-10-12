@@ -119,20 +119,21 @@ struct LibraryDeduplicationTests {
         #expect(try survivorID(insertingNewerFirst: true) == older)
     }
 
-    /// Il dedup non deve fotografare un progresso in volo: un gruppo letto minuti fa
-    /// potrebbe stare ancora convergendo via mirror, e fonderlo ora congelerebbe il vecchio.
-    @Test("Il dedup rimanda i gruppi letti di recente")
-    func defersRecentlyReadGroups() throws {
+    /// Il dedup fonde con last-writer-wins: vince la lettura più fresca anche se è su una pagina
+    /// precedente (tornare indietro non deve resuscitare la pagina vecchia). È il tuo caso 115 vs 10.
+    @Test("Il dedup tiene il progresso più fresco anche se è più indietro")
+    func keepsFreshestProgressEvenWhenBehind() throws {
         let context = try TestStore.makeContext()
+        makeComic(in: context, path: "Topolino 3620.cbz", lastReadPage: 115, dateLastOpened: Date().addingTimeInterval(-7200))
         makeComic(in: context, path: "Topolino 3620.cbz", lastReadPage: 10, dateLastOpened: Date())
-        makeComic(in: context, path: "Topolino 3620.cbz", lastReadPage: 50, dateLastOpened: Date().addingTimeInterval(-3600))
         try context.save()
 
-        #expect(LibraryViewModel().deduplicateComics(in: context) == 0)
-        #expect(try comics(in: context).count == 2)
+        #expect(LibraryViewModel().deduplicateComics(in: context) == 1)
+        #expect(try comics(in: context).count == 1)
+        #expect(try comics(in: context).first?.lastReadPage == 10)
     }
 
-    @Test("Il dedup fonde i gruppi con attività vecchia")
+    @Test("Il dedup fonde i gruppi con attività vecchia (vince il più fresco)")
     func mergesStaleGroups() throws {
         let context = try TestStore.makeContext()
         makeComic(in: context, path: "Topolino 3620.cbz", lastReadPage: 10, dateLastOpened: Date().addingTimeInterval(-3600))
@@ -141,7 +142,7 @@ struct LibraryDeduplicationTests {
 
         #expect(LibraryViewModel().deduplicateComics(in: context) == 1)
         #expect(try comics(in: context).count == 1)
-        #expect(try comics(in: context).first?.lastReadPage == 50)
+        #expect(try comics(in: context).first?.lastReadPage == 10)
     }
 
     /// This is the guard that makes `registerComic` idempotent: a file already in the library

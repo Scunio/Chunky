@@ -327,9 +327,10 @@ final class LibraryViewModel: ObservableObject {
     func deduplicateLibrary(context: NSManagedObjectContext) {
         let backgroundContext = sharedScanContext(for: context)
         enqueue(.deduplicate) { [weak self] in
-            // Col sync esplicito prima di fondere (vede il progresso in volo) e con la
-            // grazia sui letti di recente (il mirror potrebbe convergere ancora): senza,
-            // il merge fotografava il vecchio e lo riesportava sopra il fresco.
+            // Col sync esplicito prima di fondere (vede il progresso in volo): senza,
+            // il merge fotografava il vecchio e lo riesportava sopra il fresco. Il merge è
+            // last-writer-wins, quindi fondere subito è sicuro: un progresso più fresco che
+            // arriva dopo vince comunque al giro successivo.
             self?.deduplicateComics(in: backgroundContext, awaitRemoteProgress: true)
             self?.backfillSeriesNames(in: backgroundContext)
         }

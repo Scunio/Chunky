@@ -9,6 +9,13 @@ extension LibraryViewModel {
     ///
     /// NEVER touches the files: there's only one file, and it's the one the duplicate records share.
     ///
+    /// Convergenza deterministica, non finestra temporale: il superstite è scelto con
+    /// `precedesAsSurvivor` (identico su ogni device) e il progresso con last-writer-wins su
+    /// `dateLastOpened` (vedi `merge`) — a parità di orologio vince la pagina più avanzata, così
+    /// due device convergono allo stesso valore anche con gli orologi sfasati. Fondere subito è
+    /// sicuro proprio perché il merge è LWW: un progresso più fresco che arriva dopo dal mirror
+    /// vince comunque al giro successivo, invece di restare schiacciato da un `max()`.
+    ///
     /// `awaitRemoteProgress` (solo dal passo dedicato, mai da import/rebuild/test) attende in
     /// modo limitato il sync esplicito prima di fondere, così il merge vede il progresso
     /// fresco in volo invece di fotografare il vecchio. Sempre fuori dal main thread.
@@ -35,14 +42,11 @@ extension LibraryViewModel {
             guard let comics = try? context.fetch(request) else { return }
 
             for (path, group) in Dictionary(grouping: comics, by: { $0.relativePath ?? "" }) where group.count > 1 {
-                // Grazia sui letti di recente: il mirror potrebbe stare ancora convergendo
-                // (record arrivato, progresso in volo) e fonderli ora fotograferebbe il
-                // vecchio. Solo `dateLastOpened`: un import fresco mai letto si fonde subito.
-                // Si ricontrolla al prossimo giro (import mirror, foreground, rescan).
-                if Self.hasRecentReadingActivity(group) {
-                    DiagnosticLog.log("Deduplica: rimandato per \"\(path)\" (lettura recente, si ricontrolla al prossimo giro)")
-                    continue
-                }
+                // Niente grazia temporale sui letti di recente: era un livelock — ogni fetch del
+                // sync esplicito scrive un `dateLastOpened` fresco su ogni duplicato, quindi il
+                // gruppo risultava "recente" per sempre e non si fondeva mai. La freschezza è già
+                // garantita da `waitForRemoteProgress` qui sopra, e il merge LWW sotto rende sicura
+                // la fusione immediata (il più fresco vince comunque, anche se arriva dopo).
                 let ordered = group.sorted(by: Self.precedesAsSurvivor)
                 guard let survivor = ordered.first else { continue }
                 for loser in ordered.dropFirst() {
@@ -73,9 +77,6 @@ extension LibraryViewModel {
     /// più recente — lo riesporta via mirror sopra il fresco (last-writer-wins).
     /// Scade sempre: alla scadenza si procede comunque e il fetch in corso guarisce dopo.
     private static let dedupRemoteFetchTimeout: TimeInterval = 12
-    /// Finestra in cui un gruppo letto di recente non si collassa: il mirror potrebbe
-    /// convergere ancora. Assorbe anche qualche minuto di sfasamento tra gli orologi.
-    private static let dedupRecentActivityGrace: TimeInterval = 5 * 60
 
     private static func waitForRemoteProgress(in context: NSManagedObjectContext) {
         let done = DispatchGroup()
@@ -84,11 +85,6 @@ extension LibraryViewModel {
         if done.wait(timeout: .now() + dedupRemoteFetchTimeout) == .timedOut {
             DiagnosticLog.log("Deduplica: fetch progressi oltre i \(Int(dedupRemoteFetchTimeout))s, procedo comunque")
         }
-    }
-
-    private static func hasRecentReadingActivity(_ group: [ComicEntity]) -> Bool {
-        let cutoff = Date().addingTimeInterval(-dedupRecentActivityGrace)
-        return group.contains { ($0.dateLastOpened ?? .distantPast) > cutoff }
     }
 
     /// Recomputes the series for comics that still lack one. `seriesName` is written only once,
@@ -147,14 +143,22 @@ extension LibraryViewModel {
         return (lhs.id?.uuidString ?? "") < (rhs.id?.uuidString ?? "")
     }
 
-    /// Merges into the survivor whatever is worth keeping from the discarded record: without this
-    /// step, deduplication would eat the reading progress made on the other device.
+    /// Merges into the survivor with last-writer-wins on `dateLastOpened`: the freshest read wins,
+    /// even when it's on an earlier page (going back a few pages must not resurrect page 115 over
+    /// page 10). `max()` here was the bug that kept old pages alive: the dedup save — newer as a
+    /// write — was then re-exported by the mirror over the fresh progress. On equal clocks the most
+    /// advanced page wins, so two devices with skewed clocks still converge to the same value.
+    /// Page count, cover, favorite, series and title keep union semantics (worth keeping from either).
     private static func merge(_ source: ComicEntity, into target: ComicEntity) {
-        target.lastReadPage = max(target.lastReadPage, source.lastReadPage)
-        if target.pageCount <= 0 { target.pageCount = source.pageCount }
-        if let opened = source.dateLastOpened, (target.dateLastOpened ?? .distantPast) < opened {
-            target.dateLastOpened = opened
+        let sourceDate = source.dateLastOpened ?? .distantPast
+        let targetDate = target.dateLastOpened ?? .distantPast
+        if sourceDate > targetDate {
+            target.lastReadPage = source.lastReadPage
+            target.dateLastOpened = source.dateLastOpened
+        } else if sourceDate == targetDate {
+            target.lastReadPage = max(target.lastReadPage, source.lastReadPage)
         }
+        if target.pageCount <= 0 { target.pageCount = source.pageCount }
         // Safe accessors: a direct `coverImageData` read on a row whose external
         // sidecar file is missing raises an uncatchable NSException (see
         // `ComicEntity.safeCoverImageData`) instead of returning nil.
