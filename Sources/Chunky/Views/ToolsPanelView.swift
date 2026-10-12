@@ -38,6 +38,9 @@ struct ToolsPanelView: View {
                     NavigationLink(destination: ParentalLockSettingsView()) {
                         Label("Blocco genitori", systemImage: "lock")
                     }
+                    NavigationLink(destination: DiagnosticsView()) {
+                        Label("Diagnostica", systemImage: "stethoscope")
+                    }
                 }
 
                 Section {
