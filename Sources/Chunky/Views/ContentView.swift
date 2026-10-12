@@ -38,6 +38,7 @@ struct ContentView: View {
             // a new gathering phase every time.
             .onAppear {
                 ICloudDownloadTracker.shared.start()
+                RemoteProgressSync.logAccountStatus()
                 syncSyncFolderIfNeeded()
                 adoptFilesDroppedInDocuments()
                 viewModel.deduplicateLibrary(context: context)

@@ -182,6 +182,14 @@ enum RemoteProgressSync {
         Engine.resetToken()
     }
 
+    /// One-shot CloudKit account check, logged to Diagnostica at launch: tells "different
+    /// iCloud account / sync disabled" apart from delivery problems when mirrored imports
+    /// never arrive. Gated like every other entry point (entitlement-less builds never
+    /// touch `CKContainer`).
+    static func logAccountStatus() {
+        Engine.logAccountStatus()
+    }
+
     // MARK: - Private
 
     private static var currentDeviceName: String {
@@ -516,6 +524,33 @@ enum RemoteProgressSync {
 
         static func resetToken() {
             UserDefaults.standard.removeObject(forKey: RemoteProgressSync.defaultsTokenKey)
+        }
+
+        /// Reports `CKContainer.accountStatus` to Diagnostica (see `logAccountStatus`).
+        /// The completion handler runs off-main; `DiagnosticLog` is thread-safe.
+        static func logAccountStatus() {
+            guard cloudKitUsable else {
+                DiagnosticLog.log("CloudKit account: non verificabile (build senza entitlement)")
+                return
+            }
+            CKContainer(identifier: RemoteProgressSync.containerIdentifier).accountStatus { status, error in
+                if let error {
+                    DiagnosticLog.log("CloudKit account: errore verifica (\(error.localizedDescription))")
+                    return
+                }
+                switch status {
+                case .available:
+                    DiagnosticLog.log("CloudKit account: disponibile")
+                case .noAccount:
+                    DiagnosticLog.log("CloudKit account: nessun account iCloud su questo device")
+                case .restricted:
+                    DiagnosticLog.log("CloudKit account: con restrizioni")
+                case .couldNotDetermine:
+                    DiagnosticLog.log("CloudKit account: non determinabile")
+                @unknown default:
+                    DiagnosticLog.log("CloudKit account: stato sconosciuto")
+                }
+            }
         }
 
         private static func storedToken() -> CKServerChangeToken? {
