@@ -12,11 +12,12 @@
             return nil;
         }
         NSData *data = (NSData *)value;
-        // Force `_PFExternalReferenceData` to load its sidecar file now, inside the
-        // `@try`: without this, the fault would fire later (during Swift Data
-        // bridging) outside any handler and still crash.
-        (void)[data length];
-        return data;
+        // Force `_PFExternalReferenceData` to load and copy its sidecar bytes now,
+        // inside the `@try`. Returning the proxy itself is unsafe: Swift's
+        // `NSData` -> `Data` bridge can trigger `_retrieveExternalData` only after
+        // this method returns, outside the exception handler. An owned copy has
+        // no deferred Core Data fault when Swift bridges it.
+        return [NSData dataWithData:data];
     } @catch (NSException *exception) {
         return nil;
     }

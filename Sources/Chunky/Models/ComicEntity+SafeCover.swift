@@ -23,6 +23,7 @@ extension ComicEntity {
             return data as Data
         }
         ObjCExceptionCatcher.clearBinaryValue(for: self, key: "coverImageData")
+        CoverThumbnailCache.invalidate(for: self)
         if changedValues()["coverImageData"] != nil {
             DiagnosticLog.log("CoverThumbnail: riferimento esterno illeggibile rimosso, verrà rigenerata")
         }

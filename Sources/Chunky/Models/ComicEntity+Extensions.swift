@@ -85,7 +85,10 @@ extension ComicEntity {
         // Safe accessors: a direct `coverImageData` read on a row whose external
         // sidecar file is missing raises an uncatchable NSException (see
         // `ComicEntity.safeCoverImageData`) instead of returning nil.
-        if safeCoverImageData == nil { coverImageData = loser.safeCoverImageData }
+        if safeCoverImageData == nil {
+            CoverThumbnailCache.invalidate(for: self)
+            coverImageData = loser.safeCoverImageData
+        }
         if loser.isFavorite { isFavorite = true }
         if (seriesName ?? "").isEmpty { seriesName = loser.seriesName }
         if (title ?? "").isEmpty { title = loser.title }

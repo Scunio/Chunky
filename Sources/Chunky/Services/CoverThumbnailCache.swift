@@ -29,7 +29,35 @@ enum CoverThumbnailCache {
         return cache
     }()
 
+    private static let contextChangeObserver = NotificationCenter.default.addObserver(
+        forName: .NSManagedObjectContextObjectsDidChange,
+        object: nil,
+        queue: nil
+    ) { notification in
+        let updated = notification.userInfo?[NSUpdatedObjectsKey] as? Set<NSManagedObject> ?? []
+        for object in updated {
+            guard let comic = object as? ComicEntity,
+                  comic.changedValues().keys.contains("coverImageData") else { continue }
+            invalidate(for: comic)
+        }
+
+        let deleted = notification.userInfo?[NSDeletedObjectsKey] as? Set<NSManagedObject> ?? []
+        for object in deleted {
+            guard let comic = object as? ComicEntity else { continue }
+            invalidate(for: comic)
+        }
+    }
+
+    /// Drop a decoded thumbnail when its source cover changes.
+    static func invalidate(for comic: ComicEntity) {
+        guard !comic.objectID.isTemporaryID else { return }
+        cache.removeObject(forKey: NSManagedObjectIDBox(comic.objectID))
+    }
+
     static func image(for comic: ComicEntity) -> PlatformImage? {
+        // Keep the notification observer alive so CloudKit and other contexts also
+        // invalidate thumbnails when they update a cover outside local write paths.
+        _ = contextChangeObserver
         // `safeCoverImageData`, not `coverImageData`: when the sidecar file backing
         // this external-binary attribute goes missing, a direct access raises an
         // NSException (`_PFExternalReferenceData _retrieveExternalData`) that Swift

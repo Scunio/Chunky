@@ -198,6 +198,7 @@ final class LibraryViewModel: ObservableObject {
                 in: context
             )
             comic.pageCount = Int32(pageCount)
+            CoverThumbnailCache.invalidate(for: comic)
             comic.coverImageData = coverData
             if saveImmediately {
                 try? context.save()
@@ -625,6 +626,7 @@ final class LibraryViewModel: ObservableObject {
         context.performAndWait {
             guard let comic = try? context.existingObject(with: objectID) as? ComicEntity else { return }
             comic.pageCount = Int32(analysis.pageCount)
+            CoverThumbnailCache.invalidate(for: comic)
             comic.coverImageData = analysis.coverData
 
             let fallbackTitle = (relativePath as NSString).deletingPathExtension

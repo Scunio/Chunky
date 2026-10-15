@@ -134,6 +134,7 @@ enum ComicDownloadService {
                 comic.title = LibraryViewModel.displayTitle(from: analysis?.metadata, fallbackTitle: fallbackTitle)
                 comic.seriesName = analysis?.metadata?.series ?? comic.seriesName
                 comic.pageCount = Int32(analysis?.pageCount ?? 0)
+                CoverThumbnailCache.invalidate(for: comic)
                 comic.coverImageData = analysis?.coverData
                 comic.isRemotePlaceholder = false
                 try? context.save()
