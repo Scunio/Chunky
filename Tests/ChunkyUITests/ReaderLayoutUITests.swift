@@ -27,9 +27,9 @@ final class ReaderLayoutUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    private func launchReader() -> XCUIApplication {
+    private func launchReader(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["--uitesting", "--uitesting-seed"]
+        app.launchArguments += ["--uitesting", "--uitesting-seed"] + extraArguments
         app.launch()
 
         // The fixture is written on launch, which on a clean container is *after* the library
@@ -107,6 +107,16 @@ final class ReaderLayoutUITests: XCTestCase {
             XCTAssertGreaterThan(footer.frame.maxY, window.maxY - 80,
                                  "Il footer non arriva al bordo inferiore: \(footer.frame)")
         }
+    }
+
+    func testRemoteProgressBannerSitsBelowHeader() {
+        let app = launchReader(extraArguments: ["--uitesting-remote-banner"])
+        let header = app.buttons["Libreria"]
+        let banner = app.staticTexts["Pagina 2 su un altro dispositivo"]
+        XCTAssertTrue(header.waitForExistence(timeout: 15))
+        XCTAssertTrue(banner.waitForExistence(timeout: 15))
+        XCTAssertGreaterThanOrEqual(banner.frame.minY, header.frame.maxY,
+                                    "Il banner copre l'header: banner \(banner.frame), header \(header.frame)")
     }
 }
 #endif

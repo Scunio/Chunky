@@ -1389,7 +1389,18 @@ struct ReaderContentView: View {
             .padding(.vertical, 10)
             .background(Color.black.opacity(0.85))
             .cornerRadius(20)
+            // The reader fills the screen edge to edge on iOS, so a fixed 8pt inset
+            // puts this banner under the status bar and on top of the header pill.
+            // When the controls are visible, place it just below the measured header;
+            // otherwise keep it below the status bar. The measured height also adapts
+            // to iPad and landscape layouts where the header can be taller.
+            #if os(iOS)
+            .padding(.top, isControlsVisible
+                     ? headerHeight + 8
+                     : PlatformSafeArea.statusBarHeight + 8)
+            #else
             .padding(.top, 8)
+            #endif
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -1698,6 +1709,9 @@ struct ReaderContentView: View {
                     isLoadingComic = false
                     provider = loaded
                     pageCache = PageImageCache(provider: loaded)
+                    if CommandLine.arguments.contains("--uitesting-remote-banner"), loaded.pageCount > 1 {
+                        pendingRemotePage = 1
+                    }
                     let clampedStart = min(startingPage, max(0, loaded.pageCount - 1))
                     let starts = spreadStarts(pageCount: loaded.pageCount)
                     let aligned = starts.last(where: { $0 <= clampedStart }) ?? 0
