@@ -37,6 +37,16 @@ struct ContentView: View {
             // isn't active): stopping and restarting it when entering/leaving the reader would force
             // a new gathering phase every time.
             .onAppear {
+                // UI-test fixtures are written before the root view appears. Scan them now
+                // regardless of whether the user's library lives locally or in iCloud.
+                if CommandLine.arguments.contains(UITestSeed.launchArgument)
+                    || CommandLine.arguments.contains(UITestSeed.multiLaunchArgument) {
+                    // The fixtures are written into local Documents (the app's iCloud
+                    // library may be elsewhere). Queue adoption then an additive scan on
+                    // the same serial worker so the comic is registered before UI queries.
+                    viewModel.adoptFilesDroppedInDocuments(context: context)
+                    viewModel.rebuildLibrary(context: context)
+                }
                 ICloudDownloadTracker.shared.start()
                 RemoteProgressSync.logAccountStatus()
                 // Crea una volta la subscription ai cambi della zona progressi: da qui

@@ -59,6 +59,12 @@ enum UITestSeed {
         #else
         writeLandmarkPDF(to: url, colorSeed: colorSeed)
         #endif
+        // The normal Documents adoption ignores files modified in the last five seconds
+        // because user copies may still be in progress. Fixtures are already complete.
+        try? FileManager.default.setAttributes(
+            [.modificationDate: Date.distantPast],
+            ofItemAtPath: url.path
+        )
     }
 
     /// `colorSeed == 0` (the single-comic case) keeps the original fixed palette untouched;
