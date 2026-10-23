@@ -23,6 +23,14 @@ struct PanelSelectionView: View {
 
     private var hasSelection: Bool { selection.width >= 8 && selection.height >= 8 }
 
+    private var topControlsInset: CGFloat {
+        #if os(iOS)
+        PlatformSafeArea.topInset
+        #else
+        0
+        #endif
+    }
+
     var body: some View {
         ZStack {
             GeometryReader { proxy in
@@ -76,7 +84,10 @@ struct PanelSelectionView: View {
                             .background(Circle().fill(Color.red))
                     }
                 }
-                .padding()
+                // This overlay fills the reader's edge-to-edge hosting view, so it must
+                // account for the status bar/notch itself instead of relying on safe areas.
+                .padding(.top, topControlsInset + 16)
+                .padding(.horizontal)
                 Spacer()
             }
         }

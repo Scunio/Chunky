@@ -938,7 +938,8 @@ struct ReaderContentView: View {
                 resetToken: PagerResetToken(
                     doublePage: effectiveDoublePage,
                     rightToLeft: comic.readingDirection == .rightToLeft,
-                    pageCount: provider.pageCount
+                    pageCount: provider.pageCount,
+                    backgroundIsDark: isBackgroundDark
                 ),
                 fadeDuration: fadeTransitionDuration
             ) { start in

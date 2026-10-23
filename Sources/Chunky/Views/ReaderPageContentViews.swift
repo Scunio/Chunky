@@ -3,6 +3,12 @@ import SwiftUI
 import UIKit
 #endif
 
+private struct PageProcessingSettings: Equatable {
+    let autoCrop: Bool
+    let autoTintContrast: Bool
+    let upscale: Bool
+}
+
 // Content of a page or spread: which image to show, how to load it and how to size it.
 // Extracted from `ReaderSupportViews.swift`; the zoom layer lives in
 // `ReaderZoomViews.swift`, the pager in `ReaderPagerViews.swift`.
@@ -127,6 +133,15 @@ private struct SpreadPairView: View {
     @State private var trailingImage: PlatformImage?
     @State private var leadingFailed = false
     @State private var trailingFailed = false
+    @State private var loadGeneration = 0
+
+    private var processingSettings: PageProcessingSettings {
+        PageProcessingSettings(
+            autoCrop: isAutoCropEnabled,
+            autoTintContrast: isAutoTintContrastEnabled,
+            upscale: isUpscalingEnabled
+        )
+    }
 
     var body: some View {
         Group {
@@ -152,9 +167,23 @@ private struct SpreadPairView: View {
             }
         }
         .onAppear {
-            loadPage(index: leadingIndex) { leadingImage = $0 } onFailure: { leadingFailed = true }
-            loadPage(index: leadingIndex + 1) { trailingImage = $0 } onFailure: { trailingFailed = true }
+            loadPages()
         }
+        .onChange(of: processingSettings) { _, _ in reloadPages() }
+    }
+
+    private func reloadPages() {
+        loadGeneration += 1
+        leadingImage = nil
+        trailingImage = nil
+        leadingFailed = false
+        trailingFailed = false
+        loadPages()
+    }
+
+    private func loadPages() {
+        loadPage(index: leadingIndex) { leadingImage = $0 } onFailure: { leadingFailed = true }
+        loadPage(index: leadingIndex + 1) { trailingImage = $0 } onFailure: { trailingFailed = true }
     }
 
     /// Spinner while loading, "Retry" button if the read failed — instead of a spinner
@@ -180,6 +209,7 @@ private struct SpreadPairView: View {
     }
 
     private func loadPage(index: Int, onSuccess: @escaping (PlatformImage) -> Void, onFailure: @escaping () -> Void) {
+        let generation = loadGeneration
         let autoCrop = isAutoCropEnabled
         let upscale = isUpscalingEnabled
         let autoTintContrast = isAutoTintContrastEnabled
@@ -195,9 +225,15 @@ private struct SpreadPairView: View {
             )
             Task {
                 if let loaded = await imageCache.image(at: index, options: options) {
-                    await MainActor.run { onSuccess(loaded) }
+                    await MainActor.run {
+                        guard generation == loadGeneration else { return }
+                        onSuccess(loaded)
+                    }
                 } else {
-                    await MainActor.run { onFailure() }
+                    await MainActor.run {
+                        guard generation == loadGeneration else { return }
+                        onFailure()
+                    }
                 }
             }
             return
@@ -209,7 +245,10 @@ private struct SpreadPairView: View {
                 loaded = try provider.image(atPage: index)
             } catch {
                 DiagnosticLog.log("Lettura pagina \(index) fallita: \((error as NSError).localizedDescription)")
-                DispatchQueue.main.async { onFailure() }
+                DispatchQueue.main.async {
+                    guard generation == self.loadGeneration else { return }
+                    onFailure()
+                }
                 return
             }
             if autoCrop {
@@ -222,7 +261,10 @@ private struct SpreadPairView: View {
                 loaded = ImageProcessing.upscaleIfNeeded(loaded, targetSize: targetSize)
             }
             let final = loaded
-            DispatchQueue.main.async { onSuccess(final) }
+            DispatchQueue.main.async {
+                guard generation == self.loadGeneration else { return }
+                onSuccess(final)
+            }
         }
     }
 }
@@ -274,6 +316,7 @@ private struct PageView: View {
     @AppStorage("motionBlurEnabled") private var isMotionBlurEnabled = true
     @State private var image: PlatformImage?
     @State private var loadFailed = false
+    @State private var imageLoadGeneration = 0
     @State private var scale: CGFloat = 1
     @State private var lastScale: CGFloat = 1
     @State private var offset: CGSize = .zero
@@ -288,6 +331,14 @@ private struct PageView: View {
     /// vertically.
     private var effectiveZoomMode: PageZoomMode {
         isDoublePage ? doublePageZoomMode : singlePageZoomMode
+    }
+
+    private var processingSettings: PageProcessingSettings {
+        PageProcessingSettings(
+            autoCrop: isAutoCropEnabled,
+            autoTintContrast: isAutoTintContrastEnabled,
+            upscale: isUpscalingEnabled
+        )
     }
 
     var body: some View {
@@ -350,6 +401,7 @@ private struct PageView: View {
                     }
                 }
                 .onAppear { loadImage(targetSize: proxy.size) }
+                .onChange(of: processingSettings) { _, _ in reloadImage(targetSize: proxy.size) }
             }
             .clipped()
         }
@@ -407,6 +459,20 @@ private struct PageView: View {
             }
         }
         .onAppear { loadImage(targetSize: CGSize(width: estimatedWidth, height: height)) }
+        .onChange(of: processingSettings) {
+            _, _ in reloadImage(targetSize: CGSize(width: estimatedWidth, height: height))
+        }
+    }
+
+    private func reloadImage(targetSize: CGSize) {
+        imageLoadGeneration += 1
+        image = nil
+        loadFailed = false
+        scale = 1
+        lastScale = 1
+        offset = .zero
+        lastOffset = .zero
+        loadImage(targetSize: targetSize)
     }
 
     /// Spinner while loading, "Retry" button if the read failed — instead of a spinner
@@ -441,6 +507,7 @@ private struct PageView: View {
 
     private func loadImage(targetSize: CGSize) {
         guard image == nil else { return }
+        let generation = imageLoadGeneration
         let autoCrop = isAutoCropEnabled
         let upscale = isUpscalingEnabled
         let autoTintContrast = isAutoTintContrastEnabled
@@ -457,6 +524,7 @@ private struct PageView: View {
             Task {
                 let loaded = await imageCache.image(at: index, options: options)
                 await MainActor.run {
+                    guard generation == imageLoadGeneration else { return }
                     if let loaded {
                         self.image = loaded
                     } else {
@@ -479,7 +547,10 @@ private struct PageView: View {
                 // useful for any other read failure). With a "Retry" button instead of
                 // staying stuck forever — see `pageSlot`.
                 DiagnosticLog.log("Lettura pagina \(index) fallita: \((error as NSError).localizedDescription)")
-                DispatchQueue.main.async { self.loadFailed = true }
+                DispatchQueue.main.async {
+                    guard generation == self.imageLoadGeneration else { return }
+                    self.loadFailed = true
+                }
                 return
             }
             if autoCrop {
@@ -491,7 +562,10 @@ private struct PageView: View {
             if upscale {
                 loaded = ImageProcessing.upscaleIfNeeded(loaded, targetSize: targetSize)
             }
-            DispatchQueue.main.async { self.image = loaded }
+            DispatchQueue.main.async {
+                guard generation == self.imageLoadGeneration else { return }
+                self.image = loaded
+            }
         }
     }
 

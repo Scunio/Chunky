@@ -80,7 +80,7 @@ final class SMBClient: RemoteBrowsing {
     func download(_ entry: RemoteEntry, connection: SMBConnectionInfo, onProgress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
         try await withConnectedShare(connection) { manager in
             let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-            try? FileManager.default.removeItem(at: destination)
+            defer { try? FileManager.default.removeItem(at: destination) }
             let progress: SMB2Manager.ReadProgressHandler = onProgress.map { handler in
                 { bytes, total in
                     if total > 0 { handler(Double(bytes) / Double(total)) }
@@ -89,9 +89,17 @@ final class SMBClient: RemoteBrowsing {
             }
             try await manager.downloadItem(atPath: self.smbPath(from: entry.url), to: destination, progress: progress)
 
-            let finalDestination = FileManager.default.temporaryDirectory.appendingPathComponent(entry.title)
-            try? FileManager.default.removeItem(at: finalDestination)
-            try FileManager.default.moveItem(at: destination, to: finalDestination)
+            let outputDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("Chunky-Remote-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+            let fileName = (entry.title as NSString).lastPathComponent
+            let finalDestination = outputDirectory.appendingPathComponent(fileName.isEmpty ? UUID().uuidString : fileName)
+            do {
+                try FileManager.default.moveItem(at: destination, to: finalDestination)
+            } catch {
+                try? FileManager.default.removeItem(at: outputDirectory)
+                throw error
+            }
             return finalDestination
         }
     }

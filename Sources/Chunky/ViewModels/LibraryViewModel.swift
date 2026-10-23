@@ -47,11 +47,20 @@ final class LibraryViewModel: ObservableObject {
 
     // MARK: - Explicit import
 
-    func importFiles(_ urls: [URL], into context: NSManagedObjectContext) {
+    func importFiles(
+        _ urls: [URL],
+        into context: NSManagedObjectContext,
+        cleaningTemporaryDirectories temporaryDirectories: [URL] = []
+    ) {
         let backgroundContext = sharedScanContext(for: context)
         let statusToken = beginStatus(urls.count == 1 ? "Importazione…" : "Importazione di \(urls.count) fumetti…")
 
         workQueue.async { [weak self] in
+            defer {
+                for directory in temporaryDirectories {
+                    try? FileManager.default.removeItem(at: directory)
+                }
+            }
             guard let self = self else { return }
             defer { self.endStatus(token: statusToken) }
             for (index, url) in urls.enumerated() {

@@ -36,23 +36,30 @@ enum FolderToComicConverter {
         // On iCloud Drive, the files of a folder not yet opened may just be
         // undownloaded placeholders: without waiting for them, they'd end up archived empty/truncated.
         for imageURL in images {
-            try? LibraryStorage.ensureDownloaded(imageURL)
+            try LibraryStorage.ensureDownloaded(imageURL)
         }
 
         let comicName = folderURL.lastPathComponent.isEmpty ? "Fumetto" : folderURL.lastPathComponent
-        let destination = FileManager.default.temporaryDirectory.appendingPathComponent("\(comicName).cbz")
-        try? FileManager.default.removeItem(at: destination)
+        let outputDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Chunky-Folder-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        let destination = outputDirectory.appendingPathComponent("\(comicName).cbz")
 
-        guard let archive = try? Archive(url: destination, accessMode: .create, pathEncoding: nil) else {
-            throw FolderToComicError.archiveCreationFailed
+        do {
+            guard let archive = try? Archive(url: destination, accessMode: .create, pathEncoding: nil) else {
+                throw FolderToComicError.archiveCreationFailed
+            }
+
+            for (index, imageURL) in images.enumerated() {
+                let paddedIndex = String(format: "%04d", index)
+                let entryName = "page_\(paddedIndex).\(imageURL.pathExtension.lowercased())"
+                try archive.addEntry(with: entryName, fileURL: imageURL, compressionMethod: .deflate)
+            }
+
+            return destination
+        } catch {
+            try? FileManager.default.removeItem(at: outputDirectory)
+            throw error
         }
-
-        for (index, imageURL) in images.enumerated() {
-            let paddedIndex = String(format: "%04d", index)
-            let entryName = "page_\(paddedIndex).\(imageURL.pathExtension.lowercased())"
-            try archive.addEntry(with: entryName, fileURL: imageURL, compressionMethod: .deflate)
-        }
-
-        return destination
     }
 }

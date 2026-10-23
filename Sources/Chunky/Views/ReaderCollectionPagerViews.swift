@@ -181,6 +181,9 @@ struct PageCollectionPager<Content: View>: UIViewRepresentable {
                 currentIndex = parent.selection
                 lastRefreshedSelection = parent.selection
                 applySnapshot()
+                // Diffable snapshots don't recreate unchanged cells. Refresh the visible
+                // hosting configurations as well, so their inherited color scheme updates.
+                refreshVisibleContent()
                 scroll(toStart: parent.selection, animated: false)
                 return
             }

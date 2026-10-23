@@ -12,6 +12,9 @@ struct PagerResetToken: Hashable {
     let doublePage: Bool
     let rightToLeft: Bool
     let pageCount: Int
+    /// Page content carries the effective light/dark scheme for its reader chrome. Rebuild
+    /// cached pages when that scheme changes so Automatic <-> White takes effect immediately.
+    let backgroundIsDark: Bool
 }
 
 /// Reader pager. Exposes `UIPageViewController` because it's the only component that offers

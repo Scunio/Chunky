@@ -251,7 +251,11 @@ struct RemoteBrowserView: View {
             }
             do {
                 let localURL = try await browser.download(entry, account: account)
-                viewModel.importFiles([localURL], into: context)
+                viewModel.importFiles(
+                    [localURL],
+                    into: context,
+                    cleaningTemporaryDirectories: [localURL.deletingLastPathComponent()]
+                )
                 downloadingEntryIDs.remove(entry.id)
             } catch {
                 viewModel.importError = error.chunkyFriendlyDescription

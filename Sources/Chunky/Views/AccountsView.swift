@@ -419,7 +419,11 @@ struct AccountsView: View {
             do {
                 let comicURL = try FolderToComicConverter.makeComic(fromFolder: folderURL)
                 DispatchQueue.main.async {
-                    viewModel.importFiles([comicURL], into: context)
+                    viewModel.importFiles(
+                        [comicURL],
+                        into: context,
+                        cleaningTemporaryDirectories: [comicURL.deletingLastPathComponent()]
+                    )
                 }
             } catch {
                 DispatchQueue.main.async {

@@ -124,10 +124,19 @@ enum ComicDownloadService {
                 } else {
                     tempURL = try await browser.download(entry, account: account)
                 }
+                defer {
+                    let temporaryDirectory = tempURL.deletingLastPathComponent()
+                    if temporaryDirectory.deletingLastPathComponent().standardizedFileURL
+                        == FileManager.default.temporaryDirectory.standardizedFileURL,
+                       temporaryDirectory.lastPathComponent.hasPrefix("Chunky-Remote-") {
+                        try? FileManager.default.removeItem(at: temporaryDirectory)
+                    } else {
+                        try? FileManager.default.removeItem(at: tempURL)
+                    }
+                }
                 let destinationURL = LibraryStorage.fileURL(forRelativePath: relativePath)
                 try? FileManager.default.removeItem(at: destinationURL)
                 try FileManager.default.copyItem(at: tempURL, to: destinationURL)
-                try? FileManager.default.removeItem(at: tempURL)
 
                 let analysis = LibraryViewModel.analyzeComic(at: destinationURL, format: format)
                 let fallbackTitle = (relativePath as NSString).deletingPathExtension

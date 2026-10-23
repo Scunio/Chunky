@@ -110,9 +110,18 @@ extension RemoteBrowsing {
         }
         await MainActor.run { DownloadManager.shared.remove(downloadItem) }
 
-        let finalDestination = FileManager.default.temporaryDirectory.appendingPathComponent(suggestedName)
-        try? FileManager.default.removeItem(at: finalDestination)
-        try FileManager.default.moveItem(at: tempURL, to: finalDestination)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let outputDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Chunky-Remote-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        let fileName = (suggestedName as NSString).lastPathComponent
+        let finalDestination = outputDirectory.appendingPathComponent(fileName.isEmpty ? UUID().uuidString : fileName)
+        do {
+            try FileManager.default.moveItem(at: tempURL, to: finalDestination)
+        } catch {
+            try? FileManager.default.removeItem(at: outputDirectory)
+            throw error
+        }
         return finalDestination
     }
 }
