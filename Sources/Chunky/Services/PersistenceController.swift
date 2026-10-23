@@ -59,25 +59,41 @@ struct PersistenceController {
             return model
         }
 
+        // Read the compiled checksums from the model bundle. Asking a freshly loaded model
+        // for `versionChecksum` logs that it is still editable and can return an unstable
+        // value, which prevents Core Data from matching a store to the staged migration path.
+        guard let momdURL = Bundle(for: BundleToken.self).url(forResource: "Chunky", withExtension: "momd"),
+              let versionInfoData = try? Data(contentsOf: momdURL.appendingPathComponent("VersionInfo.plist")),
+              let versionInfo = try? PropertyListSerialization.propertyList(from: versionInfoData, format: nil)
+                as? [String: Any],
+              let checksums = versionInfo["NSManagedObjectModel_VersionChecksums"] as? [String: String] else {
+            fatalError("Could not load Core Data model version checksums")
+        }
+        func checksum(_ name: String) -> String {
+            guard let value = checksums[name] else {
+                fatalError("Could not find Core Data model version checksum for \(name)")
+            }
+            return value
+        }
+
         let v1 = loadVersion("Chunky")
         let v2 = loadVersion("Chunky 2")
         let bridge = loadVersion("Chunky 2.5")
         let current = loadVersion("Chunky 3")
 
-        let lightweight = NSLightweightMigrationStage([
-            v1.versionChecksum,
-            v2.versionChecksum,
-            bridge.versionChecksum
-        ])
-        lightweight.label = "Chunky 1–2.5: prepare inline cover storage"
+        let v1ToV2 = NSLightweightMigrationStage([checksum("Chunky")])
+        v1ToV2.label = "Chunky 1–2: lightweight migration"
+
+        let v2ToBridge = NSLightweightMigrationStage([checksum("Chunky 2")])
+        v2ToBridge.label = "Chunky 2–2.5: lightweight migration"
 
         let bridgeReference = NSManagedObjectModelReference(
             model: bridge,
-            versionChecksum: bridge.versionChecksum
+            versionChecksum: checksum("Chunky 2.5")
         )
         let currentReference = NSManagedObjectModelReference(
             model: current,
-            versionChecksum: current.versionChecksum
+            versionChecksum: checksum("Chunky 3")
         )
         let copyCoverData = NSCustomMigrationStage(
             migratingFrom: bridgeReference,
@@ -117,7 +133,7 @@ struct PersistenceController {
             }
         }
 
-        return NSStagedMigrationManager([lightweight, copyCoverData])
+        return NSStagedMigrationManager([v1ToV2, v2ToBridge, copyCoverData])
     }()
 
     init(inMemory: Bool = false) {
