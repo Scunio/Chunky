@@ -13,11 +13,11 @@
         }
         NSData *data = (NSData *)value;
         // Force `_PFExternalReferenceData` to load and copy its sidecar bytes now,
-        // inside the `@try`. Returning the proxy itself is unsafe: Swift's
-        // `NSData` -> `Data` bridge can trigger `_retrieveExternalData` only after
-        // this method returns, outside the exception handler. An owned copy has
-        // no deferred Core Data fault when Swift bridges it.
-        return [NSData dataWithData:data];
+        // inside the `@try`. `dataWithData:` may return an optimized wrapper that
+        // still defers materialization until Swift bridges it. Read the raw bytes
+        // here and allocate a plain NSData so no Core Data proxy escapes the catch.
+        NSUInteger length = data.length;
+        return [[NSData alloc] initWithBytes:data.bytes length:length];
     } @catch (NSException *exception) {
         return nil;
     }
