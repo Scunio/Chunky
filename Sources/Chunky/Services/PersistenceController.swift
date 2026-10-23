@@ -49,7 +49,9 @@ struct PersistenceController {
     /// active, then rename the inline attribute back to `coverImageData`.
     private static let stagedMigrationManager: NSStagedMigrationManager = {
         func loadVersion(_ name: String) -> NSManagedObjectModel {
-            let momdURL = Bundle(for: BundleToken.self).url(forResource: "Chunky", withExtension: "momd")!
+            guard let momdURL = Bundle(for: BundleToken.self).url(forResource: "Chunky", withExtension: "momd") else {
+                fatalError("Could not locate the Chunky Core Data model bundle")
+            }
             let modelURL = momdURL.appendingPathComponent("\(name).mom")
             guard let model = NSManagedObjectModel(contentsOf: modelURL) else {
                 fatalError("Could not load Core Data model version \(name)")
