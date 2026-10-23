@@ -88,7 +88,7 @@ targetTemplates:
         PRODUCT_NAME: Chunky
         SWIFT_OBJC_BRIDGING_HEADER: Sources/Chunky/Chunky-Bridging-Header.h
         PRODUCT_BUNDLE_IDENTIFIER: com.scunio.Chunky
-        MARKETING_VERSION: "1.0.4"
+        MARKETING_VERSION: "1.0.5"
         CURRENT_PROJECT_VERSION: "6"
         SWIFT_VERSION: "5.0"
         ENABLE_PREVIEWS: true

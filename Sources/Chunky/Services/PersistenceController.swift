@@ -43,6 +43,81 @@ struct PersistenceController {
         return model
     }()
 
+    /// `coverImageData` used external binary storage, which can leave a dangling reference if
+    /// SQLite and Core Data's sidecar files are restored or synced at different times. Migrate
+    /// through an inline temporary attribute, copy each readable blob while the old model is
+    /// active, then rename the inline attribute back to `coverImageData`.
+    private static let stagedMigrationManager: NSStagedMigrationManager = {
+        func loadVersion(_ name: String) -> NSManagedObjectModel {
+            let momdURL = Bundle(for: BundleToken.self).url(forResource: "Chunky", withExtension: "momd")!
+            let modelURL = momdURL.appendingPathComponent("\(name).mom")
+            guard let model = NSManagedObjectModel(contentsOf: modelURL) else {
+                fatalError("Could not load Core Data model version \(name)")
+            }
+            return model
+        }
+
+        let v1 = loadVersion("Chunky")
+        let v2 = loadVersion("Chunky 2")
+        let bridge = loadVersion("Chunky 2.5")
+        let current = loadVersion("Chunky 3")
+
+        let lightweight = NSLightweightMigrationStage([
+            v1.versionChecksum,
+            v2.versionChecksum,
+            bridge.versionChecksum
+        ])
+        lightweight.label = "Chunky 1–2.5: prepare inline cover storage"
+
+        let bridgeReference = NSManagedObjectModelReference(
+            model: bridge,
+            versionChecksum: bridge.versionChecksum
+        )
+        let currentReference = NSManagedObjectModelReference(
+            model: current,
+            versionChecksum: current.versionChecksum
+        )
+        let copyCoverData = NSCustomMigrationStage(
+            migratingFrom: bridgeReference,
+            to: currentReference
+        )
+        copyCoverData.label = "Chunky 2.5–3: migrate covers into SQLite"
+        copyCoverData.willMigrateHandler = { migrationManager, _ in
+            guard let migrationContainer = migrationManager.container else {
+                throw NSError(
+                    domain: "com.scunio.chunky.persistence",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Contesto di migrazione Core Data non disponibile"]
+                )
+            }
+            let context = migrationContainer.newBackgroundContext()
+            do {
+                try context.performAndWait {
+                    let request = NSFetchRequest<NSManagedObject>(entityName: "ComicEntity")
+                    let comics = try context.fetch(request)
+                    for comic in comics {
+                        if let data = ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageData") {
+                            comic.setValue(data, forKey: "coverImageDataInline")
+                            // Remove the external reference before the schema drops the old
+                            // attribute. If the migration is retried, the inline copy remains.
+                            ObjCExceptionCatcher.clearBinaryValue(for: comic, key: "coverImageData")
+                        } else {
+                            // A dangling sidecar is a missing derived cover; the existing
+                            // backfill regenerates it from the comic archive after migration.
+                            ObjCExceptionCatcher.clearBinaryValue(for: comic, key: "coverImageData")
+                        }
+                    }
+                    if context.hasChanges { try context.save() }
+                }
+            } catch {
+                DiagnosticLog.log("Migrazione cover Core Data fallita: \(error.localizedDescription)")
+                throw error
+            }
+        }
+
+        return NSStagedMigrationManager([lightweight, copyCoverData])
+    }()
+
     init(inMemory: Bool = false) {
         container = NSPersistentCloudKitContainer(name: "Chunky", managedObjectModel: Self.model)
 
@@ -58,10 +133,18 @@ struct PersistenceController {
             cloudDescription.type = NSInMemoryStoreType
             localDescription.type = NSInMemoryStoreType
         } else {
+            cloudDescription.setOption(
+                Self.stagedMigrationManager,
+                forKey: NSPersistentStoreStagedMigrationManagerOptionKey
+            )
             cloudDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
             cloudDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
             let localStoreURL = NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("ChunkyLocal.sqlite")
             localDescription.url = localStoreURL
+            localDescription.setOption(
+                Self.stagedMigrationManager,
+                forKey: NSPersistentStoreStagedMigrationManagerOptionKey
+            )
         }
         // Migrazione leggera esplicita: i default sarebbero già `true`, ma da una migrazione
         // dipende potenzialmente l'avvio dopo un aggiornamento, quindi meglio non affidarla a un
@@ -130,14 +213,20 @@ struct PersistenceController {
                 continue
             }
 
-            // Lo store non si apre (né migra): prima di cancellare tutto col fallback qui sotto,
-            // un ultimo tentativo sullo stesso file (potrebbe essere un timeout/blip). Se fallisce
-            // ancora, il fallback ricrea da zero e il mirror reimporta da CloudKit.
+            // Prima di qualunque recupero, riprova sullo stesso file: potrebbe essere un
+            // timeout o un errore transitorio. Gli errori di migrazione non devono mai attivare
+            // il fallback distruttivo: il database resta intatto per poter correggere la
+            // migrazione e riprovare senza perdere dati locali non ancora sincronizzati.
             if let retryError = scopedLoad(container: container, description: description) {
                 // Timeout, non fallimento: come nel codice originale, niente cancellazione —
                 // lo store è intatto, è solo la rete/CloudKit ad essere lenta.
                 // (`PersistenceLoadError` ha il solo caso `.timedOut`.)
                 if retryError is PersistenceLoadError {
+                    if firstError == nil { firstError = retryError }
+                    continue
+                }
+                if Self.isMigrationFailure(retryError) {
+                    DiagnosticLog.log("Store conservato dopo errore di migrazione: \((retryError as NSError).localizedDescription)")
                     if firstError == nil { firstError = retryError }
                     continue
                 }
@@ -181,6 +270,24 @@ struct PersistenceController {
         try? FileManager.default.removeItem(at: url)
         try? FileManager.default.removeItem(at: url.appendingPathExtension("shm"))
         try? FileManager.default.removeItem(at: url.appendingPathExtension("wal"))
+    }
+
+    /// Core Data migration failures are recoverable by a later app build; deleting the store
+    /// here would silently discard local library metadata and unsynced reading progress.
+    private static func isMigrationFailure(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSCocoaErrorDomain,
+           (134100...134190).contains(nsError.code) || [134505, 134506].contains(nsError.code) {
+            return true
+        }
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? Error {
+            return isMigrationFailure(underlying)
+        }
+        if let detailedErrors = nsError.userInfo[NSDetailedErrorsKey] as? [Error],
+           detailedErrors.contains(where: isMigrationFailure) {
+            return true
+        }
+        return false
     }
 }
 
