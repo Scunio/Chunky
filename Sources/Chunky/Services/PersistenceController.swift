@@ -6,7 +6,7 @@ struct PersistenceController {
     /// senza rilanciare l'app. Chi legge `.shared` al momento dell'uso (es. i push di
     /// `RemoteProgressSync`) vede sempre l'istanza corrente.
     static var shared = PersistenceController(
-        inMemory: CommandLine.arguments.contains("--uitesting")
+        uiTesting: CommandLine.arguments.contains("--uitesting")
     )
 
     /// Ricrea da zero container e store (rilancia caricamento ed eventuale migrazione).
@@ -138,7 +138,7 @@ struct PersistenceController {
         return NSStagedMigrationManager([v1ToV2, v2ToBridge, copyCoverData])
     }()
 
-    init(inMemory: Bool = false) {
+    init(inMemory: Bool = false, uiTesting: Bool = false) {
         container = NSPersistentCloudKitContainer(name: "Chunky", managedObjectModel: Self.model)
 
         guard let cloudDescription = container.persistentStoreDescriptions.first else {
@@ -151,23 +151,30 @@ struct PersistenceController {
 
         if inMemory {
             cloudDescription.type = NSInMemoryStoreType
-            // UI automation must not wait for CloudKit setup or inherit a simulator's
-            // account state. It exercises the app against a fresh, deterministic context.
             cloudDescription.cloudKitContainerOptions = nil
             localDescription.type = NSInMemoryStoreType
         } else {
-            cloudDescription.setOption(
-                Self.stagedMigrationManager,
-                forKey: NSPersistentStoreStagedMigrationManagerOptionKey
-            )
+            // UI automation runs without CloudKit entitlements. Use the normal SQLite
+            // stores, but omit CloudKit setup and migration work so simulator behavior is
+            // deterministic and matches the UI flows the tests exercise.
+            if uiTesting {
+                cloudDescription.cloudKitContainerOptions = nil
+            } else {
+                cloudDescription.setOption(
+                    Self.stagedMigrationManager,
+                    forKey: NSPersistentStoreStagedMigrationManagerOptionKey
+                )
+            }
             cloudDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
             cloudDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
             let localStoreURL = NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("ChunkyLocal.sqlite")
             localDescription.url = localStoreURL
-            localDescription.setOption(
-                Self.stagedMigrationManager,
-                forKey: NSPersistentStoreStagedMigrationManagerOptionKey
-            )
+            if !uiTesting {
+                localDescription.setOption(
+                    Self.stagedMigrationManager,
+                    forKey: NSPersistentStoreStagedMigrationManagerOptionKey
+                )
+            }
         }
         // Migrazione leggera esplicita: i default sarebbero già `true`, ma da una migrazione
         // dipende potenzialmente l'avvio dopo un aggiornamento, quindi meglio non affidarla a un
