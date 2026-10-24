@@ -113,7 +113,13 @@ struct ContentView: View {
             // ContentView is the root that's always alive for the whole session: updates to
             // `allRelativePaths` trigger the rescan here regardless of what the user
             // is currently looking at, instead of depending on a specific screen being open.
-            .onChange(of: tracker.allRelativePaths) { _, _ in scheduleDebouncedSync() }
+            .onChange(of: tracker.allRelativePaths) { _, _ in
+                scheduleDebouncedSync()
+                // The initial iCloud metadata gathering can finish after the startup
+                // backfill. Retry when the query reveals its files, including files that
+                // are already local and therefore never appear in pendingRelativePaths.
+                scheduleDebouncedPlaceholderBackfill()
+            }
             // A comic that stops being "to download" is a file that just arrived
             // locally: this is the moment to open it and extract its cover and page count, which
             // weren't available at registration time (see `registerComic`). Only the
@@ -199,6 +205,9 @@ struct ContentView: View {
                 // copying them: without this, staying in the foreground during a long transfer
                 // would leave them out of the library until the app restarts.
                 adoptFilesDroppedInDocuments()
+                // Retry cover extraction for iCloud files whose local materialization
+                // completed without a pending-download transition while Chunky was active.
+                viewModel.backfillPlaceholderMetadata(context: context)
                 // No true background execution on any platform this app ships on: remote
                 // accounts (SMB/WebDAV/OPDS) only get scanned while the app is open and in the
                 // foreground, same limitation as the rest of this loop.

@@ -569,6 +569,10 @@ final class LibraryViewModel: ObservableObject {
 
     func performBackfillPlaceholderMetadata(in context: NSManagedObjectContext) {
         var candidates: [(objectID: NSManagedObjectID, relativePath: String, format: ComicFormat)] = []
+        var missingCoverCount = 0
+        var legacyCoverCount = 0
+        var missingFileCount = 0
+        var pendingDownloadCount = 0
         context.performAndWait {
             let request = ComicEntity.fetchRequest()
             // Only the cover, not also "pageCount == 0": opening a just-downloaded comic
@@ -583,13 +587,35 @@ final class LibraryViewModel: ObservableObject {
             request.predicate = NSPredicate(format: "coverImageDataInline == nil")
             guard let comics = try? context.fetch(request) else { return }
             for comic in comics {
+                missingCoverCount += 1
+                // A staged migration may have been unable to move an external CloudKit
+                // value. Preserve readable legacy covers in the per-device cache before
+                // trying to rebuild from the archive.
+                if let legacyData = ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageData") {
+                    comic.coverImageDataInline = legacyData
+                    CoverThumbnailCache.invalidate(for: comic)
+                    legacyCoverCount += 1
+                    continue
+                }
                 guard let relativePath = comic.relativePath, !relativePath.isEmpty else { continue }
                 guard !pathsWithUnreadableArchive.contains(relativePath) else { continue }
                 let url = LibraryStorage.fileURL(forRelativePath: relativePath)
-                guard FileManager.default.fileExists(atPath: url.path),
-                      !LibraryStorage.isPendingDownload(url) else { continue }
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    missingFileCount += 1
+                    continue
+                }
+                guard !LibraryStorage.isPendingDownload(url) else {
+                    pendingDownloadCount += 1
+                    continue
+                }
                 candidates.append((comic.objectID, relativePath, comic.format))
             }
+            if context.hasChanges { try? context.save() }
+        }
+        if missingCoverCount > 0 {
+            DiagnosticLog.log(
+                "Cover backfill: \(missingCoverCount) senza cache, \(legacyCoverCount) recuperate dal campo CloudKit, \(candidates.count) archivi locali, \(pendingDownloadCount) da scaricare, \(missingFileCount) file non trovati"
+            )
         }
         guard !candidates.isEmpty else { return }
 
