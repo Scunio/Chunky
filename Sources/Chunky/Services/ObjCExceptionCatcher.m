@@ -32,4 +32,20 @@
     }
 }
 
++ (nullable NSError *)preflightFetchRequest:(NSFetchRequest *)request
+                                  inContext:(NSManagedObjectContext *)context {
+    @try {
+        NSError *error = nil;
+        [context executeFetchRequest:request error:&error];
+        return error;
+    } @catch (NSException *exception) {
+        return [NSError errorWithDomain:@"com.scunio.chunky.coredata-fetch"
+                                   code:1
+                               userInfo:@{
+            NSLocalizedDescriptionKey: exception.reason ?: @"Core Data ha rifiutato la query iniziale.",
+            @"exceptionName": exception.name ?: @"NSException"
+        }];
+    }
+}
+
 @end

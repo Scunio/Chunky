@@ -302,6 +302,11 @@ enum RemoteProgressSync {
         }
 
         private static func checkCloudKitUsable() -> Bool {
+            // UI automation runs the app without CloudKit entitlements and with local-only
+            // persistence. Keep every CloudKit entry point inert on iOS too; unlike macOS,
+            // iOS has no public entitlement-introspection API to detect the stripped build.
+            if CommandLine.arguments.contains("--uitesting") { return false }
+
             #if os(macOS)
             // SecTask is macOS-only (unavailable on iOS/tvOS): verified by probe that
             // `CKContainer(identifier:)` traps (SIGTRAP) instead of failing when the

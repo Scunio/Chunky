@@ -26,6 +26,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// can regenerate the cover). Never throws; a no-op when the value is already nil.
 + (void)clearBinaryValueForObject:(NSManagedObject *)object key:(NSString *)key;
 
+/// Runs a small fetch before the UI installs an `@FetchRequest`. Some Core Data store
+/// failures are raised as `NSException` instead of being returned through `NSError **`;
+/// SwiftUI's fetched-results controller cannot catch those exceptions itself.
++ (nullable NSError *)preflightFetchRequest:(NSFetchRequest *)request
+                                  inContext:(NSManagedObjectContext *)context;
+
 @end
 
 NS_ASSUME_NONNULL_END

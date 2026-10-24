@@ -4,6 +4,19 @@ import Testing
 
 @Suite("Migrazione Core Data")
 struct PersistenceMigrationTests {
+    @Test("Il preflight traduce le eccezioni Core Data in errori recuperabili")
+    func preflightCatchesInvalidFetch() {
+        let model = NSManagedObjectModel()
+        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
+        let context = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        context.persistentStoreCoordinator = coordinator
+        let request = NSFetchRequest<NSFetchRequestResult>(entityName: "MissingEntity")
+
+        let error = ObjCExceptionCatcher.preflightFetchRequest(request, in: context)
+
+        #expect(error != nil)
+    }
+
     @Test("I modelli storici migrano attraverso il ponte senza copiare il riferimento esterno")
     func coverMigrationMappingsCanBeInferred() throws {
         guard let modelBundle = (Bundle.allBundles + Bundle.allFrameworks)

@@ -193,15 +193,35 @@ struct PersistenceController {
 
         container.persistentStoreDescriptions.append(localDescription)
 
-        loadError = Self.loadStores(in: container)
+        let storeLoadError = Self.loadStores(in: container)
 
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
 
+        // SwiftUI's @FetchRequest executes its first query while constructing the root
+        // navigation stack. Core Data can raise an NSException for a store/query problem
+        // instead of returning an NSError; that escapes SwiftUI and terminates the app.
+        // Probe the library request here, before the UI is allowed to install its FRC, and
+        // show the existing storage-recovery screen if Core Data rejects it.
+        loadError = storeLoadError ?? Self.preflightLibraryFetch(in: container.viewContext)
+
         // Gli account creati prima dell'introduzione di `id` ce l'hanno a nil e senza
         // backfill ogni accesso al Keychain userebbe un UUID diverso (vedi `stableID`).
         // Su main all'avvio: sincrono e una tantum (idempotente).
-        RemoteAccountEntity.backfillMissingIDs(in: container.viewContext)
+        if loadError == nil {
+            RemoteAccountEntity.backfillMissingIDs(in: container.viewContext)
+        }
+    }
+
+    private static func preflightLibraryFetch(in context: NSManagedObjectContext) -> Error? {
+        let request = NSFetchRequest<NSFetchRequestResult>(entityName: "ComicEntity")
+        request.fetchLimit = 1
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \ComicEntity.title, ascending: true)]
+        if let error = ObjCExceptionCatcher.preflightFetchRequest(request, in: context) {
+            DiagnosticLog.log("Query iniziale della libreria non disponibile: \(error.localizedDescription) \((error as NSError).userInfo)")
+            return error
+        }
+        return nil
     }
 
     /// Loads every store description, waiting for all of them to report in before returning —
