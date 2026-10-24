@@ -18,7 +18,12 @@ struct ChunkyApp: App {
     init() {
         UITestSeed.seedIfRequested()
         let includeInBackup = UserDefaults.standard.object(forKey: "includeInBackup") as? Bool ?? false
-        LibraryStorage.setExcludedFromBackup(!includeInBackup)
+        // rootFolderURL() may ask the ubiquity daemon for an iCloud container. Keep that
+        // synchronous filesystem/IPC work off the main thread so a slow iCloud response
+        // can't leave the first window blank.
+        DispatchQueue.global(qos: .utility).async {
+            LibraryStorage.setExcludedFromBackup(!includeInBackup)
+        }
         CrashReportManager.configure()
         // Off-main: the first ubiquity-daemon round-trip must not land inside a view
         // body (see `LibraryStorage.isICloudAvailable`).
