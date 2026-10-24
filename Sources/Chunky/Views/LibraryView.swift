@@ -13,13 +13,12 @@ struct LibraryView: View {
     var selection: LibrarySelection = .all
 
     @Environment(\.managedObjectContext) private var context
+    @StateObject private var safeComicResults = SafeComicResults()
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var lock = ParentalLock.shared
     #endif
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \ComicEntity.title, ascending: true)]
-    ) private var comics: FetchedResults<ComicEntity>
+    private var comics: [ComicEntity] { safeComicResults.comics }
 
     @EnvironmentObject private var viewModel: LibraryViewModel
     @ObservedObject private var theme = AppTheme.shared
@@ -100,30 +99,41 @@ struct LibraryView: View {
     /// clears the focus-scale/safe-area margin.
     @ViewBuilder
     private func titledContent(filtered: [ComicEntity]) -> some View {
-        #if os(tvOS)
-        // `gridColumns`' 6-column math (1760pt content + 80pt margin each side = 1920pt,
-        // the full screen width) assumes that 80pt margin is the ONLY inset — but SwiftUI
-        // applies the system's own safe-area inset to this content by default, on top of
-        // it, starving the grid of real width and clipping the last column off the right
-        // edge (confirmed live: the 6th card in a row was visibly cut off). `.ignoresSafeArea()`
-        // makes the explicit 80pt margin the sole authority, matching that math.
-        if let title = tvOSLibraryTitle {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(title)
-                    .font(.largeTitle.bold())
-                    .padding(.horizontal, gridHorizontalPadding)
-                    .padding(.top, 60)
-                    .padding(.bottom, 8)
-                content(filtered: filtered)
+        if safeComicResults.error != nil {
+            ContentUnavailableView {
+                Label("Libreria non disponibile", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text("Chunky non è riuscito a leggere la libreria. Riprova tra poco.")
+            } actions: {
+                Button("Riprova") { safeComicResults.retry() }
+                    .buttonStyle(.borderedProminent)
             }
-            .ignoresSafeArea()
         } else {
-            content(filtered: filtered)
+            #if os(tvOS)
+            // `gridColumns`' 6-column math (1760pt content + 80pt margin each side = 1920pt,
+            // the full screen width) assumes that 80pt margin is the ONLY inset — but SwiftUI
+            // applies the system's own safe-area inset to this content by default, on top of
+            // it, starving the grid of real width and clipping the last column off the right
+            // edge (confirmed live: the 6th card in a row was visibly cut off). `.ignoresSafeArea()`
+            // makes the explicit 80pt margin the sole authority, matching that math.
+            if let title = tvOSLibraryTitle {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title)
+                        .font(.largeTitle.bold())
+                        .padding(.horizontal, gridHorizontalPadding)
+                        .padding(.top, 60)
+                        .padding(.bottom, 8)
+                    content(filtered: filtered)
+                }
                 .ignoresSafeArea()
+            } else {
+                content(filtered: filtered)
+                    .ignoresSafeArea()
+            }
+            #else
+            content(filtered: filtered)
+            #endif
         }
-        #else
-        content(filtered: filtered)
-        #endif
     }
 
     var body: some View {
@@ -132,6 +142,8 @@ struct LibraryView: View {
         // `existingGroupNames`) li ricalcolava da sé a ogni accesso.
         let filtered = filteredComics
         return titledContent(filtered: filtered)
+            .onAppear { safeComicResults.start(in: context) }
+            .onDisappear { safeComicResults.stop() }
             #if os(tvOS)
             .navigationTitle("")
             .toolbar(.hidden, for: .navigationBar)

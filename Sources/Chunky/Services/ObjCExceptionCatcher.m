@@ -34,17 +34,30 @@
 
 + (nullable NSError *)preflightFetchRequest:(NSFetchRequest *)request
                                   inContext:(NSManagedObjectContext *)context {
+    NSError *error = nil;
+    [self safeFetchRequest:request inContext:context failure:&error];
+    return error;
+}
+
++ (nullable NSArray<NSManagedObject *> *)safeFetchRequest:(NSFetchRequest *)request
+                                               inContext:(NSManagedObjectContext *)context
+                                                 failure:(NSError * _Nullable __autoreleasing *)failure {
     @try {
         NSError *error = nil;
-        [context executeFetchRequest:request error:&error];
-        return error;
+        NSArray<NSManagedObject *> *objects = [context executeFetchRequest:request error:&error];
+        if (failure) { *failure = error; }
+        return objects;
     } @catch (NSException *exception) {
-        return [NSError errorWithDomain:@"com.scunio.chunky.coredata-fetch"
-                                   code:1
-                               userInfo:@{
-            NSLocalizedDescriptionKey: exception.reason ?: @"Core Data ha rifiutato la query iniziale.",
-            @"exceptionName": exception.name ?: @"NSException"
-        }];
+        if (failure) {
+            *failure = [NSError errorWithDomain:@"com.scunio.chunky.coredata-fetch"
+                                           code:1
+                                       userInfo:@{
+                NSLocalizedDescriptionKey: exception.reason ?: @"Core Data ha rifiutato la query.",
+                @"exceptionName": exception.name ?: @"NSException",
+                @"exceptionReason": exception.reason ?: @""
+            }];
+        }
+        return nil;
     }
 }
 

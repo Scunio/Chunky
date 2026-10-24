@@ -25,6 +25,31 @@ struct PersistenceMigrationTests {
         #expect(results.count == 3)
     }
 
+    @MainActor
+    @Test("La query sicura aggiorna la libreria senza NSFetchedResultsController")
+    func safeComicResultsTracksContextChanges() async throws {
+        let context = try TestStore.makeContext()
+        let results = SafeComicResults()
+        results.start(in: context)
+        #expect(results.comics.isEmpty)
+
+        _ = ComicEntity.create(
+            title: "Nuovo fumetto",
+            relativePath: "nuovo-fumetto.cbz",
+            format: .cbz,
+            in: context
+        )
+        try context.save()
+
+        for _ in 0..<20 where results.comics.isEmpty {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+
+        #expect(results.error == nil)
+        #expect(results.comics.map(\.title) == ["Nuovo fumetto"])
+        results.stop()
+    }
+
     @Test("Il preflight traduce le eccezioni Core Data in errori recuperabili")
     func preflightCatchesInvalidFetch() {
         let model = NSManagedObjectModel()

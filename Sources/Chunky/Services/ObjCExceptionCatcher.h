@@ -32,6 +32,14 @@ NS_ASSUME_NONNULL_BEGIN
 + (nullable NSError *)preflightFetchRequest:(NSFetchRequest *)request
                                   inContext:(NSManagedObjectContext *)context;
 
+/// Executes a fetch inside an Objective-C exception boundary. Unlike Swift's `do/catch`,
+/// this also catches `NSException` raised by Core Data while a fetched-results controller
+/// is materializing rows.
++ (nullable NSArray<NSManagedObject *> *)safeFetchRequest:(NSFetchRequest *)request
+                                               inContext:(NSManagedObjectContext *)context
+                                                 failure:(NSError * _Nullable __autoreleasing *)failure
+    NS_SWIFT_NOTHROW;
+
 @end
 
 NS_ASSUME_NONNULL_END
