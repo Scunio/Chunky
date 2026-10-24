@@ -7,6 +7,9 @@ import Foundation
 enum LibraryStorage {
     private static let ubiquityContainerID = "iCloud.com.scunio.Chunky"
     private static let comicsFolderName = "Comics"
+    private static var isRunningUITests: Bool {
+        CommandLine.arguments.contains("--uitesting")
+    }
 
     nonisolated(unsafe) private static var cachedRootURL: URL?
     /// Guards `cachedRootURL`'s check-and-set below: without it, two callers racing on the
@@ -26,6 +29,9 @@ enum LibraryStorage {
     /// Always false on tvOS: no Files app/iCloud Drive there, and the entitlements lack
     /// `CloudDocuments` — querying the container hung the main thread at launch on a real Apple TV.
     static var isICloudAvailable: Bool {
+        // UI tests run without the app's iCloud entitlements. Avoid waiting on the
+        // ubiquity daemon and keep their fixture storage local and deterministic.
+        if isRunningUITests { return false }
         #if os(tvOS)
         false
         #else
@@ -61,6 +67,14 @@ enum LibraryStorage {
     }
 
     static func rootFolderURL() -> URL {
+        if isRunningUITests {
+            #if os(tvOS)
+            return FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("ComicsLibrary")
+            #else
+            return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            #endif
+        }
         rootFolderLock.lock()
         defer { rootFolderLock.unlock() }
 
