@@ -4,6 +4,27 @@ import Testing
 
 @Suite("Migrazione Core Data")
 struct PersistenceMigrationTests {
+    @Test("Il preflight interroga tutti i fumetti come la libreria")
+    func libraryPreflightFetchesAllComics() throws {
+        let context = try TestStore.makeContext()
+        for index in 0..<3 {
+            _ = ComicEntity.create(
+                title: "Fumetto \(index)",
+                relativePath: "fumetto-\(index).cbz",
+                format: .cbz,
+                in: context
+            )
+        }
+        try context.save()
+
+        let request = PersistenceController.libraryFetchRequest()
+        let results = try context.fetch(request)
+
+        #expect(request.fetchLimit == 0)
+        #expect(request.resultType == .managedObjectResultType)
+        #expect(results.count == 3)
+    }
+
     @Test("Il preflight traduce le eccezioni Core Data in errori recuperabili")
     func preflightCatchesInvalidFetch() {
         let model = NSManagedObjectModel()

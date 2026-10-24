@@ -23,7 +23,21 @@ private final class Subscriber: NSObject, MXMetricManagerSubscriber {
     func didReceive(_ payloads: [MXDiagnosticPayload]) {
         for payload in payloads {
             if let crashes = payload.crashDiagnostics, !crashes.isEmpty {
-                DiagnosticLog.log("MetricKit: \(crashes.count) crash diagnostic(s) ricevuti")
+                for (index, crash) in crashes.enumerated() {
+                    let exception = crash.exceptionReason.map {
+                        "\($0.className) / \($0.exceptionName): \($0.composedMessage)"
+                    } ?? "non disponibile"
+                    let details = [
+                        "MetricKit crash \(index + 1)/\(crashes.count)",
+                        "versione=\(crash.applicationVersion)",
+                        "terminazione=\(crash.terminationReason ?? "non disponibile")",
+                        "eccezione=\(exception)",
+                        "tipo=\(crash.exceptionType?.stringValue ?? "?")",
+                        "codice=\(crash.exceptionCode?.stringValue ?? "?")",
+                        "signal=\(crash.signal?.stringValue ?? "?")"
+                    ].joined(separator: "; ")
+                    DiagnosticLog.log(details)
+                }
             }
             if let hangs = payload.hangDiagnostics, !hangs.isEmpty {
                 DiagnosticLog.log("MetricKit: \(hangs.count) hang diagnostic(s) ricevuti")

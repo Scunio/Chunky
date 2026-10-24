@@ -214,9 +214,7 @@ struct PersistenceController {
     }
 
     private static func preflightLibraryFetch(in context: NSManagedObjectContext) -> Error? {
-        let request = NSFetchRequest<NSFetchRequestResult>(entityName: "ComicEntity")
-        request.fetchLimit = 1
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \ComicEntity.title, ascending: true)]
+        let request = libraryFetchRequest()
         if let error = ObjCExceptionCatcher.preflightFetchRequest(request, in: context) {
             DiagnosticLog.log("Query iniziale della libreria non disponibile: \(error.localizedDescription) \((error as NSError).userInfo)")
             return error
@@ -224,18 +222,28 @@ struct PersistenceController {
         return nil
     }
 
+    /// Keep startup validation aligned with the full object query installed by LibraryView's
+    /// `@FetchRequest`. Fetching only one row or only object IDs can miss an error encountered
+    /// while Core Data materializes a later comic.
+    static func libraryFetchRequest() -> NSFetchRequest<NSFetchRequestResult> {
+        let request = NSFetchRequest<NSFetchRequestResult>(entityName: "ComicEntity")
+        request.resultType = .managedObjectResultType
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \ComicEntity.title, ascending: true)]
+        return request
+    }
+
     /// Loads every store description, waiting for all of them to report in before returning —
     /// `loadPersistentStores`'s completion handler isn't guaranteed synchronous (a CloudKit-backed
     /// store's schema setup can take a moment), so this is the only way to know the real outcome
     /// for every store instead of possibly returning before some completions have even fired.
     ///
-    /// If a store fails (e.g. corrupted archive or incompatible schema), its files are deleted
-    /// and it's retried through `container.loadPersistentStores` again — not
-    /// `persistentStoreCoordinator.addPersistentStore` directly, which silently drops
+    /// A failed store gets one non-destructive retry through `container.loadPersistentStores` —
+    /// not `persistentStoreCoordinator.addPersistentStore` directly, which silently drops
     /// `cloudKitContainerOptions` and would leave a recovered CloudKit-backed store never wired
     /// up for sync. Retrying is scoped to just the failed description (`persistentStoreDescriptions`
     /// is narrowed to it for the retry call, then restored) so already-loaded stores aren't
-    /// re-attempted, which fails.
+    /// re-attempted. The store files are never deleted automatically: even a corrupt store may
+    /// contain recoverable local metadata or unsynced progress, so recovery must preserve it.
     private static func loadStores(in container: NSPersistentCloudKitContainer) -> Error? {
         let allDescriptions = container.persistentStoreDescriptions
         var failures: [(NSPersistentStoreDescription, Error)] = []
@@ -268,32 +276,13 @@ struct PersistenceController {
                 continue
             }
 
-            // Prima di qualunque recupero, riprova sullo stesso file: potrebbe essere un
-            // timeout o un errore transitorio. Gli errori di migrazione non devono mai attivare
-            // il fallback distruttivo: il database resta intatto per poter correggere la
-            // migrazione e riprovare senza perdere dati locali non ancora sincronizzati.
+            // Riprova sullo stesso file: potrebbe essere un errore transitorio. Nessun errore
+            // autorizza la cancellazione automatica dello store.
             if let retryError = scopedLoad(container: container, description: description) {
-                // Timeout, non fallimento: come nel codice originale, niente cancellazione —
-                // lo store è intatto, è solo la rete/CloudKit ad essere lenta.
-                // (`PersistenceLoadError` ha il solo caso `.timedOut`.)
-                if retryError is PersistenceLoadError {
-                    if firstError == nil { firstError = retryError }
-                    continue
-                }
-                if Self.isMigrationFailure(retryError) {
-                    DiagnosticLog.log("Store conservato dopo errore di migrazione: \((retryError as NSError).localizedDescription)")
-                    if firstError == nil { firstError = retryError }
-                    continue
-                }
+                DiagnosticLog.log("Store conservato dopo il retry fallito: \((retryError as NSError).localizedDescription) \((retryError as NSError).userInfo)")
+                if firstError == nil { firstError = retryError }
             } else {
                 continue
-            }
-
-            deleteStoreFiles(at: url)
-
-            if let retryError = scopedLoad(container: container, description: description) {
-                DiagnosticLog.log("Retry after deleting store also failed: \((retryError as NSError).localizedDescription)")
-                if firstError == nil { firstError = retryError }
             }
         }
         container.persistentStoreDescriptions = allDescriptions
@@ -321,29 +310,6 @@ struct PersistenceController {
         return retryError
     }
 
-    private static func deleteStoreFiles(at url: URL) {
-        try? FileManager.default.removeItem(at: url)
-        try? FileManager.default.removeItem(at: url.appendingPathExtension("shm"))
-        try? FileManager.default.removeItem(at: url.appendingPathExtension("wal"))
-    }
-
-    /// Core Data migration failures are recoverable by a later app build; deleting the store
-    /// here would silently discard local library metadata and unsynced reading progress.
-    private static func isMigrationFailure(_ error: Error) -> Bool {
-        let nsError = error as NSError
-        if nsError.domain == NSCocoaErrorDomain,
-           (134100...134190).contains(nsError.code) || [134505, 134506].contains(nsError.code) {
-            return true
-        }
-        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? Error {
-            return isMigrationFailure(underlying)
-        }
-        if let detailedErrors = nsError.userInfo[NSDetailedErrorsKey] as? [Error],
-           detailedErrors.contains(where: isMigrationFailure) {
-            return true
-        }
-        return false
-    }
 }
 
 enum PersistenceLoadError: LocalizedError {
