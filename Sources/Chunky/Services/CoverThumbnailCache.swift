@@ -7,7 +7,7 @@ import UIKit
 import AppKit
 #endif
 
-/// Thumbnail delle cover già decodificate dai PNG in `coverImageData`.
+/// Thumbnail delle cover già decodificate dai PNG in `coverImageDataInline`.
 ///
 /// Without this cache, `ComicGridItemView` would re-decode the cover on every evaluation of
 /// `body` — not just when the cell appears, but on every redraw triggered by
@@ -37,7 +37,7 @@ enum CoverThumbnailCache {
         let updated = notification.userInfo?[NSUpdatedObjectsKey] as? Set<NSManagedObject> ?? []
         for object in updated {
             guard let comic = object as? ComicEntity,
-                  comic.changedValues().keys.contains("coverImageData") else { continue }
+                  comic.changedValues().keys.contains("coverImageDataInline") else { continue }
             invalidate(for: comic)
         }
 
@@ -58,7 +58,7 @@ enum CoverThumbnailCache {
         // Keep the notification observer alive so CloudKit and other contexts also
         // invalidate thumbnails when they update a cover outside local write paths.
         _ = contextChangeObserver
-        // `safeCoverImageData`, not `coverImageData`: when the sidecar file backing
+        // `safeCoverImageData`, not `coverImageDataInline`: when a cover value backing
         // this external-binary attribute goes missing, a direct access raises an
         // NSException (`_PFExternalReferenceData _retrieveExternalData`) that Swift
         // cannot catch and the app aborts — the TestFlight 1.0.2 grid crash.

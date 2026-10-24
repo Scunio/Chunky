@@ -113,18 +113,19 @@ struct PDFPageProviderTests {
 
 @Suite("CBR")
 struct CBRPageProviderTests {
-    /// The .cbr fixture requires a RAR compressor, which isn't available everywhere:
-    /// as long as it's missing, the test reports itself as skipped instead of failing opaquely.
-    @Test("Legge le pagine da un archivio RAR")
+    /// The .cbr fixture requires a RAR compressor, which isn't available everywhere.
+    /// Disable the test during discovery when the generated fixture isn't bundled.
+    @Test(
+        "Legge le pagine da un archivio RAR",
+        .enabled(if: Fixtures.url("sample.cbr") != nil, "Fixture sample.cbr non presente nel bundle")
+    )
     func readsPages() throws {
-        try withKnownIssue("Fixture sample.cbr non presente nel bundle", isIntermittent: true) {
-            guard let url = Fixtures.url("sample.cbr") else { throw Fixtures.FixtureError.missing("sample.cbr") }
-            let sut = try CBRPageProvider(fileURL: url)
-            #expect(sut.pageCount == 3)
-            let image = try sut.image(atPage: 0)
-            let cgImage = try #require(image.cgImageRepresentation)
-            let sampled = try #require(PixelProbe.sample(cgImage, atRelativeX: 0.5, y: 0.5))
-            #expect(sampled.isCloseTo(.red))
-        }
+        let url = try #require(Fixtures.url("sample.cbr"))
+        let sut = try CBRPageProvider(fileURL: url)
+        #expect(sut.pageCount == 3)
+        let image = try sut.image(atPage: 0)
+        let cgImage = try #require(image.cgImageRepresentation)
+        let sampled = try #require(PixelProbe.sample(cgImage, atRelativeX: 0.5, y: 0.5))
+        #expect(sampled.isCloseTo(.red))
     }
 }

@@ -11,10 +11,10 @@ import CoreData
 struct LibrarySidebarView: View {
     @Binding var selection: LibrarySelection
     @ObservedObject private var theme = AppTheme.shared
+    @Environment(\.managedObjectContext) private var context
+    @StateObject private var comicResults = SafeComicResults()
 
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \ComicEntity.title, ascending: true)]
-    ) private var comics: FetchedResults<ComicEntity>
+    private var comics: [ComicEntity] { comicResults.comics }
 
     private var sections: [LibraryGrouping.Section] {
         LibraryGrouping.sections(for: Array(comics))
@@ -53,6 +53,8 @@ struct LibrarySidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .onAppear { comicResults.start(in: context) }
+        .onDisappear { comicResults.stop() }
         .accessibilityIdentifier("library.sidebar")
         .accentColor(theme.accent)
         // If the selected group stops existing (last comic moved elsewhere or

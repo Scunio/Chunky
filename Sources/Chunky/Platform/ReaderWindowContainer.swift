@@ -13,9 +13,7 @@ struct ReaderWindowContainer: View {
 
     @Environment(\.managedObjectContext) private var context
     @ObservedObject private var lock = ParentalLock.shared
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \ComicEntity.title, ascending: true)]
-    ) private var allComics: FetchedResults<ComicEntity>
+    @StateObject private var comicResults = SafeComicResults()
 
     @State private var comic: ComicEntity?
     @State private var didResolve = false
@@ -29,7 +27,7 @@ struct ReaderWindowContainer: View {
                 ParentalLockGateView()
                     .lockScreenBackground()
             } else if let comic {
-                ReaderView(comic: comic, libraryComics: Array(allComics))
+                ReaderView(comic: comic, libraryComics: comicResults.comics)
             } else if didResolve {
                 ContentUnavailableView(
                     "Fumetto non più disponibile",
@@ -43,7 +41,9 @@ struct ReaderWindowContainer: View {
         .onAppear {
             comic = comicID.resolve(in: context)
             didResolve = true
+            comicResults.start(in: context)
         }
+        .onDisappear { comicResults.stop() }
     }
 }
 #endif

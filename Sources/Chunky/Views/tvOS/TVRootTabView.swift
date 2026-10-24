@@ -36,13 +36,15 @@ struct TVRootTabView: View {
 /// a popover to here, this is its own destination.
 private struct TVNowReadingTabView: View {
     @Environment(\.managedObjectContext) private var context
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \ComicEntity.dateLastOpened, ascending: false)]
-    ) private var comics: FetchedResults<ComicEntity>
+    @StateObject private var comicResults = SafeManagedObjectResults<ComicEntity>(request: {
+        let request = NSFetchRequest<NSFetchRequestResult>(entityName: "ComicEntity")
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \ComicEntity.dateLastOpened, ascending: false)]
+        return request
+    }())
     @State private var selectedComic: ComicEntity?
 
     private var lastReadComic: ComicEntity? {
-        comics.first { $0.dateLastOpened != nil }
+        comicResults.items.first { $0.dateLastOpened != nil }
     }
 
     var body: some View {
@@ -57,7 +59,7 @@ private struct TVNowReadingTabView: View {
                     Text(comic.title ?? "Senza titolo")
                         .font(.title2.bold())
 
-                    Text("\(min(Int(comic.lastReadPage) + 1, max(Int(comic.pageCount), 1))) / \(comic.pageCount)")
+                    Text(pageProgress(for: comic))
                         .foregroundColor(.secondary)
 
                     // `.card` sizes its pill tightly around a bare label, no internal padding —
@@ -78,8 +80,10 @@ private struct TVNowReadingTabView: View {
         }
         .navigationTitle("In lettura")
         .fullScreenCover(item: $selectedComic) { comic in
-            ReaderView(comic: comic, libraryComics: Array(comics))
+            ReaderView(comic: comic, libraryComics: comicResults.items)
         }
+        .onAppear { comicResults.start(in: context) }
+        .onDisappear { comicResults.stop() }
     }
 
     @ViewBuilder
@@ -96,6 +100,12 @@ private struct TVNowReadingTabView: View {
                         .foregroundColor(.secondary)
                 )
         }
+    }
+
+    private func pageProgress(for comic: ComicEntity) -> String {
+        let totalPages = max(Int(comic.pageCount), 1)
+        let currentPage = min(max(Int(comic.lastReadPage) + 1, 1), totalPages)
+        return "\(currentPage) / \(totalPages)"
     }
 }
 

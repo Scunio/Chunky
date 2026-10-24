@@ -2,25 +2,23 @@ import CoreData
 import Combine
 import Foundation
 
-/// A live, main-context comic query that turns Core Data exceptions into a recoverable
-/// view state. SwiftUI's `@FetchRequest` owns an `NSFetchedResultsController` whose later
-/// fetches aren't inside an Objective-C exception boundary; a malformed or temporarily
-/// unavailable store can therefore abort the process instead of returning an error.
+/// Live main-context results fetched inside an Objective-C exception boundary.
+/// SwiftUI's `@FetchRequest` uses an `NSFetchedResultsController` that cannot catch
+/// `NSException` raised while Core Data materializes rows from a damaged store.
 @MainActor
-final class SafeComicResults: ObservableObject {
-    @Published private(set) var comics: [ComicEntity] = []
+final class SafeManagedObjectResults<Object: NSManagedObject>: ObservableObject {
+    @Published private(set) var items: [Object] = []
     @Published private(set) var error: Error?
 
     private weak var context: NSManagedObjectContext?
     private var notificationToken: NSObjectProtocol?
     private var refreshTask: Task<Void, Never>?
+    private let request: NSFetchRequest<NSFetchRequestResult>
 
-    private let request: NSFetchRequest<NSFetchRequestResult> = {
-        let request = NSFetchRequest<NSFetchRequestResult>(entityName: "ComicEntity")
+    init(request: NSFetchRequest<NSFetchRequestResult>) {
+        self.request = request
         request.resultType = .managedObjectResultType
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \ComicEntity.title, ascending: true)]
-        return request
-    }()
+    }
 
     func start(in context: NSManagedObjectContext) {
         if self.context !== context {
@@ -67,17 +65,29 @@ final class SafeComicResults: ObservableObject {
             request,
             in: context,
             failure: &fetchError
-        ) as? [ComicEntity], fetchError == nil else {
+        ) as? [Object], fetchError == nil else {
             let error = fetchError ?? NSError(
                 domain: "com.scunio.chunky.coredata-fetch",
                 code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "Core Data non ha restituito i fumetti della libreria."]
+                userInfo: [NSLocalizedDescriptionKey: "Core Data non ha restituito i dati richiesti."]
             )
             self.error = error
-            DiagnosticLog.log("Fetch libreria intercettata: \((error as NSError).localizedDescription) \((error as NSError).userInfo)")
+            DiagnosticLog.log("Fetch Core Data intercettata: \((error as NSError).localizedDescription) \((error as NSError).userInfo)")
             return
         }
         error = nil
-        comics = objects
+        items = objects
     }
+}
+
+typealias SafeComicResults = SafeManagedObjectResults<ComicEntity>
+
+extension SafeManagedObjectResults where Object == ComicEntity {
+    convenience init() {
+        let request = NSFetchRequest<NSFetchRequestResult>(entityName: "ComicEntity")
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \ComicEntity.title, ascending: true)]
+        self.init(request: request)
+    }
+
+    var comics: [ComicEntity] { items }
 }

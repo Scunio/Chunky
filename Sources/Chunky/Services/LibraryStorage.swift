@@ -33,7 +33,7 @@ enum LibraryStorage {
         // ubiquity daemon and keep their fixture storage local and deterministic.
         if isRunningUITests { return false }
         #if os(tvOS)
-        false
+        return false
         #else
         availabilityLock.lock()
         if let cached = cachedAvailability,

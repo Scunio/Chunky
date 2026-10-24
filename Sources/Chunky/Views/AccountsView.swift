@@ -15,9 +15,13 @@ private struct OpenRemoteService {
 struct AccountsView: View {
     @Environment(\.managedObjectContext) private var context
     @EnvironmentObject private var viewModel: LibraryViewModel
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \RemoteAccountEntity.dateAdded, ascending: true)]
-    ) private var accounts: FetchedResults<RemoteAccountEntity>
+    @StateObject private var accountResults = SafeManagedObjectResults<RemoteAccountEntity>(request: {
+        let request = NSFetchRequest<NSFetchRequestResult>(entityName: "RemoteAccountEntity")
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \RemoteAccountEntity.dateAdded, ascending: true)]
+        return request
+    }())
+
+    private var accounts: [RemoteAccountEntity] { accountResults.items }
 
     /// Two distinct `.fileImporter`s on the same view conflict in SwiftUI (one of them
     /// gets stuck mid-presentation, with a visual artifact of the system picker that never
@@ -103,6 +107,8 @@ struct AccountsView: View {
             }
         }
         #endif
+        .onAppear { accountResults.start(in: context) }
+        .onDisappear { accountResults.stop() }
     }
 
     /// iOS/macOS keep the system navigation bar and a single-column list; tvOS pushes into each

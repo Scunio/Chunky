@@ -87,7 +87,7 @@ extension ComicEntity {
         // `ComicEntity.safeCoverImageData`) instead of returning nil.
         if safeCoverImageData == nil {
             CoverThumbnailCache.invalidate(for: self)
-            coverImageData = loser.safeCoverImageData
+            coverImageDataInline = loser.safeCoverImageData
         }
         if loser.isFavorite { isFavorite = true }
         if (seriesName ?? "").isEmpty { seriesName = loser.seriesName }

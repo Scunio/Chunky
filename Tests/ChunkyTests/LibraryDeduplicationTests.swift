@@ -23,7 +23,7 @@ struct LibraryDeduplicationTests {
         comic.dateAdded = dateAdded
         comic.lastReadPage = lastReadPage
         comic.pageCount = 100
-        comic.coverImageData = cover
+        comic.coverImageDataInline = cover
         comic.isFavorite = favorite
         comic.dateLastOpened = dateLastOpened
         return comic
@@ -91,7 +91,7 @@ struct LibraryDeduplicationTests {
 
         let survivor = try #require(try comics(in: context).first)
         #expect(survivor.lastReadPage == 42)
-        #expect(survivor.coverImageData == Data([0x01]))
+        #expect(survivor.safeCoverImageData == Data([0x01]))
         #expect(survivor.isFavorite)
         #expect(survivor.dateLastOpened == opened)
     }

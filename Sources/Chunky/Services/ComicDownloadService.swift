@@ -144,7 +144,7 @@ enum ComicDownloadService {
                 comic.seriesName = analysis?.metadata?.series ?? comic.seriesName
                 comic.pageCount = Int32(analysis?.pageCount ?? 0)
                 CoverThumbnailCache.invalidate(for: comic)
-                comic.coverImageData = analysis?.coverData
+                comic.coverImageDataInline = analysis?.coverData
                 comic.isRemotePlaceholder = false
                 try? context.save()
                 finish(item, error: nil, completion: completion)

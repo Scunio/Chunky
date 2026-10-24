@@ -45,11 +45,15 @@ struct PersistenceController {
         return model
     }()
 
-    /// `coverImageData` used external binary storage, which can leave a dangling reference if
-    /// SQLite and Core Data's sidecar files are restored or synced at different times. Migrate
-    /// through an inline temporary attribute, copy each readable blob while the old model is
-    /// active, then rename the inline attribute back to `coverImageData`.
-    private static let stagedMigrationManager: NSStagedMigrationManager = {
+    /// Older models stored covers externally, then renamed the inline migration attribute back
+    /// to `coverImageData`. That rename caused Core Data's following model migration to drop the
+    /// copied bytes. Every historical model now migrates to a stable bridge whose `coverImageDataInline`
+    /// name is preserved through the final schema; the external attribute is removed only after
+    /// readable data has been copied into that same inline field.
+    /// Each persistent store needs its own migration manager. Core Data loads the CloudKit
+    /// store and local store concurrently, and a staged manager owns mutable per-migration
+    /// state (including the container exposed to custom handlers).
+    static func makeStagedMigrationManager() -> NSStagedMigrationManager {
         func loadVersion(_ name: String) -> NSManagedObjectModel {
             guard let momdURL = Bundle(for: BundleToken.self).url(forResource: "Chunky", withExtension: "momd") else {
                 fatalError("Could not locate the Chunky Core Data model bundle")
@@ -78,35 +82,34 @@ struct PersistenceController {
             return value
         }
 
-        let v1 = loadVersion("Chunky")
-        let v2 = loadVersion("Chunky 2")
-        let bridge = loadVersion("Chunky 2.6")
-        let current = loadVersion("Chunky 3")
+        let bridge = loadVersion("Chunky 3.5")
+        let current = loadVersion("Chunky 4")
 
-        let v1ToV2 = NSLightweightMigrationStage([checksum("Chunky")])
-        v1ToV2.label = "Chunky 1–2: lightweight migration"
-
-        // Chunky 2.5 was shipped in a TestFlight build. Include it as an accepted
-        // source so stores from that build can migrate to the corrected bridge model.
-        let v2ToBridge = NSLightweightMigrationStage([
+        // Checksums in a lightweight stage are an ordered model history, not a list of
+        // alternative source models. Keep every released lightweight version in sequence;
+        // the bridge is the source model of the following custom stage.
+        let historicalLightweightVersions = NSLightweightMigrationStage([
+            checksum("Chunky"),
             checksum("Chunky 2"),
-            checksum("Chunky 2.5")
+            checksum("Chunky 2.5"),
+            checksum("Chunky 2.6"),
+            checksum("Chunky 3")
         ])
-        v2ToBridge.label = "Chunky 2–2.6: lightweight migration"
+        historicalLightweightVersions.label = "Chunky 1–3: lightweight migration history"
 
         let bridgeReference = NSManagedObjectModelReference(
             model: bridge,
-            versionChecksum: checksum("Chunky 2.6")
+            versionChecksum: checksum("Chunky 3.5")
         )
         let currentReference = NSManagedObjectModelReference(
             model: current,
-            versionChecksum: checksum("Chunky 3")
+            versionChecksum: checksum("Chunky 4")
         )
         let copyCoverData = NSCustomMigrationStage(
             migratingFrom: bridgeReference,
             to: currentReference
         )
-        copyCoverData.label = "Chunky 2.6–3: migrate covers into SQLite"
+        copyCoverData.label = "Chunky 3.5–4: migrate covers into SQLite"
         copyCoverData.willMigrateHandler = { migrationManager, _ in
             guard let migrationContainer = migrationManager.container else {
                 throw NSError(
@@ -120,19 +123,30 @@ struct PersistenceController {
                 try context.performAndWait {
                     let request = NSFetchRequest<NSManagedObject>(entityName: "ComicEntity")
                     let comics = try context.fetch(request)
+                    var copiedCount = 0
                     for comic in comics {
-                        if let data = ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageDataExternal") {
+                        // Some historical stores use `coverImageData` with a rename identifier
+                        // pointing at the inline attribute. During the lightweight bridge step
+                        // Core Data may already place those bytes in the inline field.
+                        let data = ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageDataExternal")
+                            ?? ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageData")
+                            ?? ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageDataInline")
+                        if let data {
                             comic.setValue(data, forKey: "coverImageDataInline")
+                            copiedCount += 1
                             // Remove the external reference before the schema drops the old
                             // attribute. If the migration is retried, the inline copy remains.
                             ObjCExceptionCatcher.clearBinaryValue(for: comic, key: "coverImageDataExternal")
+                            ObjCExceptionCatcher.clearBinaryValue(for: comic, key: "coverImageData")
                         } else {
                             // A dangling sidecar is a missing derived cover; the existing
                             // backfill regenerates it from the comic archive after migration.
                             ObjCExceptionCatcher.clearBinaryValue(for: comic, key: "coverImageDataExternal")
+                            ObjCExceptionCatcher.clearBinaryValue(for: comic, key: "coverImageData")
                         }
                     }
                     if context.hasChanges { try context.save() }
+                    DiagnosticLog.log("Migrazione cover Core Data: copiate \(copiedCount) copertine su \(comics.count) fumetti")
                 }
             } catch {
                 DiagnosticLog.log("Migrazione cover Core Data fallita: \(error.localizedDescription)")
@@ -140,8 +154,8 @@ struct PersistenceController {
             }
         }
 
-        return NSStagedMigrationManager([v1ToV2, v2ToBridge, copyCoverData])
-    }()
+        return NSStagedMigrationManager([historicalLightweightVersions, copyCoverData])
+    }
 
     init(inMemory: Bool = false, uiTesting: Bool = false) {
         container = NSPersistentCloudKitContainer(name: "Chunky", managedObjectModel: Self.model)
@@ -166,7 +180,7 @@ struct PersistenceController {
                 cloudDescription.cloudKitContainerOptions = nil
             } else {
                 cloudDescription.setOption(
-                    Self.stagedMigrationManager,
+                    Self.makeStagedMigrationManager(),
                     forKey: NSPersistentStoreStagedMigrationManagerOptionKey
                 )
             }
@@ -176,7 +190,7 @@ struct PersistenceController {
             localDescription.url = localStoreURL
             if !uiTesting {
                 localDescription.setOption(
-                    Self.stagedMigrationManager,
+                    Self.makeStagedMigrationManager(),
                     forKey: NSPersistentStoreStagedMigrationManagerOptionKey
                 )
             }

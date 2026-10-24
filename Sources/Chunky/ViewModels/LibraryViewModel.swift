@@ -208,7 +208,7 @@ final class LibraryViewModel: ObservableObject {
             )
             comic.pageCount = Int32(pageCount)
             CoverThumbnailCache.invalidate(for: comic)
-            comic.coverImageData = coverData
+            comic.coverImageDataInline = coverData
             if saveImmediately {
                 try? context.save()
             }
@@ -580,7 +580,7 @@ final class LibraryViewModel: ObservableObject {
             // No need for a dedicated attribute in the model: that would be local device state
             // that CloudKit would sync to other devices, where the file might already be
             // downloaded.
-            request.predicate = NSPredicate(format: "coverImageData == nil")
+            request.predicate = NSPredicate(format: "coverImageDataInline == nil")
             guard let comics = try? context.fetch(request) else { return }
             for comic in comics {
                 guard let relativePath = comic.relativePath, !relativePath.isEmpty else { continue }
@@ -636,7 +636,7 @@ final class LibraryViewModel: ObservableObject {
             guard let comic = try? context.existingObject(with: objectID) as? ComicEntity else { return }
             comic.pageCount = Int32(analysis.pageCount)
             CoverThumbnailCache.invalidate(for: comic)
-            comic.coverImageData = analysis.coverData
+            comic.coverImageDataInline = analysis.coverData
 
             let fallbackTitle = (relativePath as NSString).deletingPathExtension
             let title = Self.displayTitle(from: analysis.metadata, fallbackTitle: fallbackTitle)

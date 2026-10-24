@@ -14,7 +14,8 @@ import CoreData
 /// screen is visible. This view just reads the tracker's state to display it.
 struct ICloudSyncFolderView: View {
     @EnvironmentObject private var viewModel: LibraryViewModel
-    @FetchRequest(sortDescriptors: []) private var comics: FetchedResults<ComicEntity>
+    @Environment(\.managedObjectContext) private var context
+    @StateObject private var comicResults = SafeComicResults()
     @ObservedObject private var tracker = ICloudDownloadTracker.shared
 
     @AppStorage("icloudSyncFolderEnabled") private var isEnabled = false
@@ -39,7 +40,7 @@ struct ICloudSyncFolderView: View {
                     HStack {
                         Text("Downloaded")
                         Spacer()
-                        Text("\(comics.count) comics")
+                        Text("\(comicResults.comics.count) comics")
                             .foregroundColor(.secondary)
                     }
                     Text(viewModel.isImporting ? "Sincronizzazione…" : "All comics synced")
@@ -65,6 +66,8 @@ struct ICloudSyncFolderView: View {
             // hook in, instead of staying inert for the rest of the session.
             if newValue { ICloudDownloadTracker.shared.start() }
         }
+        .onAppear { comicResults.start(in: context) }
+        .onDisappear { comicResults.stop() }
     }
 }
 
