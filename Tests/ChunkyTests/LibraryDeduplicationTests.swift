@@ -39,6 +39,24 @@ struct LibraryDeduplicationTests {
         try #require(UUID(uuidString: string))
     }
 
+    @Test("La copertina CloudKit legacy viene copiata nella cache locale")
+    func recoversCoverFromLegacyCloudKitAttribute() throws {
+        let context = try TestStore.makeContext()
+        let expectedCover = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        let comic = makeComic(in: context, path: "Topolino 3620.cbz")
+        comic.setValue(expectedCover, forKey: "coverImageData")
+        try context.save()
+
+        #expect(comic.coverImageDataInline == nil)
+        #expect(comic.safeCoverImageData == expectedCover)
+        #expect(comic.coverImageDataInline == expectedCover)
+
+        try context.save()
+        context.reset()
+        let reloaded = try #require(try comics(in: context).first)
+        #expect(reloaded.coverImageDataInline == expectedCover)
+    }
+
     @Test("Due record per lo stesso file diventano uno")
     func collapsesDuplicates() throws {
         let context = try TestStore.makeContext()

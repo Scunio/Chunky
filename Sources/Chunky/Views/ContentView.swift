@@ -78,6 +78,7 @@ struct ContentView: View {
             // disabled, so hooking into `rebuildLibrary` alone isn't enough.
             .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
                 scheduleDebouncedDeduplication()
+                scheduleDebouncedPlaceholderBackfill()
                 MirrorHistoryLogger.logNewImports(in: context)
             }
             // CloudKit import/export lifecycle (mirrored store): the only visibility into
@@ -99,6 +100,12 @@ struct ContentView: View {
                 }
                 if event.succeeded {
                     DiagnosticLog.log("CloudKit \(kind) riuscito")
+                    // The first startup backfill can run before CloudKit has downloaded the
+                    // library rows. Re-run after a completed import so local covers are built
+                    // as soon as their records and iCloud files are both available.
+                    if event.type == .import {
+                        scheduleDebouncedPlaceholderBackfill()
+                    }
                 } else {
                     DiagnosticLog.log("CloudKit \(kind) fallito: \(event.error?.localizedDescription ?? "?")")
                 }
