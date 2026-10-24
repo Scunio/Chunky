@@ -80,18 +80,23 @@ struct PersistenceController {
 
         let v1 = loadVersion("Chunky")
         let v2 = loadVersion("Chunky 2")
-        let bridge = loadVersion("Chunky 2.5")
+        let bridge = loadVersion("Chunky 2.6")
         let current = loadVersion("Chunky 3")
 
         let v1ToV2 = NSLightweightMigrationStage([checksum("Chunky")])
         v1ToV2.label = "Chunky 1–2: lightweight migration"
 
-        let v2ToBridge = NSLightweightMigrationStage([checksum("Chunky 2")])
-        v2ToBridge.label = "Chunky 2–2.5: lightweight migration"
+        // Chunky 2.5 was shipped in a TestFlight build. Include it as an accepted
+        // source so stores from that build can migrate to the corrected bridge model.
+        let v2ToBridge = NSLightweightMigrationStage([
+            checksum("Chunky 2"),
+            checksum("Chunky 2.5")
+        ])
+        v2ToBridge.label = "Chunky 2–2.6: lightweight migration"
 
         let bridgeReference = NSManagedObjectModelReference(
             model: bridge,
-            versionChecksum: checksum("Chunky 2.5")
+            versionChecksum: checksum("Chunky 2.6")
         )
         let currentReference = NSManagedObjectModelReference(
             model: current,
@@ -101,7 +106,7 @@ struct PersistenceController {
             migratingFrom: bridgeReference,
             to: currentReference
         )
-        copyCoverData.label = "Chunky 2.5–3: migrate covers into SQLite"
+        copyCoverData.label = "Chunky 2.6–3: migrate covers into SQLite"
         copyCoverData.willMigrateHandler = { migrationManager, _ in
             guard let migrationContainer = migrationManager.container else {
                 throw NSError(
@@ -116,15 +121,15 @@ struct PersistenceController {
                     let request = NSFetchRequest<NSManagedObject>(entityName: "ComicEntity")
                     let comics = try context.fetch(request)
                     for comic in comics {
-                        if let data = ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageData") {
+                        if let data = ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageDataExternal") {
                             comic.setValue(data, forKey: "coverImageDataInline")
                             // Remove the external reference before the schema drops the old
                             // attribute. If the migration is retried, the inline copy remains.
-                            ObjCExceptionCatcher.clearBinaryValue(for: comic, key: "coverImageData")
+                            ObjCExceptionCatcher.clearBinaryValue(for: comic, key: "coverImageDataExternal")
                         } else {
                             // A dangling sidecar is a missing derived cover; the existing
                             // backfill regenerates it from the comic archive after migration.
-                            ObjCExceptionCatcher.clearBinaryValue(for: comic, key: "coverImageData")
+                            ObjCExceptionCatcher.clearBinaryValue(for: comic, key: "coverImageDataExternal")
                         }
                     }
                     if context.hasChanges { try context.save() }
