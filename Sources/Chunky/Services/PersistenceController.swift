@@ -5,7 +5,9 @@ struct PersistenceController {
     /// `var` (non `let`) per il ripristino dalla schermata d'errore: `resetShared()` lo ricrea
     /// senza rilanciare l'app. Chi legge `.shared` al momento dell'uso (es. i push di
     /// `RemoteProgressSync`) vede sempre l'istanza corrente.
-    static var shared = PersistenceController()
+    static var shared = PersistenceController(
+        inMemory: CommandLine.arguments.contains("--uitesting")
+    )
 
     /// Ricrea da zero container e store (rilancia caricamento ed eventuale migrazione).
     /// Pesante e bloccante: chiamare fuori dal main (lo fa `StorageErrorView`).
@@ -149,6 +151,9 @@ struct PersistenceController {
 
         if inMemory {
             cloudDescription.type = NSInMemoryStoreType
+            // UI automation must not wait for CloudKit setup or inherit a simulator's
+            // account state. It exercises the app against a fresh, deterministic context.
+            cloudDescription.cloudKitContainerOptions = nil
             localDescription.type = NSInMemoryStoreType
         } else {
             cloudDescription.setOption(
