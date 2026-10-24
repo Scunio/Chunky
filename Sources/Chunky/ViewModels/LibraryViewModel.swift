@@ -573,6 +573,7 @@ final class LibraryViewModel: ObservableObject {
         var legacyCoverCount = 0
         var missingFileCount = 0
         var pendingDownloadCount = 0
+        var invalidCoverCount = 0
         context.performAndWait {
             let request = ComicEntity.fetchRequest()
             // Only the cover, not also "pageCount == 0": opening a just-downloaded comic
@@ -584,15 +585,26 @@ final class LibraryViewModel: ObservableObject {
             // No need for a dedicated attribute in the model: that would be local device state
             // that CloudKit would sync to other devices, where the file might already be
             // downloaded.
-            request.predicate = NSPredicate(format: "coverImageDataInline == nil")
             guard let comics = try? context.fetch(request) else { return }
             for comic in comics {
+                // A non-nil value can still be an unreadable/truncated image. Those records
+                // used to be skipped forever by the nil-only predicate, leaving a blank cell.
+                let inlineData = ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageDataInline")
+                if let inlineData, CoverThumbnailCache.canDecode(inlineData as Data) {
+                    continue
+                }
+                if inlineData != nil {
+                    ObjCExceptionCatcher.clearBinaryValue(for: comic, key: "coverImageDataInline")
+                    CoverThumbnailCache.invalidate(for: comic)
+                    invalidCoverCount += 1
+                }
                 missingCoverCount += 1
                 // A staged migration may have been unable to move an external CloudKit
                 // value. Preserve readable legacy covers in the per-device cache before
                 // trying to rebuild from the archive.
-                if let legacyData = ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageData") {
-                    comic.coverImageDataInline = legacyData
+                if let legacyData = ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageData"),
+                   CoverThumbnailCache.canDecode(legacyData as Data) {
+                    comic.coverImageDataInline = legacyData as Data
                     CoverThumbnailCache.invalidate(for: comic)
                     legacyCoverCount += 1
                     continue
@@ -614,7 +626,7 @@ final class LibraryViewModel: ObservableObject {
         }
         if missingCoverCount > 0 {
             DiagnosticLog.log(
-                "Cover backfill: \(missingCoverCount) senza cache, \(legacyCoverCount) recuperate dal campo CloudKit, \(candidates.count) archivi locali, \(pendingDownloadCount) da scaricare, \(missingFileCount) file non trovati"
+                "Cover backfill: \(missingCoverCount) mancanti/non valide (\(invalidCoverCount) cache non valide), \(legacyCoverCount) recuperate dal campo CloudKit, \(candidates.count) archivi locali, \(pendingDownloadCount) da scaricare, \(missingFileCount) file non trovati"
             )
         }
         guard !candidates.isEmpty else { return }

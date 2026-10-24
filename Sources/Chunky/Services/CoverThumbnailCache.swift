@@ -76,6 +76,13 @@ enum CoverThumbnailCache {
         return decoded
     }
 
+    /// Checks whether persisted bytes can actually produce the raster thumbnail the UI needs.
+    /// Non-nil cache data isn't proof of a valid image: partial Core Data migrations and older
+    /// imports can leave truncated or non-image bytes behind.
+    static func canDecode(_ data: Data) -> Bool {
+        thumbnail(from: data) != nil || PlatformImage.from(data: data) != nil
+    }
+
     /// Decode ridotto via `CGImageSourceCreateThumbnailAtIndex`: non carica mai il bitmap
     /// intero in memoria e restituisce un'immagine già alle dimensioni di presentazione,
     /// così la cella non deve riscalare nulla durante lo scroll.

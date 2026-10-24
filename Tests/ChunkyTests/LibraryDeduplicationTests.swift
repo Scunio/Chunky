@@ -39,10 +39,21 @@ struct LibraryDeduplicationTests {
         try #require(UUID(uuidString: string))
     }
 
+    private func validCover() throws -> Data {
+        let archive = try #require(Fixtures.url("sample.cbz"))
+        return try #require(LibraryViewModel.analyzeComic(at: archive, format: .cbz)?.coverData)
+    }
+
+    @Test("I dati binari non immagine non sono considerati una copertina valida")
+    func rejectsNonImageCoverData() throws {
+        #expect(!CoverThumbnailCache.canDecode(Data([0x01, 0x02, 0x03])))
+        #expect(CoverThumbnailCache.canDecode(try validCover()))
+    }
+
     @Test("La copertina CloudKit legacy viene copiata nella cache locale")
     func recoversCoverFromLegacyCloudKitAttribute() throws {
         let context = try TestStore.makeContext()
-        let expectedCover = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        let expectedCover = try validCover()
         let comic = makeComic(in: context, path: "Topolino 3620.cbz")
         comic.setValue(expectedCover, forKey: "coverImageData")
         try context.save()
@@ -60,7 +71,7 @@ struct LibraryDeduplicationTests {
     @Test("Il backfill persiste la copertina CloudKit legacy senza riaprire l'archivio")
     func backfillPersistsLegacyCloudKitCover() throws {
         let context = try TestStore.makeContext()
-        let expectedCover = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        let expectedCover = try validCover()
         let comic = makeComic(in: context, path: "archivio-non-presente.cbz")
         comic.setValue(expectedCover, forKey: "coverImageData")
         try context.save()
@@ -72,6 +83,27 @@ struct LibraryDeduplicationTests {
         context.reset()
         let reloaded = try #require(try comics(in: context).first)
         #expect(reloaded.coverImageDataInline == expectedCover)
+    }
+
+    @Test("Il backfill rigenera dal file una cache esistente ma illeggibile")
+    func backfillRegeneratesInvalidInlineCover() throws {
+        let context = try TestStore.makeContext()
+        let relativePath = "cover-repair-\(UUID().uuidString).cbz"
+        let archiveURL = LibraryStorage.fileURL(forRelativePath: relativePath)
+        try FileManager.default.createDirectory(
+            at: archiveURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: archiveURL) }
+        try Fixtures.data("sample.cbz").write(to: archiveURL)
+
+        let comic = makeComic(in: context, path: relativePath, cover: Data([0x01, 0x02, 0x03]))
+        try context.save()
+
+        LibraryViewModel().performBackfillPlaceholderMetadata(in: context)
+
+        #expect(CoverThumbnailCache.canDecode(comic.coverImageDataInline ?? Data()))
+        #expect(comic.pageCount > 0)
     }
 
     @Test("Due record per lo stesso file diventano uno")
