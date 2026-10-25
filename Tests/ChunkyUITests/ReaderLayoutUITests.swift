@@ -29,7 +29,14 @@ final class ReaderLayoutUITests: XCTestCase {
 
     private func launchReader(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["--uitesting", "--uitesting-seed"] + extraArguments
+        // These UI assertions use the Italian accessibility labels. Simulator images can
+        // change their default language independently of the repository, so pin the app's
+        // locale instead of relying on the runner's current settings.
+        app.launchArguments += [
+            "--uitesting", "--uitesting-seed",
+            "-AppleLanguages", "(it)",
+            "-AppleLocale", "it_IT"
+        ] + extraArguments
         app.launch()
 
         // The fixture is written on launch, which on a clean container is *after* the library
