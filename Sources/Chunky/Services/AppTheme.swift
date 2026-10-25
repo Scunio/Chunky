@@ -16,9 +16,9 @@ enum AppColorSchemeMode: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .automatic: NSLocalizedString("Automatica", comment: "Color appearance mode")
-        case .light: NSLocalizedString("Chiara", comment: "Color appearance mode")
-        case .dark: NSLocalizedString("Scura", comment: "Color appearance mode")
+        case .automatic: AppLocalization.localizedString("Automatica", comment: "Color appearance mode")
+        case .light: AppLocalization.localizedString("Chiara", comment: "Color appearance mode")
+        case .dark: AppLocalization.localizedString("Scura", comment: "Color appearance mode")
         }
     }
 

@@ -115,6 +115,8 @@ private struct TVNowReadingTabView: View {
 private struct TVSettingsView: View {
     var body: some View {
         List {
+            NavigationLink("Lingua") { AppLanguageSettings() }
+                .tvOSRowBackground()
             NavigationLink("Aspetto") { ColorThemeView() }
                 .tvOSRowBackground()
             NavigationLink("Blocco genitori") { ParentalLockSettingsView() }

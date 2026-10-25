@@ -14,9 +14,9 @@ enum PageBackground: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .automatic: NSLocalizedString("Automatico", comment: "Page background mode")
-        case .black: NSLocalizedString("Nero", comment: "Page background mode")
-        case .white: NSLocalizedString("Bianco", comment: "Page background mode")
+        case .automatic: AppLocalization.localizedString("Automatico", comment: "Page background mode")
+        case .black: AppLocalization.localizedString("Nero", comment: "Page background mode")
+        case .white: AppLocalization.localizedString("Bianco", comment: "Page background mode")
         }
     }
 }

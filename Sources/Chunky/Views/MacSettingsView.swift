@@ -13,7 +13,7 @@ import SwiftUI
 /// no effect at all. The sidebar is a regular window, so it stays resizable.
 struct MacSettingsView: View {
     private enum Category: String, CaseIterable, Identifiable {
-        case reading, navigation, appearance, imageQuality, parentalLock, advanced, diagnostics, info
+        case reading, navigation, appearance, imageQuality, parentalLock, advanced, diagnostics, language, info
 
         var id: String { rawValue }
 
@@ -26,6 +26,7 @@ struct MacSettingsView: View {
             case .parentalLock: "Blocco genitori"
             case .advanced: "Avanzate"
             case .diagnostics: "Diagnostica"
+            case .language: "Lingua"
             case .info: "Informazioni"
             }
         }
@@ -39,6 +40,7 @@ struct MacSettingsView: View {
             case .parentalLock: "lock"
             case .advanced: "gearshape.2"
             case .diagnostics: "stethoscope"
+            case .language: "globe"
             case .info: "info.circle"
             }
         }
@@ -81,6 +83,7 @@ struct MacSettingsView: View {
         case .parentalLock: ParentalLockSettingsTab()
         case .advanced: AdvancedSettingsTab()
         case .diagnostics: DiagnosticsSettingsTab()
+        case .language: AppLanguageSettings()
         case .info: InfoSettingsTab()
         }
     }

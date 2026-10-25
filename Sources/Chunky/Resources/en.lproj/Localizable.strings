@@ -7,6 +7,9 @@
 "2. Condivisione" = "2. Share";
 "Add account" = "Add Account";
 "Annulla" = "Cancel";
+"La lingua scelta si applica a tutte le finestre dell’app." = "Your language choice applies to all app windows.";
+"Lingua" = "Language";
+"Lingua del dispositivo" = "Device Language";
 "Apre il selettore file del sistema: i servizi cloud compaiono lì solo se hai le loro app installate." = "Opens the system file picker. Cloud services appear there only if their apps are installed.";
 "Apri" = "Open";
 "Aspetto" = "Appearance";

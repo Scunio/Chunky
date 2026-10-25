@@ -14,10 +14,10 @@ enum TapPageTurnStyle: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .disabled: NSLocalizedString("Disattivato", comment: "Page turn animation")
-        case .slide: NSLocalizedString("Scorrimento", comment: "Page turn animation")
-        case .immediate: NSLocalizedString("Immediato", comment: "Page turn animation")
-        case .fade: NSLocalizedString("Dissolvenza", comment: "Page turn animation")
+        case .disabled: AppLocalization.localizedString("Disattivato", comment: "Page turn animation")
+        case .slide: AppLocalization.localizedString("Scorrimento", comment: "Page turn animation")
+        case .immediate: AppLocalization.localizedString("Immediato", comment: "Page turn animation")
+        case .fade: AppLocalization.localizedString("Dissolvenza", comment: "Page turn animation")
         }
     }
 }
@@ -34,9 +34,9 @@ enum PageZoomMode: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .auto: NSLocalizedString("Automatico", comment: "Page zoom mode")
-        case .fitPage: NSLocalizedString("Adatta pagina", comment: "Page zoom mode")
-        case .fitWidth: NSLocalizedString("Adatta larghezza", comment: "Page zoom mode")
+        case .auto: AppLocalization.localizedString("Automatico", comment: "Page zoom mode")
+        case .fitPage: AppLocalization.localizedString("Adatta pagina", comment: "Page zoom mode")
+        case .fitWidth: AppLocalization.localizedString("Adatta larghezza", comment: "Page zoom mode")
         }
     }
 }
@@ -56,13 +56,13 @@ enum ReaderIdleResetOption: Int, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .never: NSLocalizedString("Mai", comment: "Reader idle reset interval")
-        case .seconds10: NSLocalizedString("Dopo 10 secondi", comment: "Reader idle reset interval")
-        case .seconds20: NSLocalizedString("Dopo 20 secondi", comment: "Reader idle reset interval")
-        case .seconds30: NSLocalizedString("Dopo 30 secondi", comment: "Reader idle reset interval")
-        case .minute1: NSLocalizedString("Dopo 1 minuto", comment: "Reader idle reset interval")
-        case .minutes2: NSLocalizedString("Dopo 2 minuti", comment: "Reader idle reset interval")
-        case .minutes3: NSLocalizedString("Dopo 3 minuti", comment: "Reader idle reset interval")
+        case .never: AppLocalization.localizedString("Mai", comment: "Reader idle reset interval")
+        case .seconds10: AppLocalization.localizedString("Dopo 10 secondi", comment: "Reader idle reset interval")
+        case .seconds20: AppLocalization.localizedString("Dopo 20 secondi", comment: "Reader idle reset interval")
+        case .seconds30: AppLocalization.localizedString("Dopo 30 secondi", comment: "Reader idle reset interval")
+        case .minute1: AppLocalization.localizedString("Dopo 1 minuto", comment: "Reader idle reset interval")
+        case .minutes2: AppLocalization.localizedString("Dopo 2 minuti", comment: "Reader idle reset interval")
+        case .minutes3: AppLocalization.localizedString("Dopo 3 minuti", comment: "Reader idle reset interval")
         }
     }
 }
@@ -309,6 +309,7 @@ struct SettingsView: View {
             #endif
 
             Section(header: Text("Informazioni")) {
+                NavigationLink("Lingua", destination: AppLanguageSettings())
                 HStack {
                     Text("Versione")
                     Spacer()

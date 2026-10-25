@@ -11,17 +11,17 @@ enum ComicReadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unsupportedFormat:
-            return NSLocalizedString("Formato di file non supportato.", comment: "Comic reading error")
+            return AppLocalization.localizedString("Formato di file non supportato.", comment: "Comic reading error")
         case .corruptArchive:
-            return NSLocalizedString("Impossibile leggere l'archivio: il file potrebbe essere danneggiato o protetto da password.", comment: "Comic reading error")
+            return AppLocalization.localizedString("Impossibile leggere l'archivio: il file potrebbe essere danneggiato o protetto da password.", comment: "Comic reading error")
         case .pageOutOfRange:
-            return NSLocalizedString("Pagina non disponibile.", comment: "Comic reading error")
+            return AppLocalization.localizedString("Pagina non disponibile.", comment: "Comic reading error")
         case .notDownloaded:
-            return NSLocalizedString("Il fumetto non è ancora stato scaricato da iCloud. Controlla la connessione e riprova.", comment: "Comic reading error")
+            return AppLocalization.localizedString("Il fumetto non è ancora stato scaricato da iCloud. Controlla la connessione e riprova.", comment: "Comic reading error")
         case .downloadCancelled:
-            return NSLocalizedString("Download annullato.", comment: "Comic reading error")
+            return AppLocalization.localizedString("Download annullato.", comment: "Comic reading error")
         case .notAvailableOnThisDevice:
-            return NSLocalizedString("Non disponibile su questo Apple TV. Caricalo da \"Account\".", comment: "Comic reading error")
+            return AppLocalization.localizedString("Non disponibile su questo Apple TV. Caricalo da \"Account\".", comment: "Comic reading error")
         }
     }
 }

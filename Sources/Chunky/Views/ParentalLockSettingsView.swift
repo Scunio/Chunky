@@ -8,8 +8,8 @@ enum ParentalAutoLockTrigger: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .doNothing: NSLocalizedString("Non fare nulla", comment: "Parental lock behavior")
-        case .lockImmediately: NSLocalizedString("Blocca subito", comment: "Parental lock behavior")
+        case .doNothing: AppLocalization.localizedString("Non fare nulla", comment: "Parental lock behavior")
+        case .lockImmediately: AppLocalization.localizedString("Blocca subito", comment: "Parental lock behavior")
         }
     }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct ChunkyApp: App {
+    @AppStorage("appLanguage") private var appLanguageRawValue = AppLanguage.system.rawValue
     // `@State` (non `let`) per il ripristino dalla schermata d'errore: "Riprova" riassegna
     // l'istanza ricreata e la schermata rivaluta `loadError` (errore di nuovo vs libreria aperta).
     @State private var persistenceController = PersistenceController.shared
@@ -14,6 +15,10 @@ struct ChunkyApp: App {
     @ObservedObject private var lock = ParentalLock.shared
     @ObservedObject private var theme = AppTheme.shared
     @Environment(\.scenePhase) private var scenePhase
+
+    private var appLocale: Locale {
+        (AppLanguage(rawValue: appLanguageRawValue) ?? .system).locale
+    }
 
     init() {
         UITestSeed.seedIfRequested()
@@ -39,6 +44,7 @@ struct ChunkyApp: App {
             } else {
                 ZStack {
                     ContentView()
+                        .environment(\.locale, appLocale)
                         .environment(\.managedObjectContext, persistenceController.container.viewContext)
                         .environmentObject(libraryViewModel)
                         .onOpenURL { url in
@@ -78,6 +84,7 @@ struct ChunkyApp: App {
         WindowGroup("Fumetto", for: ComicID.self) { $comicID in
             if let comicID {
                 ReaderWindowContainer(comicID: comicID)
+                    .environment(\.locale, appLocale)
                     .environment(\.managedObjectContext, persistenceController.container.viewContext)
                     // The reader exposes Account/Tools from its own header: without this, the
                     // reader window is no longer a .sheet of LibraryView and no longer inherits
@@ -117,6 +124,7 @@ struct ChunkyApp: App {
             }
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             .environmentObject(libraryViewModel)
+            .environment(\.locale, appLocale)
         }
         .defaultSize(width: 760, height: 640)
         .windowResizability(.contentMinSize)

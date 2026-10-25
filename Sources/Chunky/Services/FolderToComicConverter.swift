@@ -7,8 +7,8 @@ enum FolderToComicError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noImagesFound: return NSLocalizedString("La cartella scelta non contiene immagini.", comment: "Folder import error")
-        case .archiveCreationFailed: return NSLocalizedString("Impossibile creare il fumetto dalla cartella.", comment: "Folder import error")
+        case .noImagesFound: return AppLocalization.localizedString("La cartella scelta non contiene immagini.", comment: "Folder import error")
+        case .archiveCreationFailed: return AppLocalization.localizedString("Impossibile creare il fumetto dalla cartella.", comment: "Folder import error")
         }
     }
 }

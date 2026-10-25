@@ -9,9 +9,9 @@ enum ReadStatus: CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .unread: NSLocalizedString("Non letto", comment: "Reading status")
-        case .reading: NSLocalizedString("In lettura", comment: "Reading status")
-        case .finished: NSLocalizedString("Terminato", comment: "Reading status")
+        case .unread: AppLocalization.localizedString("Non letto", comment: "Reading status")
+        case .reading: AppLocalization.localizedString("In lettura", comment: "Reading status")
+        case .finished: AppLocalization.localizedString("Terminato", comment: "Reading status")
         }
     }
 
