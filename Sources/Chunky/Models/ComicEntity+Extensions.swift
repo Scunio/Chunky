@@ -9,8 +9,8 @@ enum ReadingDirection: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .leftToRight: "Occidentale (sinistra → destra)"
-        case .rightToLeft: "Manga (destra → sinistra)"
+        case .leftToRight: NSLocalizedString("Occidentale (sinistra → destra)", comment: "Reading direction")
+        case .rightToLeft: NSLocalizedString("Manga (destra → sinistra)", comment: "Reading direction")
         }
     }
 }

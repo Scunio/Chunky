@@ -102,8 +102,8 @@ struct AddAccountView: View {
     var body: some View {
         #if os(tvOS)
         tvOSForm
-            .onChange(of: kind, perform: updateDiscovery)
-            .onChange(of: scenePhase, perform: recheckOnForeground)
+            .onChange(of: kind) { _, newKind in updateDiscovery(newKind) }
+            .onChange(of: scenePhase) { _, newPhase in recheckOnForeground(newPhase) }
             .onAppear { updateDiscovery(kind) }
             .onDisappear { discovery.stop(); localNetwork.stop() }
         #else
@@ -129,8 +129,8 @@ struct AddAccountView: View {
                 }
         }
         .sheetSized()
-        .onChange(of: kind, perform: updateDiscovery)
-        .onChange(of: scenePhase, perform: recheckOnForeground)
+        .onChange(of: kind) { _, newKind in updateDiscovery(newKind) }
+        .onChange(of: scenePhase) { _, newPhase in recheckOnForeground(newPhase) }
         .onAppear { updateDiscovery(kind) }
         .onDisappear { discovery.stop(); localNetwork.stop() }
         #endif

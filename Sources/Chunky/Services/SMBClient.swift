@@ -82,7 +82,7 @@ final class SMBClient: RemoteBrowsing {
             let destination = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             defer { try? FileManager.default.removeItem(at: destination) }
             let progress: SMB2Manager.ReadProgressHandler = onProgress.map { handler in
-                { bytes, total in
+                { @Sendable bytes, total in
                     if total > 0 { handler(Double(bytes) / Double(total)) }
                     return true
                 }

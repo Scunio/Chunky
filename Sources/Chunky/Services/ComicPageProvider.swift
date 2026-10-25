@@ -11,17 +11,17 @@ enum ComicReadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unsupportedFormat:
-            return "Formato di file non supportato."
+            return NSLocalizedString("Formato di file non supportato.", comment: "Comic reading error")
         case .corruptArchive:
-            return "Impossibile leggere l'archivio: il file potrebbe essere danneggiato o protetto da password."
+            return NSLocalizedString("Impossibile leggere l'archivio: il file potrebbe essere danneggiato o protetto da password.", comment: "Comic reading error")
         case .pageOutOfRange:
-            return "Pagina non disponibile."
+            return NSLocalizedString("Pagina non disponibile.", comment: "Comic reading error")
         case .notDownloaded:
-            return "Il fumetto non è ancora stato scaricato da iCloud. Controlla la connessione e riprova."
+            return NSLocalizedString("Il fumetto non è ancora stato scaricato da iCloud. Controlla la connessione e riprova.", comment: "Comic reading error")
         case .downloadCancelled:
-            return "Download annullato."
+            return NSLocalizedString("Download annullato.", comment: "Comic reading error")
         case .notAvailableOnThisDevice:
-            return "Non disponibile su questo Apple TV. Caricalo da \"Account\"."
+            return NSLocalizedString("Non disponibile su questo Apple TV. Caricalo da \"Account\".", comment: "Comic reading error")
         }
     }
 }

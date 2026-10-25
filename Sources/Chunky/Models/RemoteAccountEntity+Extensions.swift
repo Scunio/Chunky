@@ -10,9 +10,9 @@ enum RemoteAccountKind: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .opds: "OPDS (Calibre, Ubooquity...)"
-        case .webdav: "WebDAV"
-        case .smb: "SMB (NAS)"
+        case .opds: NSLocalizedString("OPDS (Calibre, Ubooquity...)", comment: "Remote account type")
+        case .webdav: NSLocalizedString("WebDAV", comment: "Remote account type")
+        case .smb: NSLocalizedString("SMB (NAS)", comment: "Remote account type")
         }
     }
 

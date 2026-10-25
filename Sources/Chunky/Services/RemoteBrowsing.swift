@@ -29,9 +29,9 @@ enum RemoteBrowsingError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidResponse: return "Il server non ha risposto correttamente."
-        case .parsingFailed: return "Impossibile interpretare la risposta del server."
-        case .unauthorized: return "Credenziali non valide."
+        case .invalidResponse: return NSLocalizedString("Il server non ha risposto correttamente.", comment: "Remote browsing error")
+        case .parsingFailed: return NSLocalizedString("Impossibile interpretare la risposta del server.", comment: "Remote browsing error")
+        case .unauthorized: return NSLocalizedString("Credenziali non valide.", comment: "Remote browsing error")
         }
     }
 }
@@ -143,13 +143,13 @@ extension Error {
                 // comunque la pagina vuota dell'app (il toggle sta sotto Privacy
                 // e sicurezza, non raggiungibile via API). Si punta a Modifica
                 // account, l'unica azione davvero utile.
-                return "Accesso negato dal NAS. Controlla condivisione, nome utente e password (Account → Modifica)."
+                return NSLocalizedString("Accesso negato dal NAS. Controlla condivisione, nome utente e password (Account → Modifica).", comment: "NAS connection error")
             case .ETIMEDOUT:
-                return "Il server non ha risposto in tempo. Verifica che sia acceso e sulla stessa rete."
+                return NSLocalizedString("Il server non ha risposto in tempo. Verifica che sia acceso e sulla stessa rete.", comment: "Network connection error")
             case .ECONNREFUSED:
-                return "Il server ha rifiutato la connessione. Controlla indirizzo e porta."
+                return NSLocalizedString("Il server ha rifiutato la connessione. Controlla indirizzo e porta.", comment: "Network connection error")
             case .ENETUNREACH, .EHOSTUNREACH, .ENETDOWN:
-                return "Impossibile raggiungere il server. Verifica di essere sulla stessa rete Wi-Fi/LAN."
+                return NSLocalizedString("Impossibile raggiungere il server. Verifica di essere sulla stessa rete Wi-Fi/LAN.", comment: "Network connection error")
             default:
                 break
             }
@@ -157,11 +157,11 @@ extension Error {
         if let urlError = self as? URLError {
             switch urlError.code {
             case .cannotFindHost, .cannotConnectToHost:
-                return "Impossibile raggiungere il server. Controlla l'indirizzo e che sia acceso."
+                return NSLocalizedString("Impossibile raggiungere il server. Controlla l'indirizzo e che sia acceso.", comment: "Network connection error")
             case .timedOut:
                 return "Il server non ha risposto in tempo. Verifica che sia acceso e sulla stessa rete."
             case .notConnectedToInternet, .networkConnectionLost:
-                return "Nessuna connessione di rete. Verifica il Wi-Fi/LAN."
+                return NSLocalizedString("Nessuna connessione di rete. Verifica il Wi-Fi/LAN.", comment: "Network connection error")
             default:
                 break
             }

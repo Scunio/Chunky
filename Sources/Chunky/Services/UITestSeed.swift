@@ -114,7 +114,7 @@ enum UITestSeed {
         let size = CGSize(width: 1200, height: 1800)
         let bandHeight = size.height / CGFloat(pageBands.count)
 
-        guard let archive = try? Archive(url: url, accessMode: .create) else { return }
+        guard let archive = try? Archive(url: url, accessMode: .create, pathEncoding: nil) else { return }
         for page in 0..<3 {
             guard let pageData = renderPagePNG(bands: pageBands, bandHeight: bandHeight, size: size) else { continue }
             try? archive.addEntry(

@@ -693,6 +693,9 @@ enum RemoteProgressSync {
                 case .couldNotDetermine:
                     DiagnosticLog.log("CloudKit account: non determinabile")
                     return
+                case .temporarilyUnavailable:
+                    DiagnosticLog.log("CloudKit account: temporaneamente non disponibile")
+                    return
                 @unknown default:
                     DiagnosticLog.log("CloudKit account: stato sconosciuto")
                     return
@@ -731,7 +734,7 @@ enum RemoteProgressSync {
             thenApplyIn context: NSManagedObjectContext,
             completion: ((Int) -> Void)? = nil
         ) {
-            var configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
+            let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
             configuration.previousServerChangeToken = storedToken()
             let operation = CKFetchRecordZoneChangesOperation(
                 recordZoneIDs: [zoneID],

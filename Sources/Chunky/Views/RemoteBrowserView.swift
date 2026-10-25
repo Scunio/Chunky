@@ -239,14 +239,14 @@ struct RemoteBrowserView: View {
             request.predicate = NSPredicate(format: "sourceAccountID == %@ AND sourceRelativePath == %@", accountID as CVarArg, sourcePath)
             request.fetchLimit = 1
             if let placeholder = (try? context.fetch(request))?.first, placeholder.isRemotePlaceholder {
-                ComicDownloadService.downloadIfNeeded(comic: placeholder) { error in
+                ComicDownloadService.downloadIfNeeded(comic: placeholder, completion: { error in
                     Task { @MainActor in
                         if let error {
                             viewModel.importError = error.chunkyFriendlyDescription
                         }
                         downloadingEntryIDs.remove(entry.id)
                     }
-                }
+                })
                 return
             }
             do {
