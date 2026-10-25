@@ -52,6 +52,8 @@ struct LibraryView: View {
     @State private var searchText = ""
     @State private var isEditing = false
     @State private var selectedIDs: Set<NSManagedObjectID> = []
+    @State private var comicToDelete: ComicEntity?
+    @State private var isConfirmingBulkDelete = false
     @State private var collapsedGroups: Set<String> = []
     @State private var isNowReadingPresented = false
     @State private var isNewComicsPresented = false
@@ -206,6 +208,24 @@ struct LibraryView: View {
             .alert("Errore", isPresented: isErrorPresented) {
             } message: {
                 Text(viewModel.importError ?? "")
+            }
+            .confirmationDialog(
+                "Eliminare questo fumetto?",
+                isPresented: Binding(
+                    get: { comicToDelete != nil },
+                    set: { if !$0 { comicToDelete = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Elimina", role: .destructive) {
+                    if let comicToDelete { viewModel.delete(comicToDelete, from: context) }
+                    comicToDelete = nil
+                }
+                Button("Annulla", role: .cancel) { comicToDelete = nil }
+            }
+            .confirmationDialog("Eliminare i fumetti selezionati?", isPresented: $isConfirmingBulkDelete, titleVisibility: .visible) {
+                Button("Elimina", role: .destructive, action: performDeleteSelected)
+                Button("Annulla", role: .cancel) { }
             }
             // .sheet would leave a card with rounded corners that doesn't cover the whole screen.
             // On Mac the reader lives in its own window (see openComic), so there's
@@ -532,7 +552,7 @@ struct LibraryView: View {
                         allowsDeletion: !isKioskModeEnabled,
                         pendingRelativePaths: downloadTracker.pendingRelativePaths,
                         onSelect: openComic,
-                        onDelete: { viewModel.delete($0, from: context) }
+                        onDelete: { comicToDelete = $0 }
                     )
                 } else {
                     libraryGrid(filtered: filtered)
@@ -855,7 +875,7 @@ struct LibraryView: View {
             existingGroupNames: names,
             isPendingDownload: downloadTracker.pendingRelativePaths.contains(comic.relativePath ?? ""),
             onSelect: { handleTap(on: comic) },
-            onDelete: { viewModel.delete(comic, from: context) },
+            onDelete: { comicToDelete = comic },
             onAssignGroup: { assignGroup($0, to: comic) }
         )
     }
@@ -901,6 +921,10 @@ struct LibraryView: View {
     }
 
     private func deleteSelected() {
+        isConfirmingBulkDelete = true
+    }
+
+    private func performDeleteSelected() {
         for comic in filteredComics where selectedIDs.contains(comic.objectID) {
             viewModel.delete(comic, from: context)
         }

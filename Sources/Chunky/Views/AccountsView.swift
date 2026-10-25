@@ -48,6 +48,7 @@ struct AccountsView: View {
 
     @State private var activeSheet: AccountSheet?
     @State private var activeImporter: ActiveImporter?
+    @State private var accountsToDelete: [RemoteAccountEntity] = []
     @State private var folderConversionError: String?
     /// "+" doesn't open another screen: it reveals the "Add account" section at the end of the
     /// same list and turns into "Done" to close it again. iOS/macOS only — tvOS's split view
@@ -76,6 +77,13 @@ struct AccountsView: View {
 
     var body: some View {
         panel
+            .confirmationDialog("Eliminare l'account?", isPresented: Binding(
+                get: { !accountsToDelete.isEmpty },
+                set: { if !$0 { accountsToDelete = [] } }
+            ), titleVisibility: .visible) {
+                Button("Elimina", role: .destructive, action: confirmDeleteAccounts)
+                Button("Annulla", role: .cancel) { accountsToDelete = [] }
+            }
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
                 case .add(let kind):
@@ -408,14 +416,18 @@ struct AccountsView: View {
     }
 
     private func deleteAccounts(at offsets: IndexSet) {
-        for index in offsets {
-            let account = accounts[index]
+        accountsToDelete = offsets.map { accounts[$0] }
+    }
+
+    private func confirmDeleteAccounts() {
+        for account in accountsToDelete {
             // I segnaposto mai scaricati diventerebbero orfani: via subito.
             // I fumetti già scaricati restano in libreria, il NAS non si tocca.
             ComicEntity.deleteOrphanPlaceholders(ofAccountID: account.stableID, in: context)
             KeychainStore.deletePassword(forAccount: account.stableID)
             context.delete(account)
         }
+        accountsToDelete = []
         try? context.save()
     }
 
