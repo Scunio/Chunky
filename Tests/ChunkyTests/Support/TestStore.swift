@@ -3,8 +3,10 @@ import CoreData
 import Testing
 
 /// In-memory Core Data stack, independent of `PersistenceController` (which uses
-/// `NSPersistentCloudKitContainer` and would therefore want the iCloud entitlements). The
-/// model is taken from the test bundle, where the target also builds the app's resources.
+/// `NSPersistentCloudKitContainer` and would therefore want the iCloud entitlements). It keeps
+/// both app configurations so remote-account comics are assigned to the same local-only store
+/// in tests as they are in production. The model is taken from the test bundle, where the target
+/// also builds the app's resources.
 ///
 /// Shared across suites precisely because of the cache below: two private copies would load
 /// the model twice.
@@ -37,9 +39,17 @@ enum TestStore {
 
     static func makeContext() throws -> NSManagedObjectContext {
         let container = NSPersistentContainer(name: "Chunky", managedObjectModel: try model())
-        let description = NSPersistentStoreDescription()
-        description.type = NSInMemoryStoreType
-        container.persistentStoreDescriptions = [description]
+        let storeID = UUID().uuidString
+        let defaultDescription = NSPersistentStoreDescription()
+        defaultDescription.url = URL(fileURLWithPath: "/tmp/ChunkyTest-\(storeID)-default")
+        defaultDescription.type = NSInMemoryStoreType
+
+        let localDescription = NSPersistentStoreDescription()
+        localDescription.url = URL(fileURLWithPath: "/tmp/ChunkyTest-\(storeID)-local")
+        localDescription.configuration = PersistenceController.localOnlyConfigurationName
+        localDescription.type = NSInMemoryStoreType
+
+        container.persistentStoreDescriptions = [defaultDescription, localDescription]
 
         var loadError: Error?
         container.loadPersistentStores { _, error in loadError = error }

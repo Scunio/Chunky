@@ -38,10 +38,10 @@ struct RemoteBrowsingErrorTests {
         #expect(error.chunkyFriendlyDescription == "Impossibile raggiungere il server. Verifica di essere sulla stessa rete Wi-Fi/LAN.")
     }
 
-    @Test("Un codice POSIX non mappato ricade sulla descrizione di sistema")
-    func unmappedPOSIXErrorFallsBackToLocalizedDescription() {
-        let error = POSIXError(.EACCES)
-        #expect(error.chunkyFriendlyDescription == error.localizedDescription)
+    @Test("Un codice POSIX non mappato mostra l'errore generico localizzato")
+    func unmappedPOSIXErrorUsesLocalizedFallback() {
+        let error = POSIXError(.EIO)
+        #expect(error.chunkyFriendlyDescription == "Operazione non riuscita. Riprova.")
     }
 
     @Test("Host non trovato indica di controllare l'indirizzo", arguments: [
@@ -66,10 +66,10 @@ struct RemoteBrowsingErrorTests {
         #expect(error.chunkyFriendlyDescription == "Nessuna connessione di rete. Verifica il Wi-Fi/LAN.")
     }
 
-    @Test("Un codice URLError non mappato ricade sulla descrizione di sistema")
-    func unmappedURLErrorFallsBackToLocalizedDescription() {
+    @Test("Un codice URLError non mappato mostra l'errore generico localizzato")
+    func unmappedURLErrorUsesLocalizedFallback() {
         let error = URLError(.badURL)
-        #expect(error.chunkyFriendlyDescription == error.localizedDescription)
+        #expect(error.chunkyFriendlyDescription == "Operazione non riuscita. Riprova.")
     }
 
     @Test("Un errore di un tipo diverso ricade sulla descrizione di sistema")
