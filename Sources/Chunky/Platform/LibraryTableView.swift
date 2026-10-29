@@ -133,9 +133,13 @@ struct LibraryTableView: View {
     /// Same logic as `LibraryView.status(for:)` (private to that file): it doesn't reimplement
     /// the `isFinished` formula, it reuses it from `ComicEntity` so it can't diverge.
     private func statusLabel(for comic: ComicEntity) -> String {
-        if comic.lastReadPage <= 0 { return "Non letto" }
-        if comic.isFinished { return "Terminato" }
-        return "In lettura"
+        if comic.lastReadPage <= 0 {
+            return AppLocalization.localizedString("Non letto", comment: "Comic reading status")
+        }
+        if comic.isFinished {
+            return AppLocalization.localizedString("Terminato", comment: "Comic reading status")
+        }
+        return AppLocalization.localizedString("In lettura", comment: "Comic reading status")
     }
 }
 

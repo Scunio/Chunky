@@ -106,11 +106,11 @@ struct ParentalLockSections: View {
 
     private func savePasscode() {
         guard newPasscode.count >= 4 else {
-            errorMessage = "Il codice deve avere almeno 4 caratteri."
+            errorMessage = AppLocalization.localizedString("Il codice deve avere almeno 4 caratteri.", comment: "Passcode validation error")
             return
         }
         guard newPasscode == confirmPasscode else {
-            errorMessage = "I due codici non coincidono."
+            errorMessage = AppLocalization.localizedString("I due codici non coincidono.", comment: "Passcode validation error")
             return
         }
         lock.setPasscode(newPasscode)

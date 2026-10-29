@@ -125,12 +125,29 @@ struct RemoteBrowserView: View {
             ContentUnavailableView(
                 "Nessun risultato",
                 systemImage: "magnifyingglass",
-                description: Text("Niente che contenga \"\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))\".")
+                description: Text(AppLocalization.format(
+                    "Niente che contenga \"%@\".",
+                    comment: "No remote browse results match the search query",
+                    arguments: [searchText.trimmingCharacters(in: .whitespacesAndNewlines) as NSString]
+                ))
             )
         } else {
             let folders = visibleEntries.filter(\.isContainer).count
+            let folderSummary = AppLocalization.plural(
+                folders,
+                singularKey: "%d cartella",
+                pluralKey: "%d cartelle",
+                comment: "Remote browser folder count"
+            )
+            let comicCount = visibleEntries.count - folders
+            let comicSummary = AppLocalization.plural(
+                comicCount,
+                singularKey: "%d fumetto",
+                pluralKey: "%d fumetti",
+                comment: "Remote browser comic count"
+            )
             List {
-                Section(header: Text("\(folders) cartelle · \(visibleEntries.count - folders) fumetti")) {
+                Section(header: Text("\(folderSummary) · \(comicSummary)")) {
                     ForEach(visibleEntries) { entry in
                         row(for: entry)
                     }

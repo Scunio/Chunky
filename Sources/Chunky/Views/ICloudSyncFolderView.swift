@@ -26,7 +26,7 @@ struct ICloudSyncFolderView: View {
         List {
             Section {
                 HStack {
-                    Text("Sync Folder")
+                    Text("Cartella di sincronizzazione")
                     InfoButton(text: "Crea una cartella Chunky nella tua iCloud Drive.\nI fumetti che ci metti dentro restano sincronizzati con la tua libreria.\n\nSe li cancelli da Chunky, vengono cancellati anche da iCloud Drive.")
                     Spacer()
                     Toggle("", isOn: $isEnabled)
@@ -38,12 +38,17 @@ struct ICloudSyncFolderView: View {
             if isEnabled && isAvailable {
                 Section {
                     HStack {
-                        Text("Downloaded")
+                        Text("Scaricati")
                         Spacer()
-                        Text("\(comicResults.comics.count) comics")
+                        Text(AppLocalization.plural(
+                            comicResults.comics.count,
+                            singularKey: "%d fumetto",
+                            pluralKey: "%d fumetti",
+                            comment: "Number of comics in the iCloud sync folder"
+                        ))
                             .foregroundColor(.secondary)
                     }
-                    Text(viewModel.isImporting ? "Sincronizzazione…" : "All comics synced")
+                    Text(viewModel.isImporting ? "Sincronizzazione…" : "Tutti i fumetti sincronizzati")
                         .foregroundColor(.secondary)
                 }
             }

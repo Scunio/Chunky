@@ -7,7 +7,7 @@ import SwiftUI
 /// tried first and confirmed wrong for tvOS) and not a boxed label above a full-width field
 /// (the original `Form`-based layout this replaces).
 struct TVFormFieldRow<Content: View>: View {
-    let label: String
+    let label: LocalizedStringKey
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -26,7 +26,7 @@ struct TVFormFieldRow<Content: View>: View {
 /// Chunky's form genuinely spans distinct groups (server/credentials/automation) that need
 /// separation — kept minimal rather than the heavier all-caps card header tried before.
 struct TVFormSectionLabel: View {
-    let title: String
+    let title: LocalizedStringKey
 
     var body: some View {
         Text(title)
@@ -39,7 +39,7 @@ struct TVFormSectionLabel: View {
 /// Primary form action — a bold, full-width filled pill at the bottom of the form (Infuse's
 /// "Aggiungi" button), not a small top-corner toolbar button.
 struct TVFormPrimaryButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let action: () -> Void
 
     var body: some View {
@@ -58,13 +58,13 @@ struct TVFormPrimaryButton: View {
 /// text, not a system switch. Matches Infuse's own toggle rows exactly (confirmed via photo:
 /// "Scansione automatica … On", same pill shape/focus behavior as the text fields above it).
 struct TVFormToggleRow: View {
-    let label: String
+    let label: LocalizedStringKey
     @Binding var isOn: Bool
 
     var body: some View {
         TVFormFieldRow(label: label) {
             Button(action: { isOn.toggle() }) {
-                Text(isOn ? "On" : "Off")
+                Text(isOn ? "Attivo" : "Disattivato")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 14)
@@ -77,7 +77,7 @@ struct TVFormToggleRow: View {
 /// A full-width pill combining a title and expand/collapse chevron — Infuse's "Avanzate" row:
 /// not a section header sitting above a group, the pill itself IS the disclosure control.
 struct TVFormDisclosureRow: View {
-    let title: String
+    let title: LocalizedStringKey
     @Binding var isExpanded: Bool
 
     var body: some View {

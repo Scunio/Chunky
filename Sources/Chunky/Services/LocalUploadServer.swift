@@ -35,7 +35,8 @@ final class LocalUploadServer: ObservableObject {
                         self?.lastError = nil
                     case .failed(let error):
                         self?.isRunning = false
-                        self?.lastError = error.localizedDescription
+                        DiagnosticLog.log("Local upload server failed: \(error.localizedDescription)")
+                        self?.lastError = Self.userFacingStartError(error)
                     case .cancelled:
                         self?.isRunning = false
                     default:
@@ -46,7 +47,8 @@ final class LocalUploadServer: ObservableObject {
             listener.start(queue: queue)
             self.listener = listener
         } catch {
-            lastError = error.localizedDescription
+            DiagnosticLog.log("Local upload server failed to start: \(error.localizedDescription)")
+            lastError = Self.userFacingStartError(error)
         }
     }
 
@@ -56,6 +58,18 @@ final class LocalUploadServer: ObservableObject {
         for connection in connections.values { connection.cancel() }
         connections.removeAll()
         isRunning = false
+    }
+
+    private static func userFacingStartError(_ error: Error) -> String {
+        if let networkError = error as? NWError,
+           case .posix(let code) = networkError,
+           code == .EADDRINUSE {
+            return AppLocalization.localizedString(
+                "Impossibile avviare il server locale: la porta è già in uso.",
+                comment: "Local server port is already in use"
+            )
+        }
+        return AppLocalization.userFacingError(error)
     }
 
     /// Local IP addresses on which the server is reachable from the network, to show to the user.
@@ -115,7 +129,12 @@ final class LocalUploadServer: ObservableObject {
     private func handle(_ request: HTTPRequestParser.ParsedRequest, on connection: NWConnection) {
         if request.method == "POST" {
             let savedCount = handleUpload(request)
-            let body = "\(savedCount) file ricevuti."
+            let body = AppLocalization.plural(
+                savedCount,
+                singularKey: "%d file ricevuto.",
+                pluralKey: "%d file ricevuti.",
+                comment: "Local upload server response"
+            )
             respond(on: connection, status: "200 OK", contentType: "text/plain; charset=utf-8", body: Data(body.utf8))
         } else {
             respond(on: connection, status: "200 OK", contentType: "text/html; charset=utf-8", body: Data(Self.uploadPageHTML.utf8))
@@ -157,13 +176,21 @@ final class LocalUploadServer: ObservableObject {
         })
     }
 
-    private static let uploadPageHTML = """
+    private static var uploadPageHTML: String {
+        let languageCode = AppLanguage.current.languageCode
+        let title = AppLocalization.localizedString("Chunky — Importa fumetti", comment: "Local upload web page title")
+        let heading = AppLocalization.localizedString("Importa fumetti in Chunky", comment: "Local upload web page heading")
+        let instructions = AppLocalization.localizedString("Scegli uno o più file CBZ, CBR o PDF dal tuo computer.", comment: "Local upload web page instructions")
+        let upload = AppLocalization.localizedString("Carica", comment: "Local upload web page button")
+        let uploading = AppLocalization.localizedString("Caricamento in corso…", comment: "Local upload progress")
+        let errorPrefix = AppLocalization.localizedString("Errore:", comment: "Local upload web page error prefix")
+        return """
     <!DOCTYPE html>
-    <html lang="it">
+    <html lang="\(languageCode)">
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Chunky — Importa fumetti</title>
+      <title>\(title)</title>
       <style>
         body { font-family: -apple-system, sans-serif; max-width: 480px; margin: 60px auto; padding: 0 20px; text-align: center; color: #222; }
         h1 { font-size: 22px; }
@@ -173,13 +200,13 @@ final class LocalUploadServer: ObservableObject {
       </style>
     </head>
     <body>
-      <h1>Importa fumetti in Chunky</h1>
-      <p>Scegli uno o più file CBZ, CBR o PDF dal tuo computer.</p>
+      <h1>\(heading)</h1>
+      <p>\(instructions)</p>
       <form id="form">
         <input type="file" id="files" name="files" multiple accept=".cbz,.cbr,.pdf">
-        <button type="submit">Carica</button>
+        <button type="submit">\(upload)</button>
       </form>
-      <div id="status"></div>
+      <div id="status" data-uploading="\(uploading)" data-error-prefix="\(errorPrefix)"></div>
       <script>
         document.getElementById('form').addEventListener('submit', async (e) => {
           e.preventDefault();
@@ -188,18 +215,19 @@ final class LocalUploadServer: ObservableObject {
           if (!input.files.length) { return; }
           const formData = new FormData();
           for (const file of input.files) { formData.append('files', file); }
-          status.textContent = 'Caricamento in corso…';
+          status.textContent = status.dataset.uploading;
           try {
             const res = await fetch('/', { method: 'POST', body: formData });
             status.textContent = await res.text();
           } catch (err) {
-            status.textContent = 'Errore: ' + err;
+            status.textContent = status.dataset.errorPrefix + ' ' + err;
           }
         });
       </script>
     </body>
     </html>
     """
+    }
 }
 
 /// Minimal HTTP/1.1 parser: just enough to read a GET request or a complete

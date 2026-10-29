@@ -69,7 +69,7 @@ enum ReaderIdleResetOption: Int, CaseIterable, Identifiable {
 
 /// "ⓘ" icon with a pop-up explanation.
 struct InfoButton: View {
-    let text: String
+    let text: LocalizedStringKey
     @State private var isPresented = false
 
     var body: some View {
@@ -101,7 +101,7 @@ struct InfoButton: View {
 /// `compact: true` omits the trailing Spacer: use it for a Picker's label, where SwiftUI
 /// already adds the current value and the little arrow after the whole label on its own —
 /// a Spacer here would make it expand awkwardly instead of staying compact next to the title.
-func infoLabel(_ title: String, info: String, compact: Bool = false) -> some View {
+func infoLabel(_ title: LocalizedStringKey, info: LocalizedStringKey, compact: Bool = false) -> some View {
     HStack(spacing: compact ? 4 : nil) {
         Text(title)
         if !compact { Spacer() }
@@ -110,7 +110,7 @@ func infoLabel(_ title: String, info: String, compact: Bool = false) -> some Vie
 }
 
 @available(*, deprecated, renamed: "infoLabel")
-func labelWithInfo(_ title: String, info: String, compact: Bool = false) -> some View {
+func labelWithInfo(_ title: LocalizedStringKey, info: LocalizedStringKey, compact: Bool = false) -> some View {
     infoLabel(title, info: info, compact: compact)
 }
 
@@ -165,7 +165,7 @@ struct SettingsView: View {
 
             Section(header: Text("Navigazione")) {
                 Toggle(isOn: $isTapToPanEnabled) {
-                    infoLabel("Tap-to-pan", info: "Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati. Non si applica con la modalità una mano attiva, che già unifica le due zone a modo suo (vedi sotto).")
+                    infoLabel("Avanza al tocco sui bordi", info: "Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati. Non si applica con la modalità una mano attiva, che già unifica le due zone a modo suo (vedi sotto).")
                 }
                 .disabled(isOneHandedModeEnabled)
                 Toggle(isOn: $isOneHandedModeEnabled) {
@@ -173,7 +173,7 @@ struct SettingsView: View {
                 }
                 .disabled(tapPageTurnStyle == .disabled)
                 Toggle(isOn: $isHotCornersEnabled) {
-                    infoLabel("Hot corners", info: "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina.")
+                    infoLabel("Angoli attivi", info: "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina.")
                 }
                 .disabled(tapPageTurnStyle == .disabled)
                 #if os(iOS)
@@ -181,12 +181,12 @@ struct SettingsView: View {
                     infoLabel("Luminosità con due dita", info: "Se attivo, puoi regolare la luminosità dello schermo trascinando su e giù con due dita nella vista di lettura.")
                 }
                 #endif
-                Picker("Tap page-turn", selection: $tapPageTurnStyle) {
+                Picker("Cambio pagina al tocco", selection: $tapPageTurnStyle) {
                     ForEach(TapPageTurnStyle.allCases) { style in
                         Text(style.label).tag(style)
                     }
                 }
-                Picker("Swipe page-turn", selection: $swipePageTurnStyle) {
+                Picker("Cambio pagina con scorrimento", selection: $swipePageTurnStyle) {
                     ForEach(TapPageTurnStyle.allCases) { style in
                         Text(style.label).tag(style)
                     }
@@ -221,13 +221,13 @@ struct SettingsView: View {
                     infoLabel("Ritaglia bordi bianchi", info: "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo.")
                 }
                 Toggle(isOn: $isAutoTintContrastEnabled) {
-                    infoLabel("Auto tint & contrasto", info: "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità.")
+                    infoLabel("Tinta e contrasto automatici", info: "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità.")
                 }
                 Toggle(isOn: $isUpscalingEnabled) {
                     infoLabel("Upscaling pagine a bassa risoluzione", info: "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione.")
                 }
                 Toggle(isOn: $isMotionBlurEnabled) {
-                    infoLabel("Motion-blur", info: "Rende più fluido il movimento quando scorri con il dito una pagina ingrandita.")
+                    infoLabel("Sfocatura del movimento", info: "Rende più fluido il movimento quando scorri con il dito una pagina ingrandita.")
                 }
             }
 

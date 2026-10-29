@@ -789,7 +789,12 @@ struct LibraryView: View {
             // one is redundant, and a bare "· INIZIATA" reads as a cryptic status label
             // instead of a count.
             #if os(tvOS)
-            Text("\(comics.count) fumetti")
+            Text(AppLocalization.plural(
+                comics.count,
+                singularKey: "%d fumetto",
+                pluralKey: "%d fumetti",
+                comment: "Comic count in a library section"
+            ))
                 .font(.caption)
                 .foregroundColor(theme.secondaryText)
             Spacer()
@@ -909,7 +914,7 @@ struct LibraryView: View {
             // before it appears in the grid, so its objectID is already permanent), but
             // if it does happen the tap shouldn't go without any feedback: the same
             // error channel already used for failed imports is reused.
-            viewModel.importError = "Impossibile aprire questo fumetto."
+            viewModel.importError = AppLocalization.localizedString("Impossibile aprire questo fumetto.", comment: "Comic open error")
             return
         }
         openWindow(value: id)
@@ -1045,7 +1050,7 @@ private struct ComicCell: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.card)
-            .accessibilityLabel(comic.title ?? "Fumetto")
+            .accessibilityLabel(comic.title ?? AppLocalization.localizedString("Fumetto", comment: "Fallback comic accessibility label"))
 
             // A ghost two-line block behind the real title, so every cell in a row reserves
             // the same title height regardless of whether this particular title wraps to one
@@ -1057,7 +1062,7 @@ private struct ComicCell: View {
                 Text("Two\nLines")
                     .opacity(0)
                     .accessibilityHidden(true)
-                Text(comic.title ?? "Senza titolo")
+                Text(comic.title ?? AppLocalization.localizedString("Senza titolo", comment: "Untitled comic fallback"))
                     .lineLimit(2)
             }
             .font(.caption.bold())
@@ -1071,7 +1076,7 @@ private struct ComicCell: View {
                 .contextMenu { cellMenu }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(comic.title ?? "Fumetto")
+        .accessibilityLabel(comic.title ?? AppLocalization.localizedString("Fumetto", comment: "Fallback comic accessibility label"))
         #endif
     }
 

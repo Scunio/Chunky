@@ -18,7 +18,7 @@ struct ComicGridItemView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ComicCoverView(comic: comic, showsPendingDownloadBadge: showsPendingDownloadBadge, isPendingDownload: isPendingDownload)
-            Text(comic.title ?? "Senza titolo")
+            Text(comic.title ?? AppLocalization.localizedString("Senza titolo", comment: "Untitled comic fallback"))
                 .font(.caption.bold())
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)

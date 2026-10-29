@@ -138,7 +138,7 @@ struct ColorThemeView: View {
     }
 
     #if os(tvOS)
-    private func themePresetButton(name: String, backgroundHex: String, textHex: String, accentHex: String) -> some View {
+    private func themePresetButton(name: LocalizedStringKey, backgroundHex: String, textHex: String, accentHex: String) -> some View {
         Button(name) {
             theme.backgroundHex = backgroundHex
             theme.textHex = textHex
@@ -159,7 +159,7 @@ struct ColorThemeView: View {
         #endif
     }
 
-    private func tintPresetButton(name: String, hex: String, opacity: Double = 0.25) -> some View {
+    private func tintPresetButton(name: LocalizedStringKey, hex: String, opacity: Double = 0.25) -> some View {
         Button(action: {
             theme.pageTintHex = hex
             theme.pageTintOpacity = opacity
@@ -181,7 +181,7 @@ struct ColorThemeView: View {
     }
 
     #if !os(tvOS)
-    private func colorRow(title: String, hex: Binding<String>, defaultColor: Color) -> some View {
+    private func colorRow(title: LocalizedStringKey, hex: Binding<String>, defaultColor: Color) -> some View {
         let binding = Binding<Color>(
             get: { Color(hex: hex.wrappedValue) ?? defaultColor },
             set: { hex.wrappedValue = $0.hexString }

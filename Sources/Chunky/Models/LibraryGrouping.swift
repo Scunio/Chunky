@@ -37,7 +37,12 @@ enum LibraryGrouping {
     /// "TOPOLINO 3594-3687" when the titles end with a number (e.g. periodical issues):
     /// otherwise just the series name.
     static func headerText(title: String, comics: [ComicEntity]) -> String {
-        guard title != ungroupedTitle, title != recentTitle else { return title.uppercased() }
+        if title == ungroupedTitle {
+            return AppLocalization.localizedString("Altri fumetti", comment: "Ungrouped library section").uppercased()
+        }
+        if title == recentTitle {
+            return AppLocalization.localizedString("Novità", comment: "Recently added library section").uppercased()
+        }
         let numbers = comics.compactMap { issueNumber(fromTitle: $0.title ?? "") }
         guard let min = numbers.min(), let max = numbers.max(), numbers.count == comics.count else {
             return title.uppercased()

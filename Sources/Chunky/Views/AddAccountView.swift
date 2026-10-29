@@ -370,7 +370,7 @@ struct AddAccountView: View {
 
             Section(
                 header: Text("Automazione"),
-                footer: Text("Con \"Pre-cache\" attivo, ogni fumetto nuovo trovato viene scaricato subito per intero, invece di aspettare che lo apri: non esiste un modo per leggere solo titolo/copertina senza scaricare tutto il file, quindi su librerie grandi può consumare parecchia banda.")
+                footer: Text("Con il precaricamento attivo, ogni nuovo fumetto trovato viene scaricato subito per intero invece di aspettare che tu lo apra: non è possibile leggerne titolo e copertina senza scaricare il file completo, quindi su librerie grandi può consumare parecchia banda.")
             ) {
                 Toggle("Scansione automatica", isOn: $autoScanEnabled)
                 Toggle("Cartelle Smart", isOn: $smartFoldersEnabled)
@@ -378,7 +378,7 @@ struct AddAccountView: View {
                 // (ComicInfo.xml) senza anche il resto del file, quindi "dettagli" e
                 // "illustrazioni" finiscono per fare esattamente la stessa cosa — vedi
                 // RemoteAccountScanner.registerPlaceholder.
-                Toggle("Pre-cache (dettagli e copertine)", isOn: precacheBinding)
+                Toggle("Precaricamento di dettagli e copertine", isOn: precacheBinding)
             }
 
             Section(
@@ -432,12 +432,12 @@ struct AddAccountView: View {
                 #if os(iOS)
                 .keyboardType(.numberPad)
                 #endif
-            TextField("Workgroup (opzionale)", text: $smbWorkgroup)
+            TextField("Gruppo di lavoro (opzionale)", text: $smbWorkgroup)
                 #if os(iOS)
                 .autocapitalization(.none)
                 #endif
                 .disableAutocorrection(true)
-            TextField("Modifica gli Endpoint (IP risolto, opzionale)", text: $smbResolvedAddressOverride)
+            TextField("Modifica l'indirizzo IP risolto (opzionale)", text: $smbResolvedAddressOverride)
                 #if os(iOS)
                 .keyboardType(.URL)
                 .autocapitalization(.none)
@@ -535,8 +535,8 @@ struct AddAccountView: View {
                 TVFormDisclosureRow(title: "Avanzate", isExpanded: $isAdvancedExpanded)
                 if isAdvancedExpanded {
                     TVFormFieldRow(label: "Porta") { TextField("445", text: $smbPort) }
-                    TVFormFieldRow(label: "Workgroup") { TextField("opzionale", text: $smbWorkgroup).disableAutocorrection(true) }
-                    TVFormFieldRow(label: "Endpoint") { TextField("IP risolto, opzionale", text: $smbResolvedAddressOverride).disableAutocorrection(true) }
+                    TVFormFieldRow(label: "Gruppo di lavoro") { TextField("opzionale", text: $smbWorkgroup).disableAutocorrection(true) }
+                    TVFormFieldRow(label: "Indirizzo del server") { TextField("Indirizzo IP risolto (opzionale)", text: $smbResolvedAddressOverride).disableAutocorrection(true) }
                     Button(isRunningSpeedTest ? "Test in corso..." : "Test di velocità", action: runSpeedTest)
                         .disabled(isRunningSpeedTest || smbHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                             || smbShare.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -570,8 +570,8 @@ struct AddAccountView: View {
             TVFormSectionLabel(title: "Automazione")
             TVFormToggleRow(label: "Scansione automatica", isOn: $autoScanEnabled)
             TVFormToggleRow(label: "Cartelle Smart", isOn: $smartFoldersEnabled)
-            TVFormToggleRow(label: "Pre-cache (dettagli e copertine)", isOn: precacheBinding)
-            Text("Con \"Pre-cache\" attivo, ogni fumetto nuovo trovato viene scaricato subito per intero, invece di aspettare che lo apri: non esiste un modo per leggere solo titolo/copertina senza scaricare tutto il file, quindi su librerie grandi può consumare parecchia banda.")
+            TVFormToggleRow(label: "Precaricamento di dettagli e copertine", isOn: precacheBinding)
+            Text("Con il precaricamento attivo, ogni nuovo fumetto trovato viene scaricato subito per intero invece di aspettare che tu lo apra: non è possibile leggerne titolo e copertina senza scaricare il file completo, quindi su librerie grandi può consumare parecchia banda.")
                 .font(.footnote)
                 .foregroundColor(.secondary)
 
@@ -665,7 +665,7 @@ struct AddAccountView: View {
         let trimmedURL = serverURLString.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmedURL.isEmpty, let url = URL(string: trimmedURL), url.scheme != nil else {
-            validationError = "Inserisci un URL valido, comprensivo di http:// o https://"
+            validationError = AppLocalization.localizedString("Inserisci un URL valido, comprensivo di http:// o https://", comment: "Invalid account URL")
             return
         }
 
@@ -724,7 +724,7 @@ struct AddAccountView: View {
         // report success/failure for the wrong port and mislead whoever reads the result before
         // saving.
         guard let port = Int32(smbPort.trimmingCharacters(in: .whitespacesAndNewlines)), port > 0 else {
-            speedTestResult = "Porta non valida."
+            speedTestResult = AppLocalization.localizedString("Porta non valida.", comment: "Invalid SMB port")
             return
         }
 
@@ -743,15 +743,27 @@ struct AddAccountView: View {
                 let result = try await SMBClient().measureThroughput(for: connection)
                 await MainActor.run {
                     if let megabytesPerSecond = result.megabytesPerSecond {
-                        speedTestResult = String(format: "Connesso in %.0f ms · ~%.1f MB/s", result.connectLatency * 1000, megabytesPerSecond)
+                        speedTestResult = AppLocalization.format(
+                            "Connesso in %.0f ms · ~%.1f MB/s",
+                            comment: "SMB connection speed test result",
+                            arguments: [result.connectLatency * 1000, megabytesPerSecond]
+                        )
                     } else {
-                        speedTestResult = String(format: "Connesso in %.0f ms (nessun fumetto trovato per misurare il download)", result.connectLatency * 1000)
+                        speedTestResult = AppLocalization.format(
+                            "Connesso in %.0f ms (nessun fumetto trovato per misurare il download)",
+                            comment: "SMB connection succeeded but no comic was available for a speed test",
+                            arguments: [result.connectLatency * 1000]
+                        )
                     }
                     isRunningSpeedTest = false
                 }
             } catch {
                 await MainActor.run {
-                    speedTestResult = "Connessione non riuscita: \(error.chunkyFriendlyDescription)"
+                    speedTestResult = AppLocalization.format(
+                        "Connessione non riuscita: %@",
+                        comment: "SMB connection speed test failed",
+                        arguments: [error.chunkyFriendlyDescription as NSString]
+                    )
                     DiagnosticLog.log("SMB speed test host=\(trimmedHost) EPERM=\(error.isLocalNetworkDenied) preflight=\(localNetwork.status) err=\(error.localizedDescription)")
                     isRunningSpeedTest = false
                 }
@@ -770,7 +782,7 @@ struct AddAccountView: View {
         let trimmedWorkgroup = smbWorkgroup.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedOverride = smbResolvedAddressOverride.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let port = Int32(smbPort.trimmingCharacters(in: .whitespacesAndNewlines)), port > 0 else {
-            shareBrowseError = "Porta non valida."
+            shareBrowseError = AppLocalization.localizedString("Porta non valida.", comment: "Invalid SMB port")
             return
         }
 
@@ -788,12 +800,16 @@ struct AddAccountView: View {
                     availableShares = shares.map(\.name)
                     isBrowsingShares = false
                     if availableShares.isEmpty {
-                        shareBrowseError = "Nessuna condivisione trovata."
+                        shareBrowseError = AppLocalization.localizedString("Nessuna condivisione trovata.", comment: "No SMB shares found")
                     }
                 }
             } catch {
                 await MainActor.run {
-                    shareBrowseError = "Impossibile elencare le condivisioni: \(error.chunkyFriendlyDescription)"
+                    shareBrowseError = AppLocalization.format(
+                        "Impossibile elencare le condivisioni: %@",
+                        comment: "Failed to list SMB shares",
+                        arguments: [error.chunkyFriendlyDescription as NSString]
+                    )
                     DiagnosticLog.log("SMB browse host=\(trimmedHost) EPERM=\(error.isLocalNetworkDenied) preflight=\(localNetwork.status) err=\(error.localizedDescription)")
                     isBrowsingShares = false
                 }
@@ -806,15 +822,15 @@ struct AddAccountView: View {
         let trimmedShare = smbShare.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmedHost.isEmpty else {
-            validationError = "Inserisci l'indirizzo del NAS."
+            validationError = AppLocalization.localizedString("Inserisci l'indirizzo del NAS.", comment: "Missing NAS address")
             return
         }
         guard !trimmedShare.isEmpty else {
-            validationError = "Inserisci il nome della condivisione."
+            validationError = AppLocalization.localizedString("Inserisci il nome della condivisione.", comment: "Missing SMB share name")
             return
         }
         guard let port = Int32(smbPort.trimmingCharacters(in: .whitespacesAndNewlines)), port > 0 else {
-            validationError = "La porta deve essere un numero valido."
+            validationError = AppLocalization.localizedString("La porta deve essere un numero valido.", comment: "Invalid SMB port")
             return
         }
 
@@ -822,7 +838,7 @@ struct AddAccountView: View {
         components.scheme = "smb"
         components.host = trimmedHost
         guard let url = components.url else {
-            validationError = "Inserisci un indirizzo valido."
+            validationError = AppLocalization.localizedString("Inserisci un indirizzo valido.", comment: "Invalid server address")
             return
         }
 
@@ -841,7 +857,11 @@ struct AddAccountView: View {
                 let report = KeychainStore.savePassword(password, forAccount: existing.stableID)
                 AppLog.log("Salva Modifica id=\(existing.stableID.uuidString) report ok=\(report.ok) (scrittura \(report.writeStatus), lettura \(report.readStatus))")
                 if !report.ok {
-                    validationError = "Password non salvata (scrittura \(report.writeStatus), lettura \(report.readStatus))."
+                    validationError = AppLocalization.format(
+                        "Password non salvata (scrittura %d, lettura %d).",
+                        comment: "Keychain password save failed",
+                        arguments: [Int(report.writeStatus), Int(report.readStatus)]
+                    )
                     return
                 }
             }
@@ -885,7 +905,11 @@ struct AddAccountView: View {
             let report = KeychainStore.savePassword(password, forAccount: created.stableID)
             if !report.ok {
                 DiagnosticLog.log("Keychain: salvataggio fallito in Creazione id=\(created.stableID.uuidString) (scrittura \(report.writeStatus), lettura \(report.readStatus))")
-                validationError = "Password non salvata (scrittura \(report.writeStatus), lettura \(report.readStatus))."
+                validationError = AppLocalization.format(
+                    "Password non salvata (scrittura %d, lettura %d).",
+                    comment: "Keychain password save failed",
+                    arguments: [Int(report.writeStatus), Int(report.readStatus)]
+                )
                 context.delete(created)
                 try? context.save()
                 return

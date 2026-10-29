@@ -1,0 +1,118 @@
+{
+  "appInfo": {
+    "es-ES": {
+      "name": "Chunky",
+      "subtitle": "Lector CBZ, CBR y PDF",
+      "privacyPolicyUrl": "https://scunio.com/privacy"
+    },
+    "de-DE": {
+      "name": "Chunky",
+      "subtitle": "Comic-Reader für CBZ, CBR, PDF",
+      "privacyPolicyUrl": "https://scunio.com/privacy"
+    },
+    "fr-FR": {
+      "name": "Chunky",
+      "subtitle": "Lecteur BD CBZ, CBR, PDF",
+      "privacyPolicyUrl": "https://scunio.com/privacy"
+    },
+    "nl-NL": {
+      "name": "Chunky",
+      "subtitle": "Strips lezen: CBZ, CBR, PDF",
+      "privacyPolicyUrl": "https://scunio.com/privacy"
+    },
+    "pt-PT": {
+      "name": "Chunky",
+      "subtitle": "Leitor de BD CBZ, CBR e PDF",
+      "privacyPolicyUrl": "https://scunio.com/privacy"
+    },
+    "it": {
+      "name": "Chunky",
+      "subtitle": "Lettore fumetti CBZ CBR PDF",
+      "privacyPolicyUrl": "https://scunio.com/privacy"
+    },
+    "en-US": {
+      "name": "Chunky Comics Reader",
+      "subtitle": "CBZ, CBR & PDF Comic Reader",
+      "privacyPolicyUrl": "https://scunio.com/privacy"
+    }
+  },
+  "version": {
+    "es-ES": {
+      "description": "Chunky es un lector de cómics rápido y cuidado para archivos CBZ, CBR y PDF. Organiza tu colección y lee a tu manera en iPhone, iPad y Mac.\n\nLEE A TU MANERA\n• Elige lectura a doble página automática o manual y muestra la portada por separado.\n• Lee de izquierda a derecha o al estilo manga, de derecha a izquierda.\n• Cambia de página tocando o deslizando, con animación, al instante o con fundido.\n• Usa zonas táctiles para leer con una sola mano.\n• Recorta automáticamente los márgenes blancos y corrige el tono y el contraste.\n• Mejora páginas de baja resolución y ajusta el brillo con dos dedos.\n\nUNA BIBLIOTECA A TU MEDIDA\n• Importa archivos CBZ, CBR y PDF desde Archivos.\n• Conéctate a servidores SMB, WebDAV y OPDS, o sube cómics desde un navegador en la misma red.\n• Sincroniza la biblioteca y el progreso de lectura con iCloud.\n• Organiza tus cómics con grupos, favoritos y búsqueda.\n• Descarga archivos para leer sin conexión.\n\nPersonaliza la lectura con ajustes por cómic y crea una biblioteca que se adapte a ti.",
+      "keywords": "manga,novela gráfica,viñetas,lector digital,CBZ,CBR,PDF,WebDAV,OPDS,SMB,NAS,iCloud",
+      "promotionalText": "Lee CBZ, CBR y PDF con diseños flexibles, recorte automático y sincronización con iCloud. Conéctate a tu NAS, WebDAV u OPDS.",
+      "supportUrl": "https://scunio.com",
+      "marketingUrl": "https://scunio.com",
+      "whatsNew": {
+        "IOS": "Se añadió compatibilidad con español, alemán, francés, neerlandés y portugués.",
+        "MAC_OS": "Se añadió compatibilidad con español, alemán, francés, neerlandés y portugués."
+      }
+    },
+    "de-DE": {
+      "description": "Chunky ist ein schneller, sorgfältig gestalteter Comic-Reader für CBZ-, CBR- und PDF-Dateien. Organisiere deine Sammlung und lies ganz nach deinen Wünschen auf iPhone, iPad und Mac.\n\nSO, WIE DU LIEST\n• Automatische oder manuelle Doppelseiten; Cover auf Wunsch einzeln anzeigen.\n• Leserichtung von links nach rechts oder wie bei Manga von rechts nach links.\n• Umblättern durch Tippen oder Wischen: gleiten, sofort oder überblenden.\n• Bequeme Einhandbedienung mit eigenen Tippzonen.\n• Weiße Ränder automatisch zuschneiden sowie Farbton und Kontrast anpassen.\n• Seiten mit niedriger Auflösung verbessern und die Helligkeit mit zwei Fingern regeln.\n\nDEINE COMIC-BIBLIOTHEK\n• CBZ-, CBR- und PDF-Dateien aus der Dateien-App importieren.\n• Verbindung zu SMB-, WebDAV- und OPDS-Servern; Comics auch über einen Browser im selben Netzwerk hochladen.\n• Bibliothek und Lesefortschritt mit iCloud synchronisieren.\n• Comics mit Gruppen, Favoriten und Suche organisieren.\n• Dateien für das Lesen ohne Internet laden.\n\nPasse die Leseoptionen für jeden Comic an und richte deine Bibliothek so ein, wie du sie brauchst.",
+      "keywords": "manga,comics,comicreader,CBZ,CBR,PDF,WebDAV,OPDS,SMB,NAS,iCloud,Bibliothek",
+      "promotionalText": "Lies CBZ, CBR und PDF mit flexiblen Layouts, automatischem Zuschnitt und iCloud-Sync. Verbinde dich mit NAS, WebDAV oder OPDS.",
+      "supportUrl": "https://scunio.com",
+      "marketingUrl": "https://scunio.com",
+      "whatsNew": {
+        "IOS": "Spanisch, Deutsch, Französisch, Niederländisch und Portugiesisch werden jetzt unterstützt.",
+        "MAC_OS": "Spanisch, Deutsch, Französisch, Niederländisch und Portugiesisch werden jetzt unterstützt."
+      }
+    },
+    "fr-FR": {
+      "description": "Chunky est un lecteur de BD rapide et soigné pour les fichiers CBZ, CBR et PDF. Organisez votre collection et lisez à votre façon sur iPhone, iPad et Mac.\n\nLISEZ À VOTRE FAÇON\n• Choisissez les doubles pages automatiques ou manuelles et affichez la couverture seule.\n• Lisez de gauche à droite ou comme un manga, de droite à gauche.\n• Tournez les pages en touchant ou en balayant : défilement, instantané ou fondu.\n• Profitez de zones tactiles dédiées pour lire d’une seule main.\n• Recadrez automatiquement les marges blanches et corrigez la teinte et le contraste.\n• Améliorez les pages en basse résolution et réglez la luminosité avec deux doigts.\n\nUNE BIBLIOTHÈQUE À VOTRE IMAGE\n• Importez des fichiers CBZ, CBR et PDF depuis Fichiers.\n• Connectez-vous aux serveurs SMB, WebDAV et OPDS, ou envoyez des BD depuis un navigateur sur le même réseau.\n• Synchronisez votre bibliothèque et votre progression de lecture avec iCloud.\n• Organisez vos BD avec des groupes, des favoris et la recherche.\n• Téléchargez vos fichiers pour les lire hors ligne.\n\nPersonnalisez les réglages pour chaque BD et créez une bibliothèque qui vous ressemble.",
+      "keywords": "manga,BD,lecture,CBZ,CBR,PDF,WebDAV,OPDS,SMB,NAS,iCloud,bibliothèque",
+      "promotionalText": "Lisez CBZ, CBR et PDF avec des mises en page flexibles, le recadrage auto et la synchro iCloud. Connectez NAS, WebDAV ou OPDS.",
+      "supportUrl": "https://scunio.com",
+      "marketingUrl": "https://scunio.com",
+      "whatsNew": {
+        "IOS": "Ajout de l’espagnol, de l’allemand, du français, du néerlandais et du portugais.",
+        "MAC_OS": "Ajout de l’espagnol, de l’allemand, du français, du néerlandais et du portugais."
+      }
+    },
+    "nl-NL": {
+      "description": "Chunky is een snelle, zorgvuldig ontworpen reader voor strips in CBZ-, CBR- en PDF-formaat. Organiseer je collectie en lees zoals jij wilt op iPhone, iPad en Mac.\n\nLEES OP JOUW MANIER\n• Kies automatische of handmatige dubbele pagina’s en toon de omslag apart.\n• Lees van links naar rechts of, zoals manga, van rechts naar links.\n• Sla pagina’s om met tikken of vegen: vloeiend, direct of met een vervaging.\n• Lees met één hand dankzij speciale tikzones.\n• Snijd witte randen automatisch bij en corrigeer tint en contrast.\n• Verbeter pagina’s met lage resolutie en regel de helderheid met twee vingers.\n\nJOUW EIGEN STRIPBIBLIOTHEEK\n• Importeer CBZ-, CBR- en PDF-bestanden vanuit Bestanden.\n• Verbind met SMB-, WebDAV- en OPDS-servers, of upload strips via een browser op hetzelfde netwerk.\n• Synchroniseer je bibliotheek en leesvoortgang met iCloud.\n• Organiseer strips met groepen, favorieten en zoeken.\n• Download bestanden om ze offline te lezen.\n\nPas de leesinstellingen per strip aan en richt je bibliotheek in zoals jij dat wilt.",
+      "keywords": "manga,strips,stripboek,lezer,CBZ,CBR,PDF,WebDAV,OPDS,SMB,NAS,iCloud",
+      "promotionalText": "Lees CBZ, CBR en PDF met flexibele pagina’s, automatisch bijsnijden en iCloud-synchronisatie. Verbind met NAS, WebDAV of OPDS.",
+      "supportUrl": "https://scunio.com",
+      "marketingUrl": "https://scunio.com",
+      "whatsNew": {
+        "IOS": "Ondersteuning toegevoegd voor Spaans, Duits, Frans, Nederlands en Portugees.",
+        "MAC_OS": "Ondersteuning toegevoegd voor Spaans, Duits, Frans, Nederlands en Portugees."
+      }
+    },
+    "pt-PT": {
+      "description": "Chunky é um leitor de banda desenhada rápido e cuidado para ficheiros CBZ, CBR e PDF. Organize a sua coleção e leia à sua maneira no iPhone, iPad e Mac.\n\nLEIA À SUA MANEIRA\n• Escolha páginas duplas automáticas ou manuais e mostre a capa isoladamente.\n• Leia da esquerda para a direita ou ao estilo manga, da direita para a esquerda.\n• Vire páginas com toques ou gestos: deslizar, instantâneo ou esbatimento.\n• Leia com uma mão usando zonas táteis dedicadas.\n• Recorte automaticamente margens brancas e corrija a tonalidade e o contraste.\n• Melhore páginas de baixa resolução e ajuste o brilho com dois dedos.\n\nA SUA BIBLIOTECA DE BD\n• Importe ficheiros CBZ, CBR e PDF a partir de Ficheiros.\n• Ligue-se a servidores SMB, WebDAV e OPDS, ou envie bandas desenhadas através de um navegador na mesma rede.\n• Sincronize a biblioteca e o progresso de leitura com o iCloud.\n• Organize a coleção com grupos, favoritos e pesquisa.\n• Transfira ficheiros para ler sem ligação à Internet.\n\nPersonalize as opções de leitura para cada banda desenhada e organize a biblioteca ao seu gosto.",
+      "keywords": "manga,banda desenhada,leitor,CBZ,CBR,PDF,WebDAV,OPDS,SMB,NAS,iCloud,biblioteca",
+      "promotionalText": "Leia CBZ, CBR e PDF com páginas flexíveis, recorte automático e sincronização iCloud. Ligue-se ao NAS, WebDAV ou OPDS.",
+      "supportUrl": "https://scunio.com",
+      "marketingUrl": "https://scunio.com",
+      "whatsNew": {
+        "IOS": "Adicionado suporte para espanhol, alemão, francês, neerlandês e português.",
+        "MAC_OS": "Adicionado suporte para espanhol, alemão, francês, neerlandês e português."
+      }
+    },
+    "en-US": {
+      "description": "Chunky is a fast, thoughtfully designed comic reader for CBZ, CBR, and PDF files. It is made for people who read a lot and want an organized library on iPhone, iPad, and Mac.\n\nREAD YOUR WAY\n• Automatic or manual two-page spreads, with covers displayed on their own\n• Read left to right or right to left for manga, per comic or as your default\n• Separate page-turn styles for taps and swipes: slide, instant, or fade\n• One-handed reading with dedicated tap zones\n• Automatically crop white page borders\n• Automatically correct tint and contrast on yellowed or faded pages\n• Upscale low-resolution pages\n• Choose Fit Page or Fit Width, separately for single and double pages\n• Select and share a single panel without the rest of the page\n• Adjust brightness with a two-finger gesture while reading\n\nA LIBRARY THAT STAYS ORGANIZED\n• Grid or list view, with automatic grouping by series\n• Reading status (unread, reading, finished) and favorites\n• Keep New and Now Reading sections close at hand\n• Import folders of loose images and automatically turn them into comics\n\nICLOUD SYNC\n• Keep your library in sync across all your devices\n• Sync Folder: drop comics into an iCloud Drive folder and find them in Chunky, without importing them again\n• Smart downloads with a real progress indicator\n\nCONNECT TO YOUR SOURCES\n• WebDAV accounts for NAS devices, Nextcloud, ownCloud, and shared folders\n• OPDS accounts for servers such as Calibre or Ubooquity\n• Wi-Fi upload server: drag comics from a browser on the same Wi-Fi network, with no cables or cloud account\n\nPRIVATE BY DESIGN\n• Parental lock with a securely protected passcode and Face ID or Touch ID unlock\n• No tracking and no required account\n• Anonymous, optional crash reports stored locally only\n\nChunky is made for reading, not configuring: open a comic and it adapts to the way you read.",
+      "keywords": "comics,manga,CBZ,CBR,PDF,comic reader,WebDAV,OPDS,iCloud,library",
+      "marketingUrl": "https://scunio.com",
+      "promotionalText": "Read CBZ, CBR and PDF comics with smart layouts, automatic cropping and iCloud sync. Connect to NAS, WebDAV and OPDS. No account required.",
+      "supportUrl": "https://scunio.com",
+      "whatsNew": {
+        "IOS": "Added Spanish, German, French, Dutch, and Portuguese language support.",
+        "MAC_OS": "Added Spanish, German, French, Dutch, and Portuguese language support."
+      }
+    },
+    "it": {
+      "description": "Chunky è un lettore di fumetti veloce e curato nei dettagli, per CBZ, CBR e PDF — pensato per chi legge tanto e vuole una libreria sempre in ordine, su iPhone, iPad e Mac.\n\nLETTURA SU MISURA\n• Doppia pagina automatica o manuale, con copertina da sola\n• Lettura sinistra→destra o stile manga (destra→sinistra), per fumetto o come default\n• Stili di cambio pagina separati per tap e per swipe: scorrimento, immediato o dissolvenza\n• Modalità una mano, con zone di tap dedicate\n• Ritaglio automatico dei bordi bianchi\n• Correzione automatica di tinta e contrasto per pagine ingiallite o sbiadite\n• Upscaling delle pagine a bassa risoluzione\n• Zoom \"adatta pagina\" o \"adatta larghezza\", separato per pagine singole e doppie\n• Selezione di un singolo riquadro per condividerlo senza il resto della pagina\n• Luminosità regolabile con gesto a due dita, senza uscire dalla lettura\n\nLIBRERIA SEMPRE IN ORDINE\n• Vista a griglia o a lista, con raggruppamento automatico per serie\n• Stato di lettura (non letto, in lettura, terminato) e preferiti\n• Sezioni \"Nuovi\" e \"Ora in lettura\" sempre a portata di mano\n• Importa anche cartelle di immagini sciolte, convertite automaticamente in fumetto\n\nSINCRONIZZAZIONE ICLOUD\n• Libreria sincronizzata automaticamente su tutti i tuoi dispositivi\n• Sync Folder: trascina i fumetti nella cartella iCloud Drive e li ritrovi in Chunky, senza reimportarli a mano\n• Download intelligente con percentuale di avanzamento reale\n\nACCESSO ALLE TUE FONTI\n• Account WebDAV per NAS, Nextcloud, ownCloud e cartelle condivise\n• Account OPDS per server come Calibre o Ubooquity\n• Server di caricamento via Wi-Fi: trascina i fumetti da un browser sullo stesso Wi-Fi, senza cavi né account cloud\n\nPRIVATO PER DESIGN\n• Blocco genitori con codice protetto (mai salvato in chiaro) e sblocco Face ID/Touch ID\n• Nessun tracciamento, nessun account obbligatorio\n• Segnalazioni di crash anonime e disattivabili, solo in locale\n\nChunky è pensato per chi vuole leggere, non configurare: apri un fumetto e lui si adatta a come leggi tu.",
+      "keywords": "fumetti,manga,cbz,cbr,comic reader,webdav,opds,icloud,pdf,libreria fumetti",
+      "marketingUrl": "https://scunio.com",
+      "supportUrl": "https://scunio.com",
+      "promotionalText": "Leggi fumetti CBZ, CBR e PDF con impaginazione flessibile, ritaglio automatico e sync iCloud. Collegati a NAS, WebDAV e OPDS.",
+      "whatsNew": {
+        "IOS": "Aggiunto il supporto per spagnolo, tedesco, francese, olandese e portoghese.",
+        "MAC_OS": "Aggiunto il supporto per spagnolo, tedesco, francese, olandese e portoghese."
+      }
+    }
+  }
+}

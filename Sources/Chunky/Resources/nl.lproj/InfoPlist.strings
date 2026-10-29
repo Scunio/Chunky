@@ -1,0 +1,7 @@
+"CFBundleDisplayName" = "Chunky";
+"CFBundleName" = "Chunky";
+"Comic Book RAR Archive" = "Striparchief (RAR)";
+"Comic Book Zip Archive" = "Striparchief (ZIP)";
+"NSFaceIDUsageDescription" = "Gebruik Face ID om Chunky te ontgrendelen wanneer ouderlijk toezicht is ingeschakeld.";
+"NSLocalNetworkUsageDescription" = "Chunky gebruikt je lokale netwerk om je NAS (SMB) te vinden en strips te ontvangen vanuit een browser op hetzelfde wifi-netwerk.";
+"NSHumanReadableCopyright" = "MIT-licentie";

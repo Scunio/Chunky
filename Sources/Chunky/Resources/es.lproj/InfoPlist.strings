@@ -1,0 +1,7 @@
+"CFBundleDisplayName" = "Chunky";
+"CFBundleName" = "Chunky";
+"Comic Book RAR Archive" = "Archivo de cómic RAR";
+"Comic Book Zip Archive" = "Archivo de cómic ZIP";
+"NSFaceIDUsageDescription" = "Usa Face ID para desbloquear Chunky cuando el bloqueo parental está activado.";
+"NSLocalNetworkUsageDescription" = "Chunky usa la red local para encontrar tu NAS (SMB) y recibir cómics cargados desde un navegador conectado a la misma red Wi-Fi.";
+"NSHumanReadableCopyright" = "Licencia MIT";

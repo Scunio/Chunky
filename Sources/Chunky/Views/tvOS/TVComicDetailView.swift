@@ -16,6 +16,19 @@ struct TVComicDetailView: View {
         comic.lastReadPage > 0 && !comic.isFinished
     }
 
+    private var pageStatusText: String {
+        let key: String
+        if comic.isFinished {
+            key = "%@ pagine · Terminato"
+        } else if hasStartedReading {
+            key = "%@ pagine · In lettura"
+        } else {
+            key = "%@ pagine"
+        }
+        let format = AppLocalization.localizedString(key, comment: "Comic page count and reading status")
+        return String(format: format, arguments: ["\(comic.pageCount)" as NSString])
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 60) {
             coverImage
@@ -25,7 +38,7 @@ struct TVComicDetailView: View {
                 .shadow(color: .black.opacity(0.4), radius: 24, y: 12)
 
             VStack(alignment: .leading, spacing: 16) {
-                Text(comic.title ?? "Senza titolo")
+                Text(comic.title ?? AppLocalization.localizedString("Senza titolo", comment: "Untitled comic fallback"))
                     .font(.system(size: 56, weight: .bold, design: .rounded))
                     .lineLimit(2)
 
@@ -35,7 +48,7 @@ struct TVComicDetailView: View {
                         .foregroundColor(.secondary)
                 }
 
-                Text("\(comic.pageCount) pagine" + (comic.isFinished ? " · Letto" : hasStartedReading ? " · In lettura" : ""))
+                Text(pageStatusText)
                     .font(.body)
                     .foregroundColor(.secondary)
 

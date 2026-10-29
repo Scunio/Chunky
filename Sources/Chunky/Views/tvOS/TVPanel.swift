@@ -14,7 +14,7 @@ struct TVPanel<Actions: View, Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 32) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.title2.bold())
                 Spacer()
                 actions
@@ -56,7 +56,7 @@ func tvOSRowLabel(_ title: String, systemImage: String, tint: Color = .primary) 
         Image(systemName: systemImage)
             .foregroundColor(tint)
             .frame(width: 44)
-        Text(title)
+        Text(LocalizedStringKey(title))
     }
 }
 

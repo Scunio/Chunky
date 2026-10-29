@@ -53,7 +53,9 @@ final class LibraryViewModel: ObservableObject {
         cleaningTemporaryDirectories temporaryDirectories: [URL] = []
     ) {
         let backgroundContext = sharedScanContext(for: context)
-        let statusToken = beginStatus(urls.count == 1 ? "Importazione…" : "Importazione di \(urls.count) fumetti…")
+        let statusToken = beginStatus(urls.count == 1
+            ? AppLocalization.localizedString("Importazione…", comment: "Import progress")
+            : localizedProgress("Importazione di %@ fumetti…", urls.count))
 
         workQueue.async { [weak self] in
             defer {
@@ -65,7 +67,7 @@ final class LibraryViewModel: ObservableObject {
             defer { self.endStatus(token: statusToken) }
             for (index, url) in urls.enumerated() {
                 if urls.count > 1 {
-                    self.updateStatus("Importazione di \(index + 1) di \(urls.count)…", token: statusToken)
+                    self.updateStatus(self.localizedProgress("Importazione di %@ di %@…", index + 1, urls.count), token: statusToken)
                 }
                 self.importSingleFile(url, into: backgroundContext, saveImmediately: urls.count == 1)
             }
@@ -103,7 +105,11 @@ final class LibraryViewModel: ObservableObject {
     private func importSingleFile(_ url: URL, into context: NSManagedObjectContext, saveImmediately: Bool = true) {
         let ext = url.pathExtension
         guard let format = ComicFormat(fileExtension: ext) else {
-            reportError("Formato non supportato: .\(ext)")
+            reportError(AppLocalization.format(
+                "Formato non supportato: .%@",
+                comment: "Unsupported imported comic file format",
+                arguments: [ext as NSString]
+            ))
             return
         }
 
@@ -111,7 +117,8 @@ final class LibraryViewModel: ObservableObject {
             let relativePath = try LibraryStorage.importFile(from: url)
             registerComic(relativePath: relativePath, format: format, into: context, saveImmediately: saveImmediately)
         } catch {
-            reportError(error.localizedDescription)
+            DiagnosticLog.log("Import file failed: \(error.localizedDescription)")
+            reportError(AppLocalization.userFacingError(error))
         }
     }
 
@@ -264,6 +271,10 @@ final class LibraryViewModel: ObservableObject {
     /// another one is temporarily holding the label, and when that one finishes the indicator
     /// goes back to the right phrase instead of staying frozen on one from an operation that's
     /// already done.
+    private func localizedProgress(_ key: String, _ values: Int...) -> String {
+        AppLocalization.format(key, comment: "Library operation progress", arguments: values.map { NSNumber(value: $0) })
+    }
+
     @discardableResult
     private func beginStatus(_ text: String) -> Int {
         pendingLock.lock()
@@ -420,12 +431,14 @@ final class LibraryViewModel: ObservableObject {
         let newPaths = candidates.filter { !knownPaths.contains($0) }
         guard !newPaths.isEmpty else { return }
 
-        let statusToken = beginStatus(newPaths.count == 1 ? "Aggiungo 1 fumetto…" : "Aggiungo \(newPaths.count) fumetti…")
+        let statusToken = beginStatus(newPaths.count == 1
+            ? AppLocalization.localizedString("Aggiungo 1 fumetto…", comment: "Import progress")
+            : localizedProgress("Aggiungo %@ fumetti…", newPaths.count))
         defer { endStatus(token: statusToken) }
         let startedAt = Date()
         for (index, relativePath) in newPaths.enumerated() {
             if newPaths.count > 1 {
-                updateStatus("Aggiungo \(index + 1) di \(newPaths.count)…", token: statusToken)
+                updateStatus(localizedProgress("Aggiungo %@ di %@…", index + 1, newPaths.count), token: statusToken)
             }
             guard let format = ComicFormat(fileExtension: (relativePath as NSString).pathExtension) else { continue }
             registerComic(relativePath: relativePath, format: format, into: context, saveImmediately: newPaths.count == 1)
@@ -526,13 +539,15 @@ final class LibraryViewModel: ObservableObject {
         // showing "Importing…" in those cases left the user staring at an unexplained banner.
         let statusToken = unknownComicFiles.isEmpty
             ? nil
-            : beginStatus(unknownComicFiles.count == 1 ? "Aggiungo 1 fumetto…" : "Aggiungo \(unknownComicFiles.count) fumetti…")
+            : beginStatus(unknownComicFiles.count == 1
+                ? AppLocalization.localizedString("Aggiungo 1 fumetto…", comment: "Import progress")
+                : localizedProgress("Aggiungo %@ fumetti…", unknownComicFiles.count))
         defer { if let statusToken = statusToken { endStatus(token: statusToken) } }
 
         let startedAt = Date()
         for (index, url) in unknownComicFiles.enumerated() {
             if let statusToken = statusToken, unknownComicFiles.count > 1 {
-                updateStatus("Aggiungo \(index + 1) di \(unknownComicFiles.count)…", token: statusToken)
+                updateStatus(localizedProgress("Aggiungo %@ di %@…", index + 1, unknownComicFiles.count), token: statusToken)
             }
             guard let format = ComicFormat(fileExtension: url.pathExtension) else { continue }
             registerComic(relativePath: url.lastPathComponent, format: format, into: context, saveImmediately: unknownComicFiles.count == 1)
@@ -632,15 +647,15 @@ final class LibraryViewModel: ObservableObject {
         guard !candidates.isEmpty else { return }
 
         let statusToken = beginStatus(candidates.count == 1
-            ? "Preparo 1 fumetto…"
-            : "Preparo \(candidates.count) fumetti…")
+            ? AppLocalization.localizedString("Preparo 1 fumetto…", comment: "Import progress")
+            : localizedProgress("Preparo %@ fumetti…", candidates.count))
         defer { endStatus(token: statusToken) }
 
         let startedAt = Date()
         var completed = 0
         for (index, candidate) in candidates.enumerated() {
             if candidates.count > 1 {
-                updateStatus("Preparo \(index + 1) di \(candidates.count)…", token: statusToken)
+                updateStatus(localizedProgress("Preparo %@ di %@…", index + 1, candidates.count), token: statusToken)
             }
             let url = LibraryStorage.fileURL(forRelativePath: candidate.relativePath)
             // An archive that opens but doesn't yield a cover would leave the record a

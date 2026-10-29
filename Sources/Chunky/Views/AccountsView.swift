@@ -14,6 +14,7 @@ private struct OpenRemoteService {
 
 struct AccountsView: View {
     @Environment(\.managedObjectContext) private var context
+    @Environment(\.locale) private var locale
     @EnvironmentObject private var viewModel: LibraryViewModel
     @StateObject private var accountResults = SafeManagedObjectResults<RemoteAccountEntity>(request: {
         let request = NSFetchRequest<NSFetchRequestResult>(entityName: "RemoteAccountEntity")
@@ -107,7 +108,7 @@ struct AccountsView: View {
             case (.folder, .success(let urls)):
                 if let folderURL = urls.first { convertFolder(folderURL) }
             case (.folder, .failure(let error)):
-                folderConversionError = error.localizedDescription
+                folderConversionError = AppLocalization.userFacingError(error)
             case (_, .success(let urls)):
                 viewModel.importFiles(urls, into: context)
             case (_, .failure):
@@ -153,7 +154,7 @@ struct AccountsView: View {
         List {
             Section(footer: Text("Server web spento")) {
                 NavigationLink(destination: DownloadsView()) {
-                    rowLabel("Downloads", systemImage: "arrow.down.circle")
+                    rowLabel("Download", systemImage: "arrow.down.circle")
                 }
                 NavigationLink(destination: LocalUploadView()) {
                     rowLabel("Web", systemImage: "globe")
@@ -192,7 +193,7 @@ struct AccountsView: View {
             }
 
             if isAddingAccount {
-                Section(header: Text("Add account")) {
+                Section(header: Text("Aggiungi account")) {
                     Button(action: { activeSheet = .add(.opds) }) {
                         rowLabel("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
                     }
@@ -298,7 +299,7 @@ struct AccountsView: View {
             List {
                     Section {
                         NavigationLink(destination: DownloadsView()) {
-                            rowLabel("Downloads", systemImage: "arrow.down.circle")
+                            rowLabel("Download", systemImage: "arrow.down.circle")
                         }
                         .tvOSRowBackground()
                         NavigationLink(destination: LocalUploadView()) {
@@ -352,19 +353,20 @@ struct AccountsView: View {
         tvOSRowLabel(title, systemImage: systemImage, tint: tint)
         #else
         Label {
-            Text(title)
+            Text(LocalizedStringKey(title))
         } icon: {
             Image(systemName: systemImage).foregroundColor(tint)
         }
         #endif
     }
 
-    private static let scanDateFormatter: DateFormatter = {
+    private var scanDateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
+        formatter.locale = locale
         return formatter
-    }()
+    }
 
     /// Stato ultima scansione: errore (rosso) o data (grigia).
     private func accountStatus(for account: RemoteAccountEntity) -> (text: String, isError: Bool) {
@@ -372,9 +374,13 @@ struct AccountsView: View {
             return (error, true)
         }
         if let date = account.lastScanDate {
-            return ("Ultima scansione: \(Self.scanDateFormatter.string(from: date))", false)
+            return (AppLocalization.format(
+                "Ultima scansione: %@",
+                comment: "Account last scan date",
+                arguments: [scanDateFormatter.string(from: date) as NSString]
+            ), false)
         }
-        return ("Mai scansionato", false)
+        return (AppLocalization.localizedString("Mai scansionato", comment: "Account has never been scanned"), false)
     }
 
     @ViewBuilder
@@ -407,7 +413,7 @@ struct AccountsView: View {
     private var addAccountToggleButton: some View {
         Button(action: { withAnimation { isAddingAccount.toggle() } }) {
             if isAddingAccount {
-                Text("Done")
+                Text("Fatto")
             } else {
                 Image(systemName: "plus")
             }
@@ -445,7 +451,7 @@ struct AccountsView: View {
                 }
             } catch {
                 DispatchQueue.main.async {
-                    folderConversionError = error.localizedDescription
+                    folderConversionError = AppLocalization.userFacingError(error)
                 }
             }
         }

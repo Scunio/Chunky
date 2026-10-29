@@ -252,6 +252,11 @@ targets:
         com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)com.scunio.Chunky"
         # Come su iOS: silent push di CloudKit per il sync progressi realtime.
         aps-environment: development
+    settings:
+      base:
+        # La 1.0.7 è già pubblicata su Mac App Store; le nuove localizzazioni sono
+        # preparate per la prossima versione macOS, 1.0.8.
+        MARKETING_VERSION: "1.0.8"
 
   Chunky_tvOS:
     platform: tvOS

@@ -19,15 +19,15 @@ struct MacSettingsView: View {
 
         var title: String {
             switch self {
-            case .reading: "Lettura"
-            case .navigation: "Navigazione"
-            case .appearance: "Colori"
-            case .imageQuality: "Qualità immagine"
-            case .parentalLock: "Blocco genitori"
-            case .advanced: "Avanzate"
-            case .diagnostics: "Diagnostica"
-            case .language: "Lingua"
-            case .info: "Informazioni"
+            case .reading: AppLocalization.localizedString("Lettura", comment: "Settings category")
+            case .navigation: AppLocalization.localizedString("Navigazione", comment: "Settings category")
+            case .appearance: AppLocalization.localizedString("Colori", comment: "Settings category")
+            case .imageQuality: AppLocalization.localizedString("Qualità immagine", comment: "Settings category")
+            case .parentalLock: AppLocalization.localizedString("Blocco genitori", comment: "Settings category")
+            case .advanced: AppLocalization.localizedString("Avanzate", comment: "Settings category")
+            case .diagnostics: AppLocalization.localizedString("Diagnostica", comment: "Settings category")
+            case .language: AppLocalization.localizedString("Lingua", comment: "Settings category")
+            case .info: AppLocalization.localizedString("Informazioni", comment: "Settings category")
             }
         }
 
@@ -152,7 +152,7 @@ private struct NavigationSettingsTab: View {
         Form {
             Section(header: Text("Navigazione")) {
                 Toggle(isOn: $isTapToPanEnabled) {
-                    infoLabel("Tap-to-pan", info: "Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati. Non si applica con la modalità una mano attiva, che già unifica le due zone a modo suo (vedi sotto).")
+                    infoLabel("Avanza al tocco sui bordi", info: "Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati. Non si applica con la modalità una mano attiva, che già unifica le due zone a modo suo (vedi sotto).")
                 }
                 .disabled(isOneHandedModeEnabled)
                 Toggle(isOn: $isOneHandedModeEnabled) {
@@ -160,15 +160,15 @@ private struct NavigationSettingsTab: View {
                 }
                 .disabled(tapPageTurnStyle == .disabled)
                 Toggle(isOn: $isHotCornersEnabled) {
-                    infoLabel("Hot corners", info: "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina.")
+                    infoLabel("Angoli attivi", info: "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina.")
                 }
                 .disabled(tapPageTurnStyle == .disabled)
-                Picker("Tap page-turn", selection: $tapPageTurnStyle) {
+                Picker("Cambio pagina al tocco", selection: $tapPageTurnStyle) {
                     ForEach(TapPageTurnStyle.allCases) { style in
                         Text(style.label).tag(style)
                     }
                 }
-                Picker("Swipe page-turn", selection: $swipePageTurnStyle) {
+                Picker("Cambio pagina con scorrimento", selection: $swipePageTurnStyle) {
                     ForEach(TapPageTurnStyle.allCases) { style in
                         Text(style.label).tag(style)
                     }
@@ -208,13 +208,13 @@ private struct ImageQualitySettingsTab: View {
                     infoLabel("Ritaglia bordi bianchi", info: "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo.")
                 }
                 Toggle(isOn: $isAutoTintContrastEnabled) {
-                    infoLabel("Auto tint & contrasto", info: "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità.")
+                    infoLabel("Tinta e contrasto automatici", info: "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità.")
                 }
                 Toggle(isOn: $isUpscalingEnabled) {
                     infoLabel("Upscaling pagine a bassa risoluzione", info: "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione.")
                 }
                 Toggle(isOn: $isMotionBlurEnabled) {
-                    infoLabel("Motion-blur", info: "Rende più fluido il movimento quando scorri con il dito una pagina ingrandita.")
+                    infoLabel("Sfocatura del movimento", info: "Rende più fluido il movimento quando scorri con il dito una pagina ingrandita.")
                 }
             }
         }

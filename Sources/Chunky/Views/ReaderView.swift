@@ -1629,7 +1629,7 @@ struct ReaderContentView: View {
             Image(systemName: "icloud.and.arrow.down")
                 .font(.largeTitle)
                 .foregroundColor(chromeForeground)
-            Text(comic.title ?? "Fumetto")
+            Text(comic.title ?? AppLocalization.localizedString("Fumetto", comment: "Fallback comic title"))
                 .foregroundColor(chromeForeground)
                 .multilineTextAlignment(.center)
             ProgressView(value: progress)
@@ -1683,7 +1683,7 @@ struct ReaderContentView: View {
             downloadProgress = nil
             if let error = error {
                 isLoadingComic = false
-                loadError = error.localizedDescription
+                loadError = AppLocalization.userFacingError(error)
                 return
             }
             #if os(tvOS)
@@ -1729,7 +1729,7 @@ struct ReaderContentView: View {
             } catch {
                 DispatchQueue.main.async {
                     isLoadingComic = false
-                    loadError = error.localizedDescription
+                    loadError = AppLocalization.userFacingError(error)
                 }
             }
         }

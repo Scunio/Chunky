@@ -14,7 +14,7 @@ struct DownloadsView: View {
         // Same fix as `ColorThemeView`/`ParentalLockSettingsView`: `.navigationTitle` overlays a
         // fixed screen position on tvOS instead of a sticky header, so an unbounded download
         // queue scrolls right through it. `TVPanel` puts the title in the layout instead.
-        TVPanel(title: "Downloads") {
+        TVPanel(title: "Download") {
             EmptyView()
         } content: {
             downloadList
@@ -33,7 +33,7 @@ struct DownloadsView: View {
         .onExitCommand { dismiss() }
         #else
         downloadList
-            .navigationTitle("Downloads")
+            .navigationTitle("Download")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -58,7 +58,7 @@ struct DownloadsView: View {
             .tvOSListFocusFix()
 
             Button(action: { downloadManager.stopAll() }) {
-                Text("Stop all")
+                Text("Interrompi tutti i download")
                     .frame(maxWidth: .infinity)
             }
             .padding()

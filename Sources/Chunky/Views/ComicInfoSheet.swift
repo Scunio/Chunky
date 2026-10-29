@@ -11,13 +11,15 @@ struct ComicInfoSheet: View {
     var onToggleFavorite: (() -> Void)?
     var onToggleReadingDirection: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.locale) private var locale
 
-    private static let dateFormatter: DateFormatter = {
+    private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
+        formatter.locale = locale
         return formatter
-    }()
+    }
 
     var body: some View {
         #if os(tvOS)
@@ -60,9 +62,9 @@ struct ComicInfoSheet: View {
                 row("Progresso", "\(Int(comic.progress * 100))%")
             }
             Section {
-                row("Aggiunto il", Self.dateFormatter.string(from: comic.dateAdded ?? Date()))
+                row("Aggiunto il", dateFormatter.string(from: comic.dateAdded ?? Date()))
                 if let lastOpened = comic.dateLastOpened {
-                    row("Ultima lettura", Self.dateFormatter.string(from: lastOpened))
+                    row("Ultima lettura", dateFormatter.string(from: lastOpened))
                 }
             }
             if onJumpToPage != nil || onToggleFavorite != nil || onToggleReadingDirection != nil {

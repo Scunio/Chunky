@@ -159,14 +159,14 @@ extension Error {
             case .cannotFindHost, .cannotConnectToHost:
                 return AppLocalization.localizedString("Impossibile raggiungere il server. Controlla l'indirizzo e che sia acceso.", comment: "Network connection error")
             case .timedOut:
-                return "Il server non ha risposto in tempo. Verifica che sia acceso e sulla stessa rete."
+                return AppLocalization.localizedString("Il server non ha risposto in tempo. Verifica che sia acceso e sulla stessa rete.", comment: "Network connection error")
             case .notConnectedToInternet, .networkConnectionLost:
                 return AppLocalization.localizedString("Nessuna connessione di rete. Verifica il Wi-Fi/LAN.", comment: "Network connection error")
             default:
                 break
             }
         }
-        return localizedDescription
+        return AppLocalization.userFacingError(self)
     }
 
     /// SOSPETTO blocco privacy "Rete locale", non conferma: EPERM dai socket SMB

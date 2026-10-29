@@ -56,7 +56,7 @@ private struct TVNowReadingTabView: View {
                         .frame(maxHeight: 520)
                         .cornerRadius(12)
 
-                    Text(comic.title ?? "Senza titolo")
+                    Text(comic.title ?? AppLocalization.localizedString("Senza titolo", comment: "Untitled comic fallback"))
                         .font(.title2.bold())
 
                     Text(pageProgress(for: comic))
