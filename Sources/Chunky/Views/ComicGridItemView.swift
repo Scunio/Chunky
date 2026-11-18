@@ -73,7 +73,13 @@ struct ComicCoverView: View {
             // perceived as a bar, even with the contrast applied below.
             ProgressView(value: max(comic.progress, 0.08))
                 .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
+                #if os(tvOS)
+                // Viewed from across the room on a 260pt-wide cover: the iOS hairline vanished.
+                .scaleEffect(x: 1, y: 2.5, anchor: .center)
+                .frame(height: 12)
+                #else
                 .frame(height: 5)
+                #endif
                 .padding(.horizontal, 4)
                 .padding(.bottom, 4)
                 .background(

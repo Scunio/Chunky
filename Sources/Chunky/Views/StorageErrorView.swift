@@ -15,7 +15,12 @@ struct StorageErrorView: View {
         ContentUnavailableView {
             Label("Impossibile aprire la libreria", systemImage: "exclamationmark.triangle.fill")
         } description: {
+            #if os(tvOS)
+            // No "share the log" on tvOS (no ShareLink, see below), and nothing is touched there.
+            Text("Si è verificato un problema con l'archivio dati locale. Seleziona Riprova (spesso basta, se era la rete); se il problema persiste, annota il dettaglio qui sotto per l'assistenza: la libreria potrebbe dover essere ricreata.")
+            #else
             Text("Si è verificato un problema con l'archivio dati locale. Prova a toccare Riprova (spesso basta, se era la rete); se il problema persiste, condividi il log per l'assistenza: la libreria potrebbe dover essere ricreata.")
+            #endif
             Text(detailsText)
                 .font(.caption.monospaced())
                 #if !os(tvOS)

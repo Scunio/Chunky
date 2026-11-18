@@ -94,6 +94,35 @@ struct TVFormDisclosureRow: View {
     }
 }
 
+/// tvOS replacement for `Picker(...).pickerStyle(.inline)`, which on tvOS shows neither a
+/// checkmark nor the current value. Same idiom as `ColorThemeView.themePresetButton`: one
+/// `Button` row per option, checkmark + `.isSelected` on the active one, the picker's label as
+/// the `Section` header. Emits a whole `Section`: never place it inside another `Section`.
+struct TVOptionPickerSection<Value: Hashable>: View {
+    let title: Text
+    var footer: Text?
+    @Binding var selection: Value
+    let options: [Value]
+    let label: (Value) -> Text
+
+    var body: some View {
+        Section {
+            ForEach(options, id: \.self) { option in
+                Button(action: { selection = option }) {
+                    HStack {
+                        label(option)
+                        Spacer()
+                        if option == selection {
+                            Image(systemName: "checkmark").fontWeight(.semibold).accessibilityHidden(true)
+                        }
+                    }
+                }
+                .accessibilityAddTraits(option == selection ? .isSelected : [])
+            }
+        } header: { title } footer: { if let footer { footer } }
+    }
+}
+
 #Preview {
     struct PreviewContainer: View {
         @State private var isToggleOn = true

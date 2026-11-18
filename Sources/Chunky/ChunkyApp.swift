@@ -72,7 +72,7 @@ struct ChunkyApp: App {
         .onChange(of: scenePhase) { _, phase in
             guard phase == .background else { return }
             let triggerRawValue = UserDefaults.standard.string(forKey: "parentalLockAutoLockTrigger") ?? ""
-            let trigger = ParentalAutoLockTrigger(rawValue: triggerRawValue) ?? .doNothing
+            let trigger = ParentalAutoLockTrigger(rawValue: triggerRawValue) ?? .platformDefault
             if trigger == .lockImmediately {
                 lock.lockIfNeeded()
             }

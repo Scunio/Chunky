@@ -1,7 +1,7 @@
 #if os(tvOS)
 import XCTest
 
-/// Verifies the tab bar itself: all 5 destinations exist, are text-labeled (the tvOS HIG
+/// Verifies the tab bar itself: all 6 destinations exist, are text-labeled (the tvOS HIG
 /// requirement icon-only toolbars don't have to meet), and switching between them actually
 /// changes the visible screen.
 final class TVNavigationUITests: XCTestCase {
@@ -10,9 +10,9 @@ final class TVNavigationUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testAllFiveTabsExist() {
+    func testAllTabsExist() {
         let app = launchPastProfilePicker()
-        for label in ["Libreria", "In lettura", "Preferiti", "Account", "Impostazioni"] {
+        for label in ["Libreria", "In lettura", "Preferiti", "Cerca", "Account", "Impostazioni"] {
             XCTAssertTrue(app.buttons[label].exists, "Manca la tab \"\(label)\"")
         }
     }

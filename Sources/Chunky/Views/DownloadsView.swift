@@ -29,7 +29,11 @@ struct DownloadsView: View {
         // all" — a disabled `Button` can't be forced focusable by any modifier order, confirmed
         // live); making the whole panel explicitly focusable gives it a real target. Verified
         // live: Menu from an empty Downloads screen now correctly pops back to the Account list.
-        .focusable(true)
+        //
+        // Only while the list is empty, though: with rows on screen the panel itself became an
+        // extra, invisible focus stop wrapped around them (and could swallow the first Down
+        // meant for a row's cancel button). Rows give Menu a real target on their own.
+        .focusable(downloadManager.activeDownloads.isEmpty)
         .onExitCommand { dismiss() }
         #else
         downloadList
@@ -42,29 +46,47 @@ struct DownloadsView: View {
 
     private var downloadList: some View {
         VStack(spacing: 0) {
-            List(downloadManager.activeDownloads) { item in
-                DownloadRow(item: item)
-                    // No swipe-to-reveal on tvOS's remote: `DownloadRow` shows its own
-                    // always-visible cancel button there instead.
-                    #if !os(tvOS)
-                    .swipeActions {
-                        Button(role: .destructive, action: item.cancel) {
-                            Label("Annulla", systemImage: "xmark")
-                        }
-                    }
-                    #endif
+            #if os(tvOS)
+            if downloadManager.activeDownloads.isEmpty {
+                ContentUnavailableView(
+                    "Nessun download in corso",
+                    systemImage: "arrow.down.circle",
+                    description: Text("I fumetti che scarichi da un account remoto compaiono qui.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                activeList
             }
-            .listStyle(.plain)
-            .tvOSListFocusFix()
-
-            Button(action: { downloadManager.stopAll() }) {
-                Text("Interrompi tutti i download")
-                    .frame(maxWidth: .infinity)
-            }
-            .padding()
-            .foregroundColor(.red)
-            .disabled(downloadManager.activeDownloads.isEmpty)
+            #else
+            activeList
+            #endif
         }
+    }
+
+    @ViewBuilder
+    private var activeList: some View {
+        List(downloadManager.activeDownloads) { item in
+            DownloadRow(item: item)
+                // No swipe-to-reveal on tvOS's remote: `DownloadRow` shows its own
+                // always-visible cancel button there instead.
+                #if !os(tvOS)
+                .swipeActions {
+                    Button(role: .destructive, action: item.cancel) {
+                        Label("Annulla", systemImage: "xmark")
+                    }
+                }
+                #endif
+        }
+        .listStyle(.plain)
+        .tvOSListFocusFix()
+
+        Button(action: { downloadManager.stopAll() }) {
+            Text("Interrompi tutti i download")
+                .frame(maxWidth: .infinity)
+        }
+        .padding()
+        .foregroundColor(.red)
+        .disabled(downloadManager.activeDownloads.isEmpty)
     }
 }
 
@@ -84,6 +106,7 @@ private struct DownloadRow: View {
                 Button(action: item.cancel) {
                     Image(systemName: "xmark.circle.fill")
                 }
+                .accessibilityLabel(Text("Annulla download"))
                 #endif
             }
             ProgressView(value: item.fractionCompleted)

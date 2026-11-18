@@ -11,6 +11,13 @@ struct LibraryView: View {
     /// On macOS the sidebar decides which series to show; on iOS there's no sidebar and the
     /// selection always stays `.all`, so the behavior doesn't change.
     var selection: LibrarySelection = .all
+    #if os(tvOS)
+    /// The tvOS "Cerca" tab (`TVRootTabView`): same grid, driven by a system `.searchable`
+    /// field — the standard tvOS search pattern (keyboard on top, results below) — instead of
+    /// the whole library. Only there: on the other tabs a pinned search field has no way to be
+    /// dismissed with the remote (see the note on `.searchable` below).
+    var isSearchTab = false
+    #endif
 
     @Environment(\.managedObjectContext) private var context
     @StateObject private var safeComicResults = SafeComicResults()
@@ -88,7 +95,15 @@ struct LibraryView: View {
     /// title on its home tab. Only worth a title row when it says something the tab bar
     /// doesn't: "Preferiti", or a series/group name.
     private var tvOSLibraryTitle: String? {
-        effectiveSelection == .favorites ? "Preferiti" : effectiveSelection.groupTitle
+        #if os(tvOS)
+        // The search field itself heads the Cerca tab.
+        if isSearchTab { return nil }
+        #endif
+        // "Preferiti" is ours and must be localized; a group title is the user's own series
+        // name and stays verbatim.
+        return effectiveSelection == .favorites
+            ? AppLocalization.localizedString("Preferiti", comment: "Favorites tab title")
+            : effectiveSelection.groupTitle
     }
 
     /// `.navigationTitle` on tvOS overlays a fixed screen position instead of a sticky header —
@@ -113,24 +128,26 @@ struct LibraryView: View {
         } else {
             #if os(tvOS)
             // `gridColumns`' 6-column math (1760pt content + 80pt margin each side = 1920pt,
-            // the full screen width) assumes that 80pt margin is the ONLY inset — but SwiftUI
-            // applies the system's own safe-area inset to this content by default, on top of
-            // it, starving the grid of real width and clipping the last column off the right
-            // edge (confirmed live: the 6th card in a row was visibly cut off). `.ignoresSafeArea()`
-            // makes the explicit 80pt margin the sole authority, matching that math.
+            // the full screen width) assumes that 80pt margin is the ONLY horizontal inset — but
+            // SwiftUI applies the system's own safe-area inset to this content by default, on
+            // top of it, starving the grid of real width and clipping the last column off the
+            // right edge (confirmed live: the 6th card in a row was visibly cut off). Ignoring
+            // the *horizontal* (and bottom) safe area makes the explicit 80pt margin the sole
+            // authority, matching that math. Not the top edge: ignoring it too put the title
+            // row ("Preferiti", a series name) up inside the tab bar's band.
             if let title = tvOSLibraryTitle {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(title)
                         .font(.largeTitle.bold())
                         .padding(.horizontal, gridHorizontalPadding)
-                        .padding(.top, 60)
+                        .padding(.top, 20)
                         .padding(.bottom, 8)
                     content(filtered: filtered)
                 }
-                .ignoresSafeArea()
+                .ignoresSafeArea(edges: [.horizontal, .bottom])
             } else {
                 content(filtered: filtered)
-                    .ignoresSafeArea()
+                    .ignoresSafeArea(edges: [.horizontal, .bottom])
             }
             #else
             content(filtered: filtered)
@@ -205,10 +222,15 @@ struct LibraryView: View {
                 }
             }
             #endif
+            // Not on tvOS: two instances of this view live side by side there (Libreria and
+            // Preferiti tabs), both bound to the same `importError` — the alert is presented
+            // once, from `TVRootTabView`, instead.
+            #if !os(tvOS)
             .alert("Errore", isPresented: isErrorPresented) {
             } message: {
                 Text(viewModel.importError ?? "")
             }
+            #endif
             .confirmationDialog(
                 "Eliminare questo fumetto?",
                 isPresented: Binding(
@@ -230,14 +252,31 @@ struct LibraryView: View {
             // .sheet would leave a card with rounded corners that doesn't cover the whole screen.
             // On Mac the reader lives in its own window (see openComic), so there's
             // nothing to present here.
-            #if os(iOS) || os(tvOS)
+            #if os(iOS)
             .fullScreenCover(item: $selectedComic) { comic in
                 ReaderView(comic: comic, libraryComics: filtered)
             }
-            #endif
-            #if os(tvOS)
+            #elseif os(tvOS)
+            // "Continuare con:" at the end of a comic proposes the next one in *display* order
+            // (series sections, then title — what the grid shows), not the fetch's flat
+            // title order, which jumped across series.
+            .fullScreenCover(item: $selectedComic) { comic in
+                ReaderView(comic: comic, libraryComics: LibraryGrouping.sections(for: filtered).flatMap(\.comics))
+            }
             .navigationDestination(item: $detailComic) { comic in
-                TVComicDetailView(comic: comic) { selectedComic = comic }
+                TVComicDetailView(
+                    comic: comic,
+                    allowsDeletion: !isKioskModeEnabled,
+                    onRead: { selectedComic = comic },
+                    onDelete: {
+                        // Pop first, then delete: the pushed detail observes this object and
+                        // must not outlive it.
+                        detailComic = nil
+                        DispatchQueue.main.async {
+                            viewModel.delete(comic, from: context)
+                        }
+                    }
+                )
             }
             #endif
             #if os(iOS)
@@ -265,6 +304,9 @@ struct LibraryView: View {
             #elseif os(tvOS)
             // tvOS's .searchable field has no cancel/collapse affordance in the remote-driven
             // focus model — it renders as a permanently pinned field the user can't dismiss.
+            // That's exactly right for a dedicated search tab, though (the system pattern),
+            // so it's attached there only.
+            .modifier(TVSearchableModifier(isEnabled: isSearchTab, text: $searchText))
             #else
             .searchable(text: $searchText, prompt: "Cerca per titolo o serie")
             #endif
@@ -538,7 +580,14 @@ struct LibraryView: View {
 
     private func content(filtered: [ComicEntity]) -> some View {
         Group {
-            if comics.isEmpty && !viewModel.isImporting {
+            if isSearchPromptShown {
+                ContentUnavailableView(
+                    "Cerca nella libreria",
+                    systemImage: "magnifyingglass",
+                    description: Text("Scrivi un titolo o il nome di una serie.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if comics.isEmpty && !viewModel.isImporting {
                 emptyState
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filtered.isEmpty {
@@ -562,6 +611,15 @@ struct LibraryView: View {
                 #endif
             }
         }
+    }
+
+    /// tvOS "Cerca" tab with nothing typed yet: a prompt, not the whole library again.
+    private var isSearchPromptShown: Bool {
+        #if os(tvOS)
+        isSearchTab && searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        #else
+        false
+        #endif
     }
 
     /// Mostra solo i fumetti presenti sul device (niente segnaposto remoti).
@@ -628,14 +686,23 @@ struct LibraryView: View {
                 // section listed comics outside that selection, defeating the point of being
                 // there (confirmed live: the Preferiti tab showed non-favorite comics under
                 // "Novità" even though `filteredComics` itself was correctly favorites-only).
-                if effectiveSelection == .all && !recentComics.isEmpty {
-                    sectionView(title: "Novità", comics: recentComics, names: names)
+                //
+                // A horizontal row capped at `tvOSRecentLimit`, not a full grid section: as a
+                // grid it repeated a whole screen of comics that the series sections below show
+                // again. "Segna come visti" empties it (same `newTrayClearedAt` as the iOS/macOS
+                // "Novità" popover's "Cancella").
+                if showsTVRecentRow {
+                    recentComicsRow(names: names)
                 }
                 #endif
                 switch displayMode {
                 case .grouped:
                     ForEach(sections) { section in
+                        #if os(tvOS)
+                        sectionView(title: section.title, comics: section.comics, names: names, showsHeader: !(sections.count == 1 && !showsTVRecentRow))
+                        #else
                         sectionView(title: section.title, comics: section.comics, names: names)
+                        #endif
                     }
                 case .alphabetical:
                     Text("TUTTI I FUMETTI (\(filtered.count))")
@@ -723,6 +790,52 @@ struct LibraryView: View {
             .padding(.horizontal, gridHorizontalPadding)
             .padding(.vertical)
         }
+    }
+    #endif
+
+    #if os(tvOS)
+    private static let tvOSRecentLimit = 10
+
+    private var showsTVRecentRow: Bool {
+        effectiveSelection == .all && !isSearchTab && searchText.isEmpty && !recentComics.isEmpty
+    }
+
+    private func recentComicsRow(names: [String]) -> some View {
+        let shown = Array(recentComics.prefix(Self.tvOSRecentLimit))
+        return VStack(alignment: .leading, spacing: tvOSSectionHeaderSpacing) {
+            sectionHeaderContent(title: LibraryGrouping.recentTitle, comics: shown)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 40) {
+                    ForEach(shown) { comic in
+                        cell(for: comic, names: names)
+                            .frame(width: 260)
+                    }
+                    // At the end of the row, not in the header: Down from the tab bar should
+                    // land on the first cover, not on a button that empties the row.
+                    markRecentAsSeenButton
+                }
+                .padding(.horizontal, gridHorizontalPadding)
+                // Room for `.card`'s focus scale, which isn't part of layout.
+                .padding(.vertical, 30)
+            }
+            .scrollClipDisabled()
+            .focusSection()
+        }
+    }
+
+    private var markRecentAsSeenButton: some View {
+        Button(action: { newTrayClearedAtTimestamp = Date().timeIntervalSince1970 }) {
+            VStack(spacing: 16) {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 56))
+                    .accessibilityHidden(true)
+                Text("Segna come visti")
+                    .font(.callout.bold())
+                    .multilineTextAlignment(.center)
+            }
+            .frame(width: 260, height: 390)
+        }
+        .buttonStyle(.card)
     }
     #endif
 
@@ -826,12 +939,14 @@ struct LibraryView: View {
         #endif
     }
 
-    private func sectionView(title: String, comics: [ComicEntity], names: [String]) -> some View {
+    private func sectionView(title: String, comics: [ComicEntity], names: [String], showsHeader: Bool = true) -> some View {
         VStack(alignment: .leading, spacing: tvOSSectionHeaderSpacing) {
             #if os(tvOS)
             // No collapsible-section pattern on tvOS (a full-width focusable header bar
             // is jarring on a TV) — the header is just a static label, always expanded.
-            sectionHeaderContent(title: title, comics: comics)
+            if showsHeader {
+                sectionHeaderContent(title: title, comics: comics)
+            }
             #else
             Button {
                 withAnimation {
@@ -1009,7 +1124,15 @@ struct LibraryView: View {
         // A search-phrased message is wrong when there was no search at all — e.g. the
         // "Preferiti" tab/filter with a non-empty library that just has nothing favorited yet.
         if searchText.isEmpty && effectiveSelection == .favorites {
+            #if os(tvOS)
+            ContentUnavailableView(
+                "Nessun preferito",
+                systemImage: "star",
+                description: Text("Per aggiungerne uno, apri un fumetto dalla Libreria e scegli \"Preferito\", oppure tieni premuto Seleziona su una copertina.")
+            )
+            #else
             ContentUnavailableView("Nessun preferito", systemImage: "star")
+            #endif
         } else {
             ContentUnavailableView(
                 "Nessun risultato per \"\(searchText)\"",
@@ -1051,6 +1174,9 @@ private struct ComicCell: View {
             }
             .buttonStyle(.card)
             .accessibilityLabel(comic.title ?? AppLocalization.localizedString("Fumetto", comment: "Fallback comic accessibility label"))
+            // State in the value, not the label: the label stays the bare title (UI tests and
+            // VoiceOver users find the cell by it), the badges' meaning is read after it.
+            .accessibilityValue(accessibilityStatus)
 
             // A ghost two-line block behind the real title, so every cell in a row reserves
             // the same title height regardless of whether this particular title wraps to one
@@ -1185,6 +1311,29 @@ private struct ComicCell: View {
     }
     #endif
 
+    #if os(tvOS)
+    /// What the cover's badges say visually (favorite star, checkmark, progress bar), for
+    /// VoiceOver — e.g. "Preferito, In lettura 40%".
+    private var accessibilityStatus: String {
+        var parts: [String] = []
+        if comic.isFavorite {
+            parts.append(AppLocalization.localizedString("Preferito", comment: "Comic accessibility status"))
+        }
+        switch readStatus(for: comic) {
+        case .unread:
+            parts.append(ReadStatus.unread.label)
+        case .finished:
+            parts.append(ReadStatus.finished.label)
+        case .reading:
+            parts.append("\(ReadStatus.reading.label) \(Int(comic.progress * 100))%")
+        }
+        if isPendingDownload || comic.isRemotePlaceholder {
+            parts.append(AppLocalization.localizedString("Da scaricare", comment: "Comic accessibility status"))
+        }
+        return parts.joined(separator: ", ")
+    }
+    #endif
+
     @ViewBuilder
     private var selectionBadge: some View {
         if isEditing {
@@ -1295,6 +1444,23 @@ private struct NewGroupPromptModifier: ViewModifier {
         }
     }
 }
+
+#if os(tvOS)
+/// `.searchable` only when enabled — a modifier can't be applied conditionally inline
+/// without changing the view's type on each branch.
+private struct TVSearchableModifier: ViewModifier {
+    let isEnabled: Bool
+    @Binding var text: String
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.searchable(text: $text, prompt: "Cerca per titolo o serie")
+        } else {
+            content
+        }
+    }
+}
+#endif
 
 extension UTType {
     static let cbz = UTType(exportedAs: "com.scunio.chunky.cbz")

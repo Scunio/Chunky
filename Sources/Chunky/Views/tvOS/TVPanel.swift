@@ -8,6 +8,8 @@ import SwiftUI
 /// clipping fix automatically — see `View.tvOSListFocusFix()`.
 struct TVPanel<Actions: View, Content: View>: View {
     let title: String
+    /// Pushed screens already get the 80pt safe-area margin; sheets pass 48 for their own inset.
+    var horizontalInset: CGFloat = 0
     @ViewBuilder var actions: Actions
     @ViewBuilder var content: Content
 
@@ -19,13 +21,13 @@ struct TVPanel<Actions: View, Content: View>: View {
                 Spacer()
                 actions
             }
-            .padding(.horizontal, 48)
+            .padding(.horizontal, horizontalInset)
             .padding(.top, 24)
             .padding(.bottom, 28)
 
             content
                 .tvOSListFocusFix()
-                .padding(.horizontal, 48)
+                .padding(.horizontal, horizontalInset)
         }
     }
 }

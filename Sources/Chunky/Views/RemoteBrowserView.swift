@@ -23,6 +23,14 @@ struct RemoteBrowserView: View {
     /// Solo root (`startURL == nil`): le sottocartelle non offrono modifica per non
     /// duplicare l'entry point in ogni livello di navigazione.
     @State private var isShowingEdit = false
+    #if os(tvOS)
+    /// Download/import failure shown right here: on tvOS the shared `importError` alert lives at
+    /// the tab-bar root, and the user is on the Account tab looking at this list when it fails.
+    @State private var downloadError: String?
+    /// Rows whose download finished in this session — get a checkmark instead of the cloud
+    /// icon, the only confirmation the remote user otherwise had (the library is on another tab).
+    @State private var downloadedEntryIDs: Set<RemoteEntry.ID> = []
+    #endif
 
     private var browser: RemoteBrowsing { RemoteBrowsingFactory.makeBrowser(for: account.kind) }
     private var url: URL { startURL ?? account.serverURL ?? URL(string: "about:blank")! }
@@ -37,14 +45,21 @@ struct RemoteBrowserView: View {
                 if startURL == nil {
                     NavigationLink(destination: AddAccountView(editing: account, onDeleted: { dismiss() })) {
                         Text("Modifica")
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 10)
                     }
                     .buttonStyle(.card)
                 }
                 // Nome esplicito: qui parte la scansione del NAS (segnaposto
                 // leggeri, mai download se il pre-cache è spento), non un semplice
                 // ricaricamento della vista come il pull-to-refresh su iOS.
-                Button("Aggiorna libreria", action: refreshLibrary)
-                    .disabled(isLoading || isRefreshingLibrary)
+                Button(action: refreshLibrary) {
+                    Label(isRefreshingLibrary ? "Aggiornamento…" : "Aggiorna libreria", systemImage: "arrow.triangle.2.circlepath")
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.card)
+                .disabled(isLoading || isRefreshingLibrary)
             }
         } content: {
             browserContent
@@ -57,6 +72,13 @@ struct RemoteBrowserView: View {
         .onAppear { startPreflightIfNeeded(); load() }
         .onDisappear { localNetwork.stop() }
         .searchable(text: $searchText, prompt: "Cerca qui")
+        .alert("Download non riuscito", isPresented: Binding(
+            get: { downloadError != nil },
+            set: { if !$0 { downloadError = nil } }
+        )) {
+        } message: {
+            Text(downloadError ?? "")
+        }
         #else
         browserContent
             .navigationTitle(title ?? account.name ?? "Sfoglia")
@@ -118,6 +140,13 @@ struct RemoteBrowserView: View {
                     Text("Percorso: Impostazioni di Sistema → Privacy e sicurezza → Rete locale → Chunky.")
                     #endif
                 }
+            } actions: {
+                // tvOS has no pull-to-refresh and the header's "Aggiorna libreria" also rescans
+                // the NAS: a plain retry of the listing belongs right on the error.
+                #if os(tvOS)
+                Button("Riprova", action: load)
+                    .disabled(isLoading)
+                #endif
             }
         } else if entries.isEmpty {
             ContentUnavailableView("Nessun contenuto qui.", systemImage: "folder")
@@ -163,24 +192,84 @@ struct RemoteBrowserView: View {
             NavigationLink(
                 destination: RemoteBrowserView(account: account, startURL: entry.url, title: entry.title)
             ) {
+                #if os(tvOS)
+                tvOSEntryLabel(entry.title, systemImage: "folder")
+                #else
                 Label(entry.title, systemImage: "folder")
+                #endif
             }
+            #if os(tvOS)
+            .tvOSRowBackground()
+            #endif
         } else {
             Button(action: { downloadAndImport(entry) }) {
                 HStack {
+                    #if os(tvOS)
+                    tvOSEntryLabel(entry.title, systemImage: "book.closed")
+                    #else
                     Label(entry.title, systemImage: "book.closed")
                         .foregroundColor(.primary)
+                    #endif
                     Spacer()
                     if downloadingEntryIDs.contains(entry.id) {
                         ProgressView()
+                    } else if isDownloaded(entry) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .accessibilityLabel(Text("Scaricato"))
                     } else {
                         Image(systemName: "icloud.and.arrow.down")
                             .foregroundColor(.secondary)
+                            .accessibilityHidden(true)
                     }
                 }
             }
             .disabled(downloadingEntryIDs.contains(entry.id))
+            #if os(tvOS)
+            .tvOSRowBackground()
+            #endif
         }
+    }
+
+    #if os(tvOS)
+    /// Same spacing as `tvOSRowLabel` (tvOS draws `Label` with no icon–text gap), but the title
+    /// is a file/folder name on the server: shown verbatim, never looked up as a localization
+    /// key (a "%" in a file name would otherwise be read as a format specifier).
+    private func tvOSEntryLabel(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: 24) {
+            Image(systemName: systemImage)
+                .frame(width: 44)
+                .accessibilityHidden(true)
+            Text(verbatim: title)
+        }
+    }
+    #endif
+
+    private func isDownloaded(_ entry: RemoteEntry) -> Bool {
+        #if os(tvOS)
+        downloadedEntryIDs.contains(entry.id)
+        #else
+        false
+        #endif
+    }
+
+    /// Where a download failure goes: the shared library alert on iOS/macOS (unchanged), this
+    /// screen's own alert on tvOS (see `downloadError`).
+    private func reportDownloadFailure(_ error: Error) {
+        #if os(tvOS)
+        downloadError = error.chunkyFriendlyDescription
+        #else
+        viewModel.importError = error.chunkyFriendlyDescription
+        #endif
+    }
+
+    /// tvOS: marks a finished download with a checkmark. "Finished" means the file arrived and
+    /// its import was queued — `importFiles` has no completion, so a later import failure still
+    /// surfaces through the shared alert at the tab-bar root.
+    private func markDownloaded(_ entry: RemoteEntry) {
+        #if os(tvOS)
+        downloadedEntryIDs.insert(entry.id)
+        #endif
     }
 
     private func load() {
@@ -259,7 +348,9 @@ struct RemoteBrowserView: View {
                 ComicDownloadService.downloadIfNeeded(comic: placeholder, completion: { error in
                     Task { @MainActor in
                         if let error {
-                            viewModel.importError = error.chunkyFriendlyDescription
+                            reportDownloadFailure(error)
+                        } else {
+                            markDownloaded(entry)
                         }
                         downloadingEntryIDs.remove(entry.id)
                     }
@@ -273,9 +364,10 @@ struct RemoteBrowserView: View {
                     into: context,
                     cleaningTemporaryDirectories: [localURL.deletingLastPathComponent()]
                 )
+                markDownloaded(entry)
                 downloadingEntryIDs.remove(entry.id)
             } catch {
-                viewModel.importError = error.chunkyFriendlyDescription
+                reportDownloadFailure(error)
                 downloadingEntryIDs.remove(entry.id)
             }
         }

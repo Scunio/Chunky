@@ -11,6 +11,26 @@ A `switch direction { case .left: ...; case .right: ...; default: break }` means
 Presenting a dialog as a plain `ZStack` overlay (not a `.sheet`) does not automatically defocus or disable whatever was focused before it appeared. If the view underneath still has `.focusable(true)` and its own `.onMoveCommand`, remote input keeps going there instead of to the dialog's buttons. Fix: condition `.focusable(...)` on whether the dialog is presented, and explicitly restore focus to the underlying view when the dialog is dismissed (in every dismissal path — cancel, confirm, etc.).
 This isn't just a reader-chrome issue: `ChunkyApp.swift` overlaid the parental-lock screen the same way, opaque `.background` but no `.disabled(lock.isLocked)` on `ContentView` underneath — an opaque background hides content visually but doesn't stop tvOS's remote focus from reaching it. Same fix: `.disabled(lock.isLocked)` on the view being covered.
 
+**Never put `.focusable(_:)` on a `Button` on tvOS.**
+It creates a wrapper focus item with no primary action: the remote moves focus onto it and `.onMoveCommand`/`.focused(_:equals:)` work, but Select never calls the button's action (confirmed with logs on the reader header: ⓘ, layout and "Libreria" were dead). Track focus with `.focused(_:equals:)` + `.onMoveCommand` only.
+
+**A `.sheet` presented from the reader (a `.fullScreenCover`) breaks on tvOS.**
+The whole reader disappears/reappears under the sheet, focus falls back to the pager and the sheet vanishes on its own. For reader panels use an overlay in the `ZStack` with an opaque background, a default-focused "Chiudi" (`@FocusState` set in `onAppear`, otherwise Menu leaves the reader) and the header buttons `.disabled` while it is open. Use an explicit `onClose` instead of `dismiss`, which would close the whole reader.
+
+**Menu inside a `.fullScreenCover` closes it before any `.onExitCommand` runs (observed, cause unconfirmed).**
+Logs showed no `onExitCommand` firing, with or without zoom; `.interactiveDismissDisabled` and a `UITapGestureRecognizer` with `allowedPressTypes = [.menu]` (on window or on the view controller's view) did not prevent it. Not verified on a real Apple TV (may be a simulator/`axe` limit). Design around it: the reader zoom exits with Play/Pause and Select, not Menu.
+
+**`Picker(.pickerStyle(.inline))` shows neither a checkmark nor the current value on tvOS.**
+The user can't tell which option is active (and the default menu style opens an empty screen in the simulator). Use one `Button` row per option with an explicit checkmark + `.isSelected` trait: `TVOptionPickerSection` in `TVFormSection.swift`.
+
+**A long form pushed in a stack under the tab bar leaves the tab bar hidden after Menu, unless it is scrolled back to the top first.**
+Hiding the nav bar was not the cause (removing `.toolbar(.hidden)` didn't help). Fix: `ScrollViewReader` + `scrollTo(top)` in `.onExitCommand`, then `dismiss()` after ~0.35 s (`AddAccountView.tvOSForm`).
+
+**After `onSubmit` on a text field, the system keyboard hands focus back as it closes, overwriting an immediate `focusedField` assignment.**
+Delay the assignment ~400 ms (`ParentalLockSettingsView.moveFocus(to:)`).
+
+**`.buttonStyle(.card)` adds no inner padding on tvOS.** Add explicit vertical padding (14 matches the other card buttons).
+
 **`.buttonStyle(.automatic)` already draws its own resting-state rounded background on a focusable icon-only button.**
 Adding a custom `Circle()`/`Capsule()` `.background(...)` on top produces two visibly nested shapes (small circle chip floating inside the system's own larger rounded-rect backdrop), not one clean pill. If you want a native focus ring/scale, size the content with `.frame(...)` only and let `.automatic` supply the background — don't also add your own. Confirmed via cropped Canvas screenshots on `ReaderView.swift`'s header icons and the "Libreria" back pill.
 

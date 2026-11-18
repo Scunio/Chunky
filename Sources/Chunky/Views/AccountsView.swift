@@ -55,6 +55,12 @@ struct AccountsView: View {
     /// same list and turns into "Done" to close it again. iOS/macOS only — tvOS's split view
     /// (see `tvOSSplitView`) always shows "Aggiungi account" as its own category instead.
     @State private var isAddingAccount = false
+    #if os(tvOS)
+    /// "Modifica" from a row's context menu: pushed programmatically (`navigationDestination`)
+    /// — a `NavigationLink` inside a `.contextMenu` doesn't reliably push on tvOS, the menu is
+    /// dismissed before the link's own navigation runs.
+    @State private var accountBeingEdited: RemoteAccountEntity?
+    #endif
     /// Closes the sheet from `toolbarDoneButton` (no-op on tvOS — see `View+ToolbarDoneButton.swift`
     /// — where dismissal is instead the system Menu-button behavior on a plain `.sheet`).
     @Environment(\.dismiss) private var dismiss
@@ -273,21 +279,17 @@ struct AccountsView: View {
     #if os(tvOS)
     private var tvOSAccountList: some View {
         NavigationStack {
-            // Title lives in the layout, not `.navigationTitle` — same fix as
-            // `ColorThemeView`/`ParentalLockSettingsView`/`LibraryView`: on tvOS that overlays a
-            // fixed screen position instead of a sticky header, so a long enough list scrolls
-            // right through it.
+            // Title in the layout (`TVScreenTitle`, same as the other tab roots). The nav bar is
+            // left visible with an empty title, as in `TVSettingsView`: hiding it here left the
+            // tab bar hidden after popping a scrolled-down pushed form (tvOS-design-patterns.md).
             VStack(alignment: .leading, spacing: 0) {
-                Text("Account")
-                    .font(.largeTitle.bold())
-                    .padding(.horizontal, 48)
-                    .padding(.top, 60)
-                    .padding(.bottom, 24)
-
+                TVScreenTitle(title: "Account")
                 accountListBody
             }
             .navigationTitle("")
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(item: $accountBeingEdited) { account in
+                AddAccountView(editing: account)
+            }
         }
     }
 
@@ -309,22 +311,24 @@ struct AccountsView: View {
                     }
 
                     if !accounts.isEmpty {
-                        Section("I tuoi account") {
+                        Section {
                             ForEach(accounts) { account in
                                 NavigationLink(destination: RemoteBrowserView(account: account)) {
                                     accountRow(for: account)
                                 }
                                 .tvOSRowBackground()
                                 .contextMenu {
-                                    NavigationLink(destination: AddAccountView(editing: account)) {
-                                        Text("Modifica")
+                                    Button(action: { accountBeingEdited = account }) {
+                                        Label("Modifica", systemImage: "pencil")
                                     }
                                 }
                             }
+                        } header: {
+                            Text("I tuoi account").textCase(.uppercase)
                         }
                     }
 
-                    Section("Aggiungi account") {
+                    Section {
                         NavigationLink(destination: AddAccountView(initialKind: .opds)) {
                             rowLabel("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
                         }
@@ -337,6 +341,8 @@ struct AccountsView: View {
                             rowLabel("Nuovo account SMB", systemImage: RemoteAccountKind.smb.systemImage)
                         }
                         .tvOSRowBackground()
+                    } header: {
+                        Text("Aggiungi account").textCase(.uppercase)
                     }
                 }
             .listStyle(.plain)
@@ -390,9 +396,11 @@ struct AccountsView: View {
         VStack(alignment: .leading, spacing: 4) {
             tvOSRowLabel(account.name ?? "Account", systemImage: account.kind.systemImage)
             Text(status.text)
-                .font(.caption)
+                // An error is the one thing on this row the user has to act on: readable from
+                // the couch, not caption-sized.
+                .font(status.isError ? .callout.weight(.semibold) : .caption)
                 .foregroundColor(status.isError ? .red : .secondary)
-                .lineLimit(2)
+                .lineLimit(3)
                 .padding(.leading, 68)
         }
         #else

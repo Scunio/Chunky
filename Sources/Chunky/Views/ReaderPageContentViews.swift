@@ -330,7 +330,17 @@ private struct PageView: View {
     /// width and, if the result exceeds the screen's height, makes the page scrollable
     /// vertically.
     private var effectiveZoomMode: PageZoomMode {
-        isDoublePage ? doublePageZoomMode : singlePageZoomMode
+        let mode = isDoublePage ? doublePageZoomMode : singlePageZoomMode
+        #if os(tvOS)
+        // "Fit width"'s vertical `ScrollView` can never receive remote focus on tvOS, so a page
+        // taller than the screen was cut off with no way to scroll it. tvOS gets the remote
+        // zoom/pan instead (Play/Pause in `ReaderContentView.tvOSPager`); the setting is not
+        // offered in the tvOS reader settings, and a value synced from another device falls
+        // back to the whole page here.
+        return mode == .fitWidth ? .fitPage : mode
+        #else
+        return mode
+        #endif
     }
 
     private var processingSettings: PageProcessingSettings {

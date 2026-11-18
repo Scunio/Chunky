@@ -462,25 +462,20 @@ struct AddAccountView: View {
     #if os(tvOS)
     private var tvOSFormContent: some View {
         VStack(alignment: .leading, spacing: 20) {
+            // Read-only: every entry point (Account list rows "OPDS"/"WebDAV"/"SMB", or editing an
+            // existing account, where the kind is locked) already decides the type — a picker
+            // here was a redundant extra stop on the way down the form.
             TVFormFieldRow(label: "Tipo") {
-                Picker("", selection: $kind) {
-                    ForEach(RemoteAccountKind.allCases) { kind in
-                        Text(kind.label).tag(kind)
-                    }
-                }
-                .labelsHidden()
-                .disabled(isEditing)
-            }
-            if isEditing {
-                Text("Il tipo non si può cambiare in modifica.")
-                    .font(.footnote)
+                Label(kind.label, systemImage: kind.systemImage)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
                     .foregroundColor(.secondary)
             }
 
             if let validationError {
                 Text(validationError)
                     .foregroundColor(.red)
-                    .font(.footnote)
+                    .font(.callout)
             }
 
             TVFormFieldRow(label: "Nome") { TextField("es. Il mio NAS", text: $name) }
@@ -501,22 +496,26 @@ struct AddAccountView: View {
 
                 if isBlockedBySystem {
                     Text("Serve l'accesso alla rete locale: Impostazioni → App → Chunky → \"Rete locale\". Torna qui dopo averlo attivato.")
-                        .font(.footnote)
+                        .font(.callout)
                         .foregroundColor(.red)
                 }
 
                 TVFormFieldRow(label: "1. Indirizzo") { TextField("es. 192.168.1.10", text: $smbHost).disableAutocorrection(true) }
                 TVFormFieldRow(label: "2. Condivisione") { TextField("es. Video", text: $smbShare).disableAutocorrection(true) }
-                Text("Tocca il NAS in \"Trovati in rete\" se compare, altrimenti scrivi l'indirizzo a mano. Poi premi \"Sfoglia condivisioni\" e scegli dall'elenco reale del NAS.")
-                    .font(.footnote)
+                Text("Seleziona il NAS in \"Trovati in rete\" se compare, altrimenti scrivi l'indirizzo a mano. Poi premi \"Sfoglia condivisioni\" e scegli dall'elenco reale del NAS.")
+                    .font(.callout)
                     .foregroundColor(.secondary)
 
-                Button(isBrowsingShares ? "Ricerca in corso..." : "Sfoglia condivisioni", action: browseShares)
-                    .buttonStyle(.card)
+                Button(action: browseShares) {
+                    Text(isBrowsingShares ? "Ricerca in corso..." : "Sfoglia condivisioni")
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(.card)
                     .disabled(isBrowsingShares || smbHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if let shareBrowseError {
                     Text(shareBrowseError)
-                        .font(.footnote)
+                        .font(.callout)
                         .foregroundColor(.red)
                 }
                 if !availableShares.isEmpty {
@@ -537,12 +536,17 @@ struct AddAccountView: View {
                     TVFormFieldRow(label: "Porta") { TextField("445", text: $smbPort) }
                     TVFormFieldRow(label: "Gruppo di lavoro") { TextField("opzionale", text: $smbWorkgroup).disableAutocorrection(true) }
                     TVFormFieldRow(label: "Indirizzo del server") { TextField("Indirizzo IP risolto (opzionale)", text: $smbResolvedAddressOverride).disableAutocorrection(true) }
-                    Button(isRunningSpeedTest ? "Test in corso..." : "Test di velocità", action: runSpeedTest)
-                        .disabled(isRunningSpeedTest || smbHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || smbShare.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button(action: runSpeedTest) {
+                        Text(isRunningSpeedTest ? "Test in corso..." : "Test di velocità")
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.card)
+                    .disabled(isRunningSpeedTest || smbHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || smbShare.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     if let speedTestResult {
                         Text(speedTestResult)
-                            .font(.footnote)
+                            .font(.callout)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -554,7 +558,7 @@ struct AddAccountView: View {
                 Text(kind == .opds
                     ? "L'indirizzo del catalogo OPDS, es. http://192.168.1.10:8080/opds"
                     : "L'indirizzo del server WebDAV, es. https://miocloud.example.com/remote.php/dav/files/utente/")
-                    .font(.footnote)
+                    .font(.callout)
                     .foregroundColor(.secondary)
             }
 
@@ -563,7 +567,7 @@ struct AddAccountView: View {
             TVFormFieldRow(label: "Password") { SecureField("opzionale", text: $password) }
             if kind == .smb {
                 Text("Quasi tutti i NAS richiedono nome utente e password: senza, il server nega l'accesso. La password non si può rileggere, ma resta salvata nel portachiavi.")
-                    .font(.footnote)
+                    .font(.callout)
                     .foregroundColor(.secondary)
             }
 
@@ -572,19 +576,28 @@ struct AddAccountView: View {
             TVFormToggleRow(label: "Cartelle Smart", isOn: $smartFoldersEnabled)
             TVFormToggleRow(label: "Precaricamento di dettagli e copertine", isOn: precacheBinding)
             Text("Con il precaricamento attivo, ogni nuovo fumetto trovato viene scaricato subito per intero invece di aspettare che tu lo apra: non è possibile leggerne titolo e copertina senza scaricare il file completo, quindi su librerie grandi può consumare parecchia banda.")
-                .font(.footnote)
+                .font(.callout)
                 .foregroundColor(.secondary)
 
             TVFormSectionLabel(title: "Sincronizzazione progressi")
             TVFormFieldRow(label: "Chiave") { TextField("opzionale", text: $syncKeyOverride).disableAutocorrection(true) }
             if let previewSyncKey {
                 Text(previewSyncKey)
-                    .font(.footnote)
+                    .font(.callout)
                     .foregroundColor(.secondary)
             }
             Text("Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati.")
-                .font(.footnote)
+                .font(.callout)
                 .foregroundColor(.secondary)
+
+            // Repeated here: the one at the top of the form is a whole screen of fields away
+            // from "Salva", so a failed save looked like a dead button.
+            if let validationError {
+                Label(validationError, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundColor(.red)
+                    .font(.callout)
+                    .padding(.top, 12)
+            }
 
             TVFormPrimaryButton(title: "Salva", action: save)
                 .padding(.top, 12)
@@ -605,6 +618,7 @@ struct AddAccountView: View {
     /// push/pop instead of extending it.
     #if os(tvOS)
     private var tvOSForm: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             // Title lives in the layout, not `.navigationTitle` — same fix as
             // `ColorThemeView`/`ParentalLockSettingsView`: on tvOS that overlays a fixed
@@ -615,10 +629,16 @@ struct AddAccountView: View {
             VStack(alignment: .leading, spacing: 24) {
                 Text(isEditing ? "Modifica account" : "Nuovo account")
                     .font(.largeTitle.bold())
+                    .id("addAccountTop")
                 tvOSFormContent
             }
-            .padding(.horizontal, 48)
-            .padding(.vertical, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 80)
+        }
+        .tvOSListFocusFix()
+        .onExitCommand {
+            proxy.scrollTo("addAccountTop", anchor: .top)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { dismiss() }
         }
         .alert("Eliminare questo account?", isPresented: $isConfirmingDelete) {
             Button("Elimina", role: .destructive, action: deleteEditingAccount)
@@ -627,11 +647,10 @@ struct AddAccountView: View {
             Text("Viene rimossa solo la connessione con le sue credenziali: i fumetti già scaricati restano in libreria, quelli mai scaricati spariscono dall'elenco.")
         }
         .navigationTitle("")
-        .toolbar(.hidden, for: .navigationBar)
-        // Same missing-affordance fix as `DownloadsView` — this view hides its own nav bar
-        // *and* is pushed from the Account tab's hidden-nav-bar `NavigationStack` root, so
-        // Menu would otherwise exit the whole app instead of popping back to the Account list.
-        .onExitCommand { dismiss() }
+        // Same missing-affordance fix as `DownloadsView`: the nav bar stays visible (empty
+        // title) so the tab bar can come back after popping, but Menu would otherwise exit the
+        // whole app instead of popping back to the Account list.
+        }
     }
     #endif
 

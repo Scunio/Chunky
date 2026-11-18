@@ -28,8 +28,9 @@ struct TVIllustrationPanel: View {
             .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.horizontal, 48)
         .padding(.top, 60)
+        // Pure decoration: VoiceOver shouldn't stop on six unlabeled SF Symbols.
+        .accessibilityHidden(true)
     }
 }
 

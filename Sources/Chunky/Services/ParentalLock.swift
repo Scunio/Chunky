@@ -50,13 +50,22 @@ final class ParentalLock: ObservableObject {
         isLocked = true
     }
 
-    func setPasscode(_ passcode: String) {
-        KeychainStore.savePassword(passcode, forAccount: passcodeUUID)
+    @discardableResult
+    func setPasscode(_ passcode: String) -> Bool {
+        let saved = KeychainStore.savePassword(passcode, forAccount: passcodeUUID).ok
+        objectWillChange.send()
+        return saved
     }
 
     func removePasscode() {
         KeychainStore.deletePassword(forAccount: passcodeUUID)
         isEnabled = false
+    }
+
+    /// Checks a passcode without changing the lock state (e.g. to confirm removing it).
+    func verifyPasscode(_ passcode: String) -> Bool {
+        guard let stored = KeychainStore.password(forAccount: passcodeUUID) else { return false }
+        return stored == passcode
     }
 
     @discardableResult

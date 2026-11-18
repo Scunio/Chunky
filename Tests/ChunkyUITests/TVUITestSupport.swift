@@ -91,7 +91,7 @@ extension XCTestCase {
     /// currently is — reads the actual focused tab first instead of assuming a starting position,
     /// so tests can call this in any order. Fails the test if `tabLabel` isn't a real tab.
     func selectTab(_ tabLabel: String, in app: XCUIApplication) {
-        let order = ["Libreria", "In lettura", "Preferiti", "Account", "Impostazioni"]
+        let order = ["Libreria", "In lettura", "Preferiti", "Cerca", "Account", "Impostazioni"]
         guard let targetIndex = order.firstIndex(of: tabLabel) else {
             XCTFail("Tab sconosciuta: \(tabLabel)")
             return
@@ -103,7 +103,7 @@ extension XCTestCase {
             remote.press(.up)
             Thread.sleep(forTimeInterval: 0.2)
         }
-        // Find which tab is currently focused by checking each in turn — cheap (5 elements)
+        // Find which tab is currently focused by checking each in turn — cheap (6 elements)
         // and avoids assuming the bar starts on "Libreria" (true right after launch, not
         // necessarily true mid-test).
         let currentIndex = order.firstIndex { app.buttons[$0].exists && app.buttons[$0].hasFocus } ?? 0

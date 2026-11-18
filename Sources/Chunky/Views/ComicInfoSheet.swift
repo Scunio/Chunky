@@ -10,7 +10,10 @@ struct ComicInfoSheet: View {
     var onJumpToPage: (() -> Void)?
     var onToggleFavorite: (() -> Void)?
     var onToggleReadingDirection: (() -> Void)?
+    /// tvOS overlay: closes the panel instead of `dismiss` (which would dismiss the whole reader).
+    var onClose: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var isCloseFocused: Bool
     @Environment(\.locale) private var locale
 
     private var dateFormatter: DateFormatter {
@@ -21,13 +24,20 @@ struct ComicInfoSheet: View {
         return formatter
     }
 
+    private func close() {
+        if let onClose { onClose() } else { dismiss() }
+    }
+
     var body: some View {
         #if os(tvOS)
-        TVPanel(title: "Info fumetto") {
-            Button("Chiudi") { dismiss() }
+        TVPanel(title: "Info fumetto", horizontalInset: 48) {
+            Button("Chiudi") { close() }
+                .focused($isCloseFocused)
         } content: {
             listContent
         }
+        // Without an explicit start the overlay opened with nothing focused (Menu then left the whole reader).
+        .onAppear { isCloseFocused = true }
         .sheetSized()
         #else
         NavigationStack {
@@ -38,7 +48,7 @@ struct ComicInfoSheet: View {
                 #endif
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Chiudi") { dismiss() }
+                        Button("Chiudi") { close() }
                     }
                 }
         }
@@ -71,7 +81,7 @@ struct ComicInfoSheet: View {
                 Section {
                     if let onJumpToPage {
                         Button(action: {
-                            dismiss()
+                            close()
                             onJumpToPage()
                         }) {
                             actionLabel("Vai a pagina...", systemImage: "number")

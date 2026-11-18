@@ -4,6 +4,41 @@ import SwiftUI
 /// ReaderView.swift to keep its type_body_length under SwiftLint's limit (same reason
 /// ReaderSupportViews.swift/ReaderPageContentViews.swift already exist as companions).
 extension ReaderContentView {
+    #if os(tvOS)
+    /// tvOS: a `.sheet` here makes the whole reader disappear/reappear and the sheet vanishes right away, so the info
+    /// panel is an overlay like the other reader cards. Its first focusable item ("Chiudi") takes focus by default.
+    var tvInfoOverlay: some View {
+        ComicInfoSheet(
+            comic: comic,
+            loadedPageCount: provider?.pageCount,
+            onJumpToPage: {
+                jumpPageNumber = currentPage + 1
+                isPageJumpPresented = true
+                readerFocus = .dialogCancel
+            },
+            onToggleFavorite: toggleFavorite,
+            onToggleReadingDirection: toggleReadingDirection,
+            onClose: closeInfoOverlay
+        )
+        .background(readerCardBackground)
+        .cornerRadius(24)
+        .onExitCommand(perform: closeInfoOverlay)
+    }
+
+    func closeInfoOverlay() {
+        isInfoPresented = false
+        readerFocus = isPageJumpPresented ? .dialogCancel : .info
+    }
+    #endif
+
+    var readerCardBackground: Color {
+        #if os(tvOS)
+        Color(white: 0.1)
+        #else
+        Color.black.opacity(0.85)
+        #endif
+    }
+
     private var findButton: some View {
         Button(action: presentFind) {
             Image(systemName: "text.magnifyingglass")
@@ -62,7 +97,6 @@ extension ReaderContentView {
                 #endif
             }
             #if os(tvOS)
-            .focusable(readerFocus != .pager)
             // The explicit landing target for `readerFocus = .libreria` — Up from the page
             // lands here deterministically instead of relying on the system's default-focus
             // guess, and this binding keeps `readerFocus` from going `nil` while it's focused.
@@ -146,11 +180,14 @@ extension ReaderContentView {
             // layout-cycle icon isn't shown (`isDoublePageAllowed == false`) — nothing to
             // reserve space for in that case. The two `Spacer()`s still split evenly around
             // the title either way.
-            if isDoublePageAllowed {
-                headerTrailingActions
-            }
+            // Always present now: besides the (conditional) layout-cycle icon it carries the
+            // info/actions button, the only remote-reachable entry to `ComicInfoSheet`.
+            headerTrailingActions
         }
-        .foregroundColor(chromeForeground)
+        // No `.foregroundColor(chromeForeground)` on the whole row: forced on the `Button`s it
+        // also overrode `.automatic`'s own focused-state text color, leaving white text on
+        // the light focused pill ("‹ Libreria" unreadable once focused). The buttons take
+        // their resting color from the forced `colorScheme` below; the title pill sets its own.
         .environment(\.colorScheme, isBackgroundDark ? .dark : .light)
         .buttonStyle(.automatic)
         .padding(.horizontal, 80)
@@ -229,13 +266,24 @@ extension ReaderContentView {
             // Moved up from the footer on tvOS (see `footer`): the footer there has no
             // interactive controls left, only an informational page label and progress bar.
             #if os(tvOS)
+            // Info/actions: the remote-reachable replacement for the iOS/macOS long-press on
+            // the title (the title isn't focusable on tvOS) — opens `ComicInfoSheet`, which
+            // hosts "Vai a pagina", favorites and reading direction. No `.focusable` here: on a
+            // `Button` it wraps it in an action-less focus item that swallows Select.
+            Button(action: { isInfoPresented = true }) {
+                Image(systemName: "info.circle").readerTVIconChip()
+            }
+            .focused($readerFocus, equals: .info)
+            .onMoveCommand(perform: handleHeaderMoveCommand)
+            .accessibilityLabel(Text("Info fumetto"))
             if isDoublePageAllowed {
                 Button(action: cyclePageLayoutMode) {
                     Image(systemName: pageLayoutModeIconName).readerTVIconChip()
                 }
-                .focusable(readerFocus != .pager)
                 .focused($readerFocus, equals: .layout)
                 .onMoveCommand(perform: handleHeaderMoveCommand)
+                .accessibilityLabel(Text("Layout pagine"))
+                .accessibilityValue(Text(pageLayoutModeAccessibilityValue))
             }
             #endif
             // Tools opens Settings/Parental Lock/Colors, none of which exist on tvOS in v1.

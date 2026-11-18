@@ -3,6 +3,16 @@ import SwiftUI
 /// Schermata "Informazioni", raggiunta dal pannello Tools.
 struct AboutView: View {
     var body: some View {
+        #if os(tvOS)
+        // In-layout title (`.navigationTitle` overlays a fixed position on tvOS).
+        TVPanel(title: "Informazioni") { EmptyView() } content: { form }
+        #else
+        form
+            .navigationTitle("Informazioni")
+        #endif
+    }
+
+    private var form: some View {
         Form {
             Section {
                 VStack(spacing: 8) {
@@ -25,7 +35,6 @@ struct AboutView: View {
         #if os(macOS)
         .formStyle(.grouped)
         #endif
-        .navigationTitle("Informazioni")
     }
 
     private var appVersion: String {

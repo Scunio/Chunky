@@ -699,3 +699,37 @@ struct ScrollSwipeMonitor: NSViewRepresentable {
 }
 
 #endif
+
+/// Measured width of the header's leading button group (see `ReaderView.header`): the
+/// leading and trailing groups don't have the same number of icons (more on iPad/landscape,
+/// where they're not collapsed into a menu), so an ordinary `HStack` with a `Spacer` on
+/// each side of the title leaves it visibly off-center — verified live, exactly the "is the
+/// title centered?" report. Reserving the wider group's width on both sides (see `header`)
+/// keeps the title centered on the bar as a whole instead of centered between whatever
+/// the two groups happen to measure. Not gated to iOS: `header` is shared with macOS.
+struct HeaderLeadingWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// See `HeaderLeadingWidthKey`: separate key for the same reason `ChromeFooterHeightKey` is
+/// separate from `ChromeHeightKey`.
+struct HeaderTrailingWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+#if os(iOS)
+/// Measured height of the top control bar (see `ReaderView.headerHeight`).
+struct ChromeHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// Like `ChromeHeightKey`, for the bottom bar: two distinct keys because the two
+/// measurements travel through the same tree and a single one would merge them together.
+struct ChromeFooterHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+#endif

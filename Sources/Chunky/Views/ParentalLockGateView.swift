@@ -18,10 +18,16 @@ struct ParentalLockGateView: View {
                 #if !os(tvOS)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 #endif
+                // 220pt reads as a sliver on a 1920pt TV screen, and the field is the one
+                // thing on this screen the user has to aim at with the remote.
+                #if os(tvOS)
+                .frame(maxWidth: 560)
+                #else
                 .frame(maxWidth: 220)
+                #endif
                 .focused($isPasscodeFocused)
                 .onSubmit(attemptUnlock)
-                #if os(iOS)
+                #if os(iOS) || os(tvOS)
                 .keyboardType(.numberPad)
                 #endif
 

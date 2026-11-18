@@ -133,6 +133,17 @@ struct AppLanguageSettings: View {
 
     var body: some View {
         Form {
+            #if os(tvOS)
+            TVOptionPickerSection(
+                title: Text(AppLocalization.localizedString("Lingua dell'app", comment: "Language picker label")),
+                footer: Text("La lingua scelta si applica ai testi di Chunky. Le schermate e gli avvisi di sistema, incluse le richieste di autorizzazione, seguono la lingua impostata in tvOS."),
+                selection: Binding(
+                    get: { AppLanguage(rawValue: language) ?? .system },
+                    set: { language = $0.rawValue }
+                ),
+                options: Array(AppLanguage.allCases)
+            ) { Text($0.title) }
+            #else
             Section {
                 Picker(selection: $language) {
                     ForEach(AppLanguage.allCases) { option in
@@ -148,11 +159,26 @@ struct AppLanguageSettings: View {
             } footer: {
                 Text("La lingua scelta si applica ai testi di Chunky. Le schermate e gli avvisi di sistema, incluse le richieste di autorizzazione, seguono la lingua impostata in iOS o macOS.")
             }
+            #endif
         }
         .formStyle(.grouped)
+        #if os(tvOS)
+        .navigationTitle("")
+        // Same in-layout title as every other tvOS settings screen (`.navigationTitle`
+        // overlays a fixed position there), resolved from the selected language for the same
+        // reason as below.
+        .safeAreaInset(edge: .top) {
+            Text(AppLocalization.localizedString("Lingua", comment: "Language settings screen title"))
+                .font(.title2.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 24)
+                .padding(.bottom, 28)
+        }
+        #else
         // Resolve this title from the app's selected language. Navigation containers can
         // retain a LocalizedStringKey's original value after the locale changes while the
         // screen is open, even though the form contents refresh correctly.
         .navigationTitle(AppLocalization.localizedString("Lingua", comment: "Language settings screen title"))
+        #endif
     }
 }

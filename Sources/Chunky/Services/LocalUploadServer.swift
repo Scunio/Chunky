@@ -20,6 +20,13 @@ final class LocalUploadServer: ObservableObject {
         self.port = NWEndpoint.Port(rawValue: port) ?? 8281
     }
 
+    #if os(tvOS)
+    /// tvOS keeps one server for the app's lifetime instead of one per `LocalUploadView`:
+    /// leaving the screen (tab switch, Menu) must not cut an upload in progress — see
+    /// `LocalUploadView.server`.
+    static let tvOSShared = LocalUploadServer()
+    #endif
+
     func start() {
         guard listener == nil else { return }
         do {

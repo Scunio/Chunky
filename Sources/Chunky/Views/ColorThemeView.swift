@@ -38,7 +38,7 @@ struct ColorThemeView: View {
         // not a sticky header that pushes content down — a `Form` this long scrolls its
         // sections right through it. `TVPanel` puts the title in the layout instead, so it
         // never overlaps.
-        TVPanel(title: "Colori") {
+        TVPanel(title: "Aspetto") {
             EmptyView()
         } content: {
             formContent
@@ -49,6 +49,14 @@ struct ColorThemeView: View {
             #if os(macOS)
             .formStyle(.grouped)
             #endif
+        #endif
+    }
+
+    private var tintSectionTitle: LocalizedStringKey {
+        #if os(tvOS)
+        "Tinta pagina (lettore)"
+        #else
+        "Tint pagina (lettore)"
         #endif
     }
 
@@ -89,6 +97,14 @@ struct ColorThemeView: View {
             }
             #endif
 
+            #if os(tvOS)
+            TVOptionPickerSection(
+                title: Text("Sfondo pagina"),
+                footer: Text("Lo sfondo dietro le pagine nel lettore. \"Automatico\" segue la modalità chiara/scura di sistema."),
+                selection: pageBackground,
+                options: Array(PageBackground.allCases)
+            ) { Text($0.label) }
+            #else
             Section(
                 header: Text("Lettura"),
                 footer: Text("Lo sfondo dietro le pagine nel lettore. \"Automatico\" segue la modalità chiara/scura di sistema.")
@@ -99,9 +115,10 @@ struct ColorThemeView: View {
                     }
                 }
             }
+            #endif
 
             Section(
-                header: Text("Tint pagina (lettore)"),
+                header: Text(tintSectionTitle),
                 footer: Text("Sovrappone una leggera tinta alle pagine mentre leggi: utile per correggere pagine ingiallite o per una modalità notte più riposante.")
             ) {
                 #if !os(tvOS)
@@ -139,11 +156,29 @@ struct ColorThemeView: View {
 
     #if os(tvOS)
     private func themePresetButton(name: LocalizedStringKey, backgroundHex: String, textHex: String, accentHex: String) -> some View {
-        Button(name) {
+        let isActive = theme.backgroundHex.caseInsensitiveCompare(backgroundHex) == .orderedSame
+            && theme.textHex.caseInsensitiveCompare(textHex) == .orderedSame
+            && theme.accentHex.caseInsensitiveCompare(accentHex) == .orderedSame
+        return Button(action: {
             theme.backgroundHex = backgroundHex
             theme.textHex = textHex
             theme.accentHex = accentHex
+        }) {
+            // Which preset is applied was only visible by inference (the screen's colors): a
+            // checkmark says it outright, like a system single-choice list.
+            HStack {
+                Text(name)
+                Spacer()
+                if isActive {
+                    // Hidden from accessibility: the `.isSelected` trait carries the state, and
+                    // the symbol's name would otherwise be folded into the button's label.
+                    Image(systemName: "checkmark")
+                        .fontWeight(.semibold)
+                        .accessibilityHidden(true)
+                }
+            }
         }
+        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
     #endif
 
@@ -164,15 +199,31 @@ struct ColorThemeView: View {
             theme.pageTintHex = hex
             theme.pageTintOpacity = opacity
         }) {
+            #if os(tvOS)
+            // Caption-sized pills were hard to read and hit from the couch, and nothing said
+            // which tint was on: body text, real padding, and a checkmark on the active one.
+            HStack(spacing: 10) {
+                if theme.pageTintHex.caseInsensitiveCompare(hex) == .orderedSame {
+                    Image(systemName: "checkmark")
+                        .fontWeight(.semibold)
+                        .accessibilityHidden(true)
+                }
+                Text(name)
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 14)
+            #else
             Text(name)
                 .font(.caption)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                #if !os(tvOS)
                 .background(Color.secondary.opacity(0.15))
                 .cornerRadius(8)
-                #endif
+            #endif
         }
+        #if os(tvOS)
+        .accessibilityAddTraits(theme.pageTintHex.caseInsensitiveCompare(hex) == .orderedSame ? .isSelected : [])
+        #endif
         #if os(tvOS)
         .buttonStyle(.card)
         #else
