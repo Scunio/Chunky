@@ -43,7 +43,7 @@ struct ReaderContentView: View {
     var libraryComics: [ComicEntity] = []
     let onSwitchComic: (ComicEntity) -> Void
     @Environment(\.managedObjectContext) private var context
-    @Environment(\.dismiss) private var dismiss
+    @ReaderDismiss private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     #if os(macOS)
     // On Mac the reader lives in its own window (WindowGroup(for: ComicID.self)), not in a

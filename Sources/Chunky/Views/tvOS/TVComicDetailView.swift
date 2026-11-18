@@ -16,6 +16,8 @@ struct TVComicDetailView: View {
     /// this view never observes a deleted object). Asked for only after the confirmation below.
     var onDelete: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.tvPresentedReaderComicID) private var presentedReaderComicID
+    @FocusState private var isPrimaryActionFocused: Bool
     @State private var isConfirmingDelete = false
 
     /// Same rule as the "In lettura" tab (`TVNowReadingTabView.lastReadComic`): opened at least
@@ -70,6 +72,7 @@ struct TVComicDetailView: View {
                         .padding(.vertical, 14)
                 }
                 .buttonStyle(.card)
+                .focused($isPrimaryActionFocused)
                 .accessibilityIdentifier("comicDetail.primaryAction")
                 .padding(.top, 8)
 
@@ -110,6 +113,10 @@ struct TVComicDetailView: View {
         // pop-vs-exit-app decision on, so it falls through to exiting the whole app instead of
         // popping back to the grid. Driving the pop explicitly avoids relying on that default.
         .onExitCommand { dismiss() }
+        .onChange(of: presentedReaderComicID) { old, new in
+            guard new == nil, old == comic.objectID else { return }
+            DispatchQueue.main.async { isPrimaryActionFocused = true }
+        }
         .confirmationDialog("Eliminare questo fumetto?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
             Button("Elimina", role: .destructive) { onDelete?() }
             Button("Annulla", role: .cancel) {}

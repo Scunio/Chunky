@@ -45,6 +45,7 @@ struct TVRootTabView: View {
         } message: {
             Text(viewModel.importError ?? "")
         }
+        .tvReaderOverlay()
     }
 }
 
@@ -73,7 +74,10 @@ private struct TVNowReadingTabView: View {
         request.sortDescriptors = [NSSortDescriptor(keyPath: \ComicEntity.dateLastOpened, ascending: false)]
         return request
     }())
-    @State private var selectedComic: ComicEntity?
+    @Environment(\.tvOpenReader) private var openReader
+    @Environment(\.tvPresentedReaderComicID) private var presentedReaderComicID
+    @State private var openedComicID: NSManagedObjectID?
+    @FocusState private var isResumeFocused: Bool
 
     private var lastReadComic: ComicEntity? {
         comicResults.items.first { $0.dateLastOpened != nil && !$0.isFinished }
@@ -106,13 +110,17 @@ private struct TVNowReadingTabView: View {
                     // `.card` sizes its pill tightly around a bare label, no internal padding —
                     // confirmed cramped-looking on-device on the equivalent button in
                     // `TVComicDetailView`; same fix here.
-                    Button(action: { selectedComic = comic }) {
+                    Button(action: {
+                        openedComicID = comic.objectID
+                        openReader(comic, libraryComics: libraryOrder)
+                    }) {
                         Text("Riprendi")
                             .font(.headline)
                             .padding(.horizontal, 32)
                             .padding(.vertical, 14)
                     }
                     .buttonStyle(.card)
+                    .focused($isResumeFocused)
                 }
                 .padding(.vertical, 20)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -123,8 +131,9 @@ private struct TVNowReadingTabView: View {
         }
         .navigationTitle("")
         .toolbar(.hidden, for: .navigationBar)
-        .fullScreenCover(item: $selectedComic) { comic in
-            ReaderView(comic: comic, libraryComics: libraryOrder)
+        .onChange(of: presentedReaderComicID) { old, new in
+            guard new == nil, old != nil, old == openedComicID else { return }
+            DispatchQueue.main.async { isResumeFocused = true }
         }
         .onAppear { comicResults.start(in: context) }
         .onDisappear { comicResults.stop() }

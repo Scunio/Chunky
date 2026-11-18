@@ -35,14 +35,15 @@ struct LibraryView: View {
     @ObservedObject private var downloadTracker = ICloudDownloadTracker.shared
     @AppStorage("kioskModeEnabled") private var isKioskModeEnabled = false
     @State private var isShowingFileImporter = false
-    #if os(iOS) || os(tvOS)
-    // On Mac the reader lives in its own window (see `openComic`); this state
-    // exists on iOS and tvOS for their shared `.fullScreenCover`.
+    #if os(iOS)
+    // On Mac the reader lives in its own window (see `openComic`); on tvOS it is a root
+    // overlay (`TVReaderOverlay`); this state is for iOS's `.fullScreenCover`.
     @State private var selectedComic: ComicEntity?
     #endif
     #if os(tvOS)
     // tvOS opens a detail screen (cover, metadata, "Leggi") before the reader — a cover tap
-    // pushes here first; `TVComicDetailView`'s own button is what sets `selectedComic`.
+    // pushes here first; `TVComicDetailView`'s own button opens the reader overlay.
+    @Environment(\.tvOpenReader) private var openReader
     @State private var detailComic: ComicEntity?
     #endif
     #if os(iOS)
@@ -257,17 +258,13 @@ struct LibraryView: View {
                 ReaderView(comic: comic, libraryComics: filtered)
             }
             #elseif os(tvOS)
-            // "Continuare con:" at the end of a comic proposes the next one in *display* order
-            // (series sections, then title — what the grid shows), not the fetch's flat
-            // title order, which jumped across series.
-            .fullScreenCover(item: $selectedComic) { comic in
-                ReaderView(comic: comic, libraryComics: LibraryGrouping.sections(for: filtered).flatMap(\.comics))
-            }
             .navigationDestination(item: $detailComic) { comic in
                 TVComicDetailView(
                     comic: comic,
                     allowsDeletion: !isKioskModeEnabled,
-                    onRead: { selectedComic = comic },
+                    // "Continuare con:" proposes the next comic in *display* order (series
+                    // sections, then title — what the grid shows), not the flat title order.
+                    onRead: { openReader(comic, libraryComics: LibraryGrouping.sections(for: filtered).flatMap(\.comics)) },
                     onDelete: {
                         // Pop first, then delete: the pushed detail observes this object and
                         // must not outlive it.
@@ -1020,7 +1017,8 @@ struct LibraryView: View {
     }
 
     /// The single place from which a comic is "opened": on iOS it sets the state that presents the
-    /// `fullScreenCover`, on Mac it opens an independent window (see `ComicID`,
+    /// `fullScreenCover`, on tvOS it pushes the detail screen (whose button opens the reader
+    /// overlay), on Mac it opens an independent window (see `ComicID`,
     /// `ReaderWindowContainer`).
     private func openComic(_ comic: ComicEntity) {
         #if os(macOS)
