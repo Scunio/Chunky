@@ -28,14 +28,16 @@ final class TVAddSMBAccountUITests: XCTestCase {
         XCUIRemote.shared.press(.select)
 
         let remote = XCUIRemote.shared
-        func fill(_ label: String, _ value: String, secure: Bool = false) {
+        // Initial focus on the form lands below "Nome" (e.g. on a "Trovati in rete" row when a
+        // NAS is discovered), so the first field is reached upward; the rest go downward.
+        func fill(_ label: String, _ value: String, secure: Bool = false, direction: XCUIRemote.Button = .down) {
             let field = secure ? app.secureTextFields[label] : app.textFields[label]
             XCTAssertTrue(field.waitForExistence(timeout: 5), "Campo mancante: \(label)")
-            moveFocus(to: field, direction: .down, maxSteps: 15, app: app)
+            moveFocus(to: field, direction: direction, maxSteps: 15, app: app)
             enterText(value, into: field, app: app)
         }
 
-        fill("Nome", "Test NAS")
+        fill("Nome", "Test NAS", direction: .up)
         fill("1. Indirizzo", host)
         fill("2. Condivisione", share)
         if !user.isEmpty { fill("Nome utente", user) }
@@ -49,13 +51,15 @@ final class TVAddSMBAccountUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Test NAS"].waitForExistence(timeout: 8), "L'account SMB salvato non è comparso nella lista")
 
-        focusRow("Test NAS", in: app, direction: .up)
+        // The account row's label also carries its status ("Test NAS, Mai scansionato").
+        let accountRow = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "Test NAS")).firstMatch
+        moveFocus(to: accountRow, direction: .up, app: app)
         remote.press(.select)
 
-        // The browser must list something from the real share (any row) — confirms the saved
-        // credentials actually connect over the network.
-        XCTAssertTrue(app.cells.firstMatch.waitForExistence(timeout: 15),
-                      "Il browser dell'account SMB non ha mostrato il contenuto della condivisione")
+        // The share is known to contain a "Serie" folder — confirms the saved credentials
+        // actually connect over the network and the listing is real.
+        XCTAssertTrue(app.staticTexts["Serie"].waitForExistence(timeout: 20),
+                      "Il browser dell'account SMB non ha mostrato la cartella \"Serie\" della condivisione")
     }
 }
 #endif
