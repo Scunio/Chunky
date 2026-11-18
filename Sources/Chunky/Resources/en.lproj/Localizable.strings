@@ -51,7 +51,7 @@
 "Caricamento in corso…" = "Uploading…";
 "Caricamento…" = "Loading…";
 "Errore:" = "Error:";
-"Eliminare questo fumetto?" = "Delete this Comic?";
+"Eliminare questo fumetto?" = "Delete This Comic?";
 "Nessun risultato" = "No Results";
 "Nessun risultato per \"%@\"" = "No Results for \"%@\"";
 "Riprovo…" = "Retrying…";
@@ -84,7 +84,7 @@
 "Impossibile avviare il server locale: la porta è già in uso." = "Couldn't start the local server: the port is already in use.";
 "Operazione non riuscita. Riprova." = "Something went wrong. Please try again.";
 "Formato non supportato: .%@" = "Unsupported file format: .%@";
-"Avanza al tocco sui bordi" = "Tap-to-Pan";
+"Avanza al tocco sui bordi" = "Tap to Pan";
 "Con il precaricamento attivo, ogni nuovo fumetto trovato viene scaricato subito per intero invece di aspettare che tu lo apra: non è possibile leggerne titolo e copertina senza scaricare il file completo, quindi su librerie grandi può consumare parecchia banda." = "When pre-cache is on, each newly found comic is downloaded in full right away instead of waiting until you open it. Its title and cover can't be read without downloading the whole file, so large libraries may use a lot of bandwidth.";
 "Impossibile elencare le condivisioni: %@" = "Couldn't list shares: %@";
 "Inserisci l'indirizzo del NAS." = "Enter the NAS address.";
@@ -103,7 +103,7 @@
 "Intensità" = "Intensity";
 "Ignora" = "Skip";
 "Invia subito i progressi di questo device e scarica quelli degli altri (anche i fumetti iCloud, non solo remoti)." = "Send this device's reading progress now and download progress from your other devices, including iCloud comics.";
-"L'upscaling migliora le pagine a bassa risoluzione con un filtro di qualità superiore al semplice ridimensionamento. Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni." = "Upscaling improves low-resolution pages with a higher-quality filter than simple resizing. Auto-crop removes white scan margins.";
+"L'upscaling migliora le pagine a bassa risoluzione con un filtro di qualità superiore al semplice ridimensionamento. Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni." = "Upscaling improves low-resolution pages with a higher-quality filter than simple resizing. Crop White Borders automatically removes white margins from scans.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati." = "Leave blank to use the automatic key. If the same share is configured differently on other devices (for example, an IP address on one and a .local name on another), enter the same word on each device to match reading progress.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati. La struttura delle cartelle dentro lo share deve comunque coincidere." = "Leave blank to use the automatic key. If the same share is configured differently on other devices (for example, an IP address on one and a .local name on another), enter the same word on each device to match reading progress. The folder structure inside the share must still match.";
 "Le segnalazioni di crash restano solo su questo dispositivo (nessun server remoto): vengono aggiunte al log diagnostico e possono arrivare con qualche ritardo, generalmente solo su dispositivo fisico." = "Crash reports stay on this device; nothing is sent to a remote server. Reports are added to the diagnostic log and may arrive with a delay, usually only on a physical device.";
@@ -146,7 +146,7 @@
 "Server locale" = "Local Server";
 "Server web spento" = "Web Server Off";
 "Si applica ai nuovi fumetti importati. Puoi comunque cambiare la direzione per ogni fumetto dal lettore." = "Applies to newly imported comics. You can still change the direction for each comic in the reader.";
-"Si è verificato un problema con l'archivio dati locale. Prova a toccare Riprova (spesso basta, se era la rete); se il problema persiste, condividi il log per l'assistenza: la libreria potrebbe dover essere ricreata." = "There was a problem with the local data store. Tap Retry (often enough if the issue was the network). If the problem persists, share the log with support; the library may need to be rebuilt.";
+"Si è verificato un problema con l'archivio dati locale. Prova a toccare Riprova (spesso basta, se era la rete); se il problema persiste, condividi il log per l'assistenza: la libreria potrebbe dover essere ricreata." = "There was a problem with the local data store. Tap Try Again (often enough if the issue was the network). If the problem persists, share the log with support; the library may need to be rebuilt.";
 "Sincronizzazione progressi" = "Reading Progress Sync";
 "Sovrappone una leggera tinta alle pagine mentre leggi: utile per correggere pagine ingiallite o per una modalità notte più riposante." = "Adds a light tint to pages as you read. Useful for correcting yellowed pages or creating a more comfortable night mode.";
 "Stop all" = "Stop All";
@@ -176,7 +176,7 @@
 "Terminato" = "Finished";
 "Occidentale (sinistra → destra)" = "Western (left to right)";
 "Manga (destra → sinistra)" = "Manga (right to left)";
-"OPDS (Calibre, Ubooquity...)" = "OPDS (Calibre, Ubooquity...)";
+"OPDS (Calibre, Ubooquity...)" = "OPDS (Calibre, Ubooquity…)";
 "SMB (NAS)" = "SMB (NAS)";
 "Chiara" = "Light";
 "Scura" = "Dark";
@@ -429,7 +429,7 @@
 "Da scaricare" = "Not downloaded";
 "Download non riuscito" = "Download Failed";
 "Formato" = "Format";
-"Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni. L'upscaling migliora le pagine a bassa risoluzione." = "Trim Margins automatically removes white margins from scans. Upscaling improves low-resolution pages.";
+"Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni. L'upscaling migliora le pagine a bassa risoluzione." = "Crop White Borders automatically removes white margins from scans. Upscaling improves low-resolution pages.";
 "Il server resta attivo anche se cambi scheda, finché non lo spegni qui." = "The server stays on even if you switch tabs, until you turn it off here.";
 "Inquadra il codice con la fotocamera di un telefono sulla stessa rete per aprire la pagina di caricamento." = "Scan the code with the camera of a phone on the same network to open the upload page.";
 "Inserisci il codice attuale per disattivare il blocco genitori." = "Enter the current passcode to turn off Parental Lock.";
@@ -453,7 +453,7 @@
 "Per aggiungerne uno, apri un fumetto dalla Libreria e scegli \"Preferito\", oppure tieni premuto Seleziona su una copertina." = "To add one, open a comic from the Library and choose \"Favorite\", or press and hold Select on a cover.";
 "Preferito" = "Favorite";
 "Progresso" = "Progress";
-"Ricerca in corso..." = "Searching...";
+"Ricerca in corso..." = "Searching…";
 "Ricomincia dall'inizio" = "Start Over";
 "Rimuovere il codice?" = "Remove Passcode?";
 "Scaricato" = "Downloaded";
@@ -461,16 +461,16 @@
 "Segna come visti" = "Mark as Seen";
 "Seleziona il NAS in \"Trovati in rete\" se compare, altrimenti scrivi l'indirizzo a mano. Poi premi \"Sfoglia condivisioni\" e scegli dall'elenco reale del NAS." = "Select the NAS under \"Found on Network\" if it appears; otherwise enter its address. Then choose \"Browse Shares\" and pick from the NAS's actual list.";
 "Sfoglia condivisioni" = "Browse Shares";
-"Si applica ai nuovi fumetti importati. Puoi comunque cambiare la direzione per ogni fumetto dal lettore, con il pulsante Info." = "Applies to newly imported comics. You can still change the direction for each comic from the reader with the Info button.";
+"Si applica ai nuovi fumetti importati. Puoi comunque cambiare la direzione per ogni fumetto dal lettore, con il pulsante Info." = "Applies to newly imported comics. You can still change the direction for each comic in the reader with the ⓘ button.";
 "Si è verificato un problema con l'archivio dati locale. Seleziona Riprova (spesso basta, se era la rete); se il problema persiste, annota il dettaglio qui sotto per l'assistenza: la libreria potrebbe dover essere ricreata." = "There was a problem with the local data store. Select Try Again (often enough if it was the network). If the problem persists, note the details below for support; the library may need to be recreated.";
 "Sincronizzazione…" = "Syncing…";
-"Sinistra e destra cambiano pagina, Play/Pausa o Select ingrandiscono e tornano alla pagina intera" = "Left and right turn the page, Play/Pause or Select zoom in and back to the full page";
+"Sinistra e destra cambiano pagina, Play/Pausa o Select ingrandiscono e tornano alla pagina intera" = "Left and right turn the page. Play/Pause or Select zooms in and returns to the full page.";
 "Test di velocità" = "Speed Test";
-"Test in corso..." = "Testing...";
+"Test in corso..." = "Testing…";
 "Ultima lettura" = "Last Read";
 "Web" = "Web";
-"es. http://192.168.1.10:8080/opds" = "e.g. http://192.168.1.10:8080/opds";
-"es. https://miocloud.example.com/…" = "e.g. https://mycloud.example.com/…";
+"es. http://192.168.1.10:8080/opds" = "e.g., http://192.168.1.10:8080/opds";
+"es. https://miocloud.example.com/…" = "e.g., https://mycloud.example.com/…";
 "Il blocco genitori impedisce di aprire Chunky senza inserire il codice. Non protegge da un utente sufficientemente determinato: serve a scoraggiare gli accessi accidentali." = "Parental Lock prevents opening Chunky without the passcode. It isn't designed to stop a determined user; it helps prevent accidental access.";
 "Impossibile salvare il codice. Riprova." = "Couldn't save the passcode. Try again.";
 "Tinta pagina (lettore)" = "Page Tint (Reader)";
