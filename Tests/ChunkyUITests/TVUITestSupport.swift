@@ -11,7 +11,8 @@ extension XCTestCase {
     @discardableResult
     func launchPastProfilePicker(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["--uitesting"] + extraArguments
+        app.launchArguments += ["--uitesting", "--uitesting-reset", "-AppleLanguages", "(it)", "-AppleLocale", "it_IT",
+                                "-appLanguage", "italian"] + extraArguments
         app.launch()
 
         let remote = XCUIRemote.shared
@@ -65,6 +66,14 @@ extension XCTestCase {
         }
         XCTAssertTrue(reached, "Non sono riuscito a spostare il focus sull'elemento entro \(maxSteps) passi", file: file, line: line)
         return reached
+    }
+
+    /// Moves focus onto the List row labelled `label`. XCUI reports `Focused` on the row's Cell
+    /// (not the inner Button/StaticText) in tvOS Lists, so this targets `app.cells[label]`.
+    @discardableResult
+    func focusRow(_ label: String, in app: XCUIApplication, direction: XCUIRemote.Button = .down,
+                  maxSteps: Int = 12, file: StaticString = #filePath, line: UInt = #line) -> Bool {
+        moveFocus(to: app.cells[label], direction: direction, maxSteps: maxSteps, app: app, file: file, line: line)
     }
 
     /// Types `text` into `field`: selects it (opening tvOS's full-screen text-entry keyboard),

@@ -15,7 +15,9 @@ struct TVFormFieldRow<Content: View>: View {
             Text(label)
                 .font(.body)
                 .frame(width: 260, alignment: .leading)
+                .accessibilityHidden(true)
             content
+                .accessibilityLabel(Text(label))
                 .frame(maxWidth: .infinity)
         }
     }
@@ -51,6 +53,7 @@ struct TVFormPrimaryButton: View {
         }
         .buttonStyle(.card)
         .tint(.orange)
+        .accessibilityIdentifier("addAccount.save")
     }
 }
 
@@ -70,6 +73,7 @@ struct TVFormToggleRow: View {
                     .padding(.vertical, 14)
             }
             .buttonStyle(.card)
+            .accessibilityValue(Text(isOn ? "Attivo" : "Disattivato"))
         }
     }
 }

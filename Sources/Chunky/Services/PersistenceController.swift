@@ -158,6 +158,7 @@ struct PersistenceController {
     }
 
     init(inMemory: Bool = false, uiTesting: Bool = false) {
+        if !inMemory { UITestReset.performIfRequested() }
         container = NSPersistentCloudKitContainer(name: "Chunky", managedObjectModel: Self.model)
 
         guard let cloudDescription = container.persistentStoreDescriptions.first else {

@@ -13,7 +13,7 @@ final class TVAccountUITests: XCTestCase {
         let app = launchPastProfilePicker()
         selectTab("Account", in: app)
 
-        for label in ["Downloads", "Web", "Calibre / Ubooquity / OPDS", "Nuovo account WebDAV", "Nuovo account SMB"] {
+        for label in ["Download", "Web", "Calibre / Ubooquity / OPDS", "Nuovo account WebDAV", "Nuovo account SMB"] {
             XCTAssertTrue(app.staticTexts[label].waitForExistence(timeout: 5), "Riga mancante nella lista Account: \"\(label)\"")
         }
     }
@@ -22,21 +22,20 @@ final class TVAccountUITests: XCTestCase {
         let app = launchPastProfilePicker()
         selectTab("Account", in: app)
 
-        let webdavRow = app.buttons["Nuovo account WebDAV"]
-        XCTAssertTrue(webdavRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.cells["Nuovo account WebDAV"].waitForExistence(timeout: 5))
+        focusRow("Nuovo account WebDAV", in: app)
+        XCUIRemote.shared.press(.select)
 
-        // `hasFocus` on a List-embedded Button is unreliable here — fixed press count instead.
-        let remote = XCUIRemote.shared
-        for _ in 0..<4 {
-            remote.press(.down)
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-        remote.press(.select)
-
-        XCTAssertTrue(app.textFields["Nome account"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.textFields["Nome"].waitForExistence(timeout: 5),
                       "Il form \"Nuovo account\" non è comparso nel pannello di dettaglio")
         XCTAssertTrue(app.textFields["URL del server"].exists)
         XCTAssertTrue(app.buttons["Salva"].exists)
+
+        // Menu pops the form back to the category list.
+        XCUIRemote.shared.press(.menu)
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertTrue(app.cells["Nuovo account WebDAV"].waitForExistence(timeout: 5),
+                      "Menu non ha riportato alla lista Account")
     }
 }
 #endif

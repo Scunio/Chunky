@@ -70,6 +70,7 @@ struct TVComicDetailView: View {
                         .padding(.vertical, 14)
                 }
                 .buttonStyle(.card)
+                .accessibilityIdentifier("comicDetail.primaryAction")
                 .padding(.top, 8)
 
                 // Secondary actions: until now only reachable from the grid tile's long-press

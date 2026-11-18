@@ -25,7 +25,7 @@ final class TVRedesignScreenshotUITests: XCTestCase {
         attach(app, name: "01-library-tab")
 
         let remote = XCUIRemote.shared
-        let tabNames = ["library", "now-reading", "favorites", "accounts", "settings"]
+        let tabNames = ["library", "now-reading", "favorites", "search", "accounts", "settings"]
         for (index, name) in tabNames.enumerated() {
             if index > 0 {
                 remote.press(.right)

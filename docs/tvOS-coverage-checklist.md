@@ -14,7 +14,7 @@ Update this file every iteration: check off what got real coverage, add a one-li
 
 - [ ] Detail: secondary `.card` actions (Ricomincia dall'inizio / Preferito / Segna come letto–non letto / Elimina with confirmation dialog; Elimina hidden in kiosk mode) — added 2026-11-17, not yet exercised live
 - [ ] Detail: status reads "Terminato" after reading to the last spread in double-page mode (reader now records the last page actually shown, tvOS only) — not yet verified live
-- [ ] "Novità" is now a horizontal row capped at 10 with a trailing "Segna come visti" card (sets `newTrayClearedAt`), no longer a full grid section above the series — layout/focus not yet verified live; `TVLibraryUITests` press counts may need re-tuning because of it
+- [ ] "Novità" is now a horizontal row capped at 10 with a trailing "Segna come visti" card (sets `newTrayClearedAt`), no longer a full grid section above the series — layout/focus not yet verified live; `TVLibraryUITests` press counts may need re-tuning because of it (detail button is found via `comicDetail.primaryAction`)
 - [ ] Title row ("Preferiti", series name) no longer ignores the top safe area (was drawn inside the tab bar band) — only horizontal/bottom are ignored now; visual check pending
 - [ ] VoiceOver: cover cells keep the title as label and expose favorite/read/progress as value
 
@@ -53,7 +53,7 @@ Update this file every iteration: check off what got real coverage, add a one-li
 - [ ] Real connection attempt: no live server available in this environment — the friendly-error path for a syntactically-valid-but-unreachable address (as opposed to a malformed one) is still untested
 
 ## Impostazioni tab
-- [ ] New rows appended after the existing ones (UI tests count Down presses): Lettura (`TVReaderSettingsView`: direzione predefinita, copertina da sola, animazione, ritaglio/tinta/upscaling, ripartenza da pagina 1), Diagnostica (`DiagnosticsSections` in a `TVPanel`), Informazioni (`AboutView`, now `TVPanel` on tvOS), Licenze open source (`AcknowledgementsView`, focusable paragraphs so the remote can scroll). Root no longer uses `.navigationTitle` (in-layout `TVScreenTitle`) but keeps its nav bar, and every pushed screen is wrapped in `TVPopsOnMenu` (explicit Menu pop) — Menu-pop on each not yet verified live
+- [ ] New rows appended after the existing ones (UI tests now reach rows by label via `focusRow`, no longer by counting Down presses): Lettura (`TVReaderSettingsView`: direzione predefinita, copertina da sola, animazione, ritaglio/tinta/upscaling, ripartenza da pagina 1), Diagnostica (`DiagnosticsSections` in a `TVPanel`), Informazioni (`AboutView`, now `TVPanel` on tvOS), Licenze open source (`AcknowledgementsView`, focusable paragraphs so the remote can scroll). Root no longer uses `.navigationTitle` (in-layout `TVScreenTitle`) but keeps its nav bar, and every pushed screen is wrapped in `TVPopsOnMenu` (explicit Menu pop) — Menu-pop on each not yet verified live
 - [ ] Lingua: picker now has a visible label and a tvOS-specific footer; in-layout title
 - [ ] Diagnostica: the log `ScrollView` still can't be scrolled with the remote (only the visible tail shows) — known gap, not fixed
 - [x] `ColorThemeView` — Modalità segmented control: right-navigation works fine here (unlike the reader header — confirms that's a reader-specific bug, not a tool limitation), select on "Scura" visibly flipped the whole app to dark, confirmed real

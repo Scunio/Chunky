@@ -156,7 +156,7 @@ private struct TVNowReadingTabView: View {
 /// "Impostazioni" tab content: the tvOS home for screens that were previously unreachable there
 /// (no trigger button existed anywhere in the tvOS UI for `ToolsPanelView`, so `SettingsView`,
 /// `ParentalLockSettingsView` and most of `ColorThemeView` were compiled but dead code).
-/// New rows go *after* the existing ones: the tvOS UI tests count Down presses to reach them.
+/// The tvOS UI tests reach rows by label (`focusRow`, which targets the List `Cell`), so rows can be added anywhere.
 private struct TVSettingsView: View {
     var body: some View {
         VStack(spacing: 0) {

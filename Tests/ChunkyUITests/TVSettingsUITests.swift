@@ -14,10 +14,7 @@ final class TVSettingsUITests: XCTestCase {
         selectTab("Impostazioni", in: app)
 
         XCTAssertTrue(app.staticTexts["Aspetto"].waitForExistence(timeout: 5))
-        // Focus starts on the tab bar, not inside the list — one `.down` moves it in, landing
-        // on row 1 ("Aspetto").
-        XCUIRemote.shared.press(.down)
-        Thread.sleep(forTimeInterval: 0.5)
+        focusRow("Aspetto", in: app)
         XCUIRemote.shared.press(.select)
         // The tvOS-only preset row (ColorThemeView), not the ColorPicker/Slider section that's
         // iOS/macOS only — its absence here would mean the tvOS branch didn't compile in.
@@ -32,12 +29,7 @@ final class TVSettingsUITests: XCTestCase {
         selectTab("Impostazioni", in: app)
 
         XCTAssertTrue(app.staticTexts["Blocco genitori"].waitForExistence(timeout: 5))
-        // Focus starts on the tab bar: first `.down` lands on row 1 ("Aspetto"), second on
-        // row 2 ("Blocco genitori").
-        XCUIRemote.shared.press(.down)
-        Thread.sleep(forTimeInterval: 0.4)
-        XCUIRemote.shared.press(.down)
-        Thread.sleep(forTimeInterval: 0.4)
+        focusRow("Blocco genitori", in: app)
         XCUIRemote.shared.press(.select)
 
         // No passcode set in a fresh UI-test container, so the "set a code" fields are what

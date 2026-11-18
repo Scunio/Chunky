@@ -38,6 +38,10 @@ final class ParentalLock: ObservableObject {
 
     private init() {
         isLocked = false
+        if UITestReset.isRequested {
+            UITestReset.performIfRequested()
+            removePasscode()
+        }
         // If the lock is configured, the app must ask for the passcode even on the first
         // "cold" launch (e.g. after a force-quit): otherwise closing the app from the
         // multitasking switcher would be enough to bypass the lock entirely.

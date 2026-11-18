@@ -53,8 +53,8 @@ final class TVLibraryUITests: XCTestCase {
         }
         remote.press(.select)
 
-        XCTAssertTrue(app.buttons["Leggi"].waitForExistence(timeout: 5),
-                      "Il bottone \"Leggi\" non è comparso nella schermata di dettaglio")
+        XCTAssertTrue(app.buttons["comicDetail.primaryAction"].waitForExistence(timeout: 5),
+                      "Il bottone di azione principale non è comparso nella schermata di dettaglio")
         XCTAssertTrue(app.staticTexts[focusedTitle].waitForExistence(timeout: 5), "Il titolo del fumetto non è comparso nel dettaglio")
 
         // Menu should pop the detail screen back to the grid (a real push, unlike the tab bar's

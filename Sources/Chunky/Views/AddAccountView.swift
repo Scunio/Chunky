@@ -470,6 +470,7 @@ struct AddAccountView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
                     .foregroundColor(.secondary)
+                    .accessibilityValue(Text(kind.label))
             }
 
             if let validationError {

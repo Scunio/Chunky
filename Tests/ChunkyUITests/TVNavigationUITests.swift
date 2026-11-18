@@ -30,8 +30,8 @@ final class TVNavigationUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Blocco genitori"].exists)
 
         selectTab("Account", in: app)
-        XCTAssertTrue(app.staticTexts["Downloads"].waitForExistence(timeout: 5),
-                      "La riga \"Downloads\" non è comparsa nella tab Account")
+        XCTAssertTrue(app.staticTexts["Download"].waitForExistence(timeout: 5),
+                      "La riga \"Download\" non è comparsa nella tab Account")
 
         // Back to the start, confirming the bar isn't a one-way ratchet.
         selectTab("Libreria", in: app)

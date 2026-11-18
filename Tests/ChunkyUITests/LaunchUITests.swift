@@ -30,11 +30,19 @@ final class LaunchUITests: XCTestCase {
     private static let launchTimeout: TimeInterval = 60
 
     func testAppLaunchesAndShowsLibrary() {
+        #if os(tvOS)
+        // tvOS has no "Chunky" header: the "Libreria" tab-bar button is the proof that launch got
+        // past StorageErrorView and the parental-controls lock screen.
+        let app = launchPastProfilePicker()
+        XCTAssertTrue(app.buttons["Libreria"].waitForExistence(timeout: Self.launchTimeout),
+                      "La libreria non è comparsa entro il timeout")
+        #else
         let app = launchApp()
         // The "Chunky" title is the library's header: if it doesn't appear, launch ended up
         // on StorageErrorView or on the parental-controls lock screen.
         XCTAssertTrue(app.staticTexts["Chunky"].waitForExistence(timeout: Self.launchTimeout),
                       "La libreria non è comparsa entro il timeout")
+        #endif
     }
 
     func testLibraryShowsImportAffordanceWhenEmpty() {

@@ -21,6 +21,7 @@ struct ChunkyApp: App {
     }
 
     init() {
+        UITestReset.performIfRequested()
         UITestSeed.seedIfRequested()
         let includeInBackup = UserDefaults.standard.object(forKey: "includeInBackup") as? Bool ?? false
         // rootFolderURL() may ask the ubiquity daemon for an iCloud container. Keep that
