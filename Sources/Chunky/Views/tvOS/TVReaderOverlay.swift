@@ -42,6 +42,7 @@ extension EnvironmentValues {
 /// rather than being consumed by the system's cover dismissal.
 struct TVReaderOverlayModifier: ViewModifier {
     @State private var request: TVReaderRequest?
+    @FocusState private var fallbackFocused: Bool
 
     func body(content: Content) -> some View {
         ZStack {
@@ -51,6 +52,15 @@ struct TVReaderOverlayModifier: ViewModifier {
                 .environment(\.tvOpenReader, TVOpenReaderAction { request = $0 })
                 .environment(\.tvPresentedReaderComicID, request?.id)
             if let request {
+                // Focus fallback: while the reader shows its loading spinner or error state no
+                // reader view is focusable, and a Menu press with nothing focused leaves the app
+                // for the tvOS Home Screen. This invisible host keeps Menu routed to `close`.
+                Color.clear
+                    .focusable()
+                    .focused($fallbackFocused)
+                    .onAppear { fallbackFocused = true }
+                    .onExitCommand(perform: close)
+                    .zIndex(0.5)
                 ReaderView(comic: request.comic, libraryComics: request.libraryComics)
                     .id(request.id)
                     .environment(\.readerCloseAction, close)
