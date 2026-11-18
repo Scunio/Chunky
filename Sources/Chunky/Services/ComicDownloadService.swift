@@ -114,7 +114,7 @@ enum ComicDownloadService {
 
         let item = DownloadManager.shared.register(title: comic.title ?? "Fumetto", key: sourcePath)
         let entry = RemoteEntry(title: (relativePath as NSString).lastPathComponent, isContainer: false, url: sourceURL)
-        let browser = RemoteBrowsingFactory.makeBrowser(for: account.kind)
+        let browser = makeBrowser(account.kind)
 
         // `@MainActor`, not a plain `Task { }`: `account` belongs to `context`, which is always
         // the main-queue-confined view context (both callers — ReaderView and
@@ -174,6 +174,11 @@ enum ComicDownloadService {
             let pending = waiters.removeValue(forKey: key) ?? []
             for waiter in pending { waiter(error) }
         }
+    }
+
+    /// Test seam: how the network client for an account kind is built. Defaults to the real one.
+    nonisolated(unsafe) static var makeBrowser: (RemoteAccountKind) -> RemoteBrowsing = {
+        RemoteBrowsingFactory.makeBrowser(for: $0)
     }
 
     /// Completions of callers that arrived while a remote download was already running, by

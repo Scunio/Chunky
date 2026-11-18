@@ -8,6 +8,7 @@ import Testing
 /// sparire (orfani che non potrebbero più scaricarsi), quelli scaricati restare.
 /// `Ricostruisci libreria` deve fare lo stesso per gli orfani rimasti indietro.
 @Suite("Pulizia segnaposto orfani", .serialized)
+@MainActor // il viewContext è confinato al main thread: usarlo da un worker del runner dei test è la causa del flaky (.nilError / NSMergeConflict)
 struct OrphanPlaceholderTests {
     private func makeAccount(name: String, in context: NSManagedObjectContext) throws -> RemoteAccountEntity {
         let account = RemoteAccountEntity.create(
