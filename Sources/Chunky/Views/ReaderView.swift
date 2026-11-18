@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreData
+import Combine
 #if os(macOS)
 import AppKit
 #endif
@@ -1789,6 +1790,12 @@ extension ReaderContentView {
             .onAppear {
                 readerFocus = .pager
                 scheduleChromeAutoHide()
+            }
+            // After the parental-lock screen goes away, hand focus back to the pager (twice: the first can lose to the system).
+            .onReceive(ParentalLock.shared.$isLocked.removeDuplicates().dropFirst().filter { !$0 }) { _ in
+                for delay in [0.45, 1.2] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { readerFocus = .pager; isAwaitingPagerReturn = true }
+                }
             }
             .onTapGesture {
                 if isTVZoomed {

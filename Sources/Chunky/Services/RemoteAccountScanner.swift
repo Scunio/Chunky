@@ -80,31 +80,32 @@ enum RemoteAccountScanner {
             } else {
                 let sourcePath = entry.url.absoluteString
                 guard !existingPaths.contains(sourcePath) else { continue }
-                await registerPlaceholder(entry: entry, account: account, sourcePath: sourcePath, context: context)
+                await registerPlaceholder(entry: entry, account: account, context: context)
             }
         }
         return firstError
     }
 
-    private static func registerPlaceholder(
+    /// Returns the comic already registered for this remote file, or creates (and saves) a
+    /// placeholder for it. Shared by the scan and the tvOS browser so both converge on one record.
+    static func findOrCreatePlaceholder(
         entry: RemoteEntry,
         account: RemoteAccountEntity,
-        sourcePath: String,
         context: NSManagedObjectContext
-    ) async {
-        guard let format = ComicFormat(fileExtension: (entry.title as NSString).pathExtension) else { return }
-        guard let accountID = account.id else { return }
-
-        let fallbackTitle = (entry.title as NSString).deletingPathExtension
-        let seriesName = account.smartFoldersEnabled ? LibraryViewModel.deriveSeriesName(fromFallbackTitle: fallbackTitle) : nil
+    ) -> ComicEntity? {
+        guard let format = ComicFormat(fileExtension: (entry.title as NSString).pathExtension) else { return nil }
+        guard let accountID = account.id else { return nil }
+        let sourcePath = entry.url.absoluteString
 
         // Another pass (or the same account scanned again concurrently) may have just registered
         // this same remote file — re-check right before the write to avoid a duplicate.
         let duplicateRequest = ComicEntity.fetchRequest()
         duplicateRequest.predicate = NSPredicate(format: "sourceAccountID == %@ AND sourceRelativePath == %@", accountID as CVarArg, sourcePath)
         duplicateRequest.fetchLimit = 1
-        guard ((try? context.count(for: duplicateRequest)) ?? 0) == 0 else { return }
+        if let existing = (try? context.fetch(duplicateRequest))?.first { return existing }
 
+        let fallbackTitle = (entry.title as NSString).deletingPathExtension
+        let seriesName = account.smartFoldersEnabled ? LibraryViewModel.deriveSeriesName(fromFallbackTitle: fallbackTitle) : nil
         let relativePath = reserveUniqueRelativePath(suggestedName: entry.title, in: context)
 
         let placeholder = ComicEntity.create(
@@ -118,6 +119,16 @@ enum RemoteAccountScanner {
             in: context
         )
         try? context.save()
+        return placeholder
+    }
+
+    private static func registerPlaceholder(
+        entry: RemoteEntry,
+        account: RemoteAccountEntity,
+        context: NSManagedObjectContext
+    ) async {
+        guard let placeholder = findOrCreatePlaceholder(entry: entry, account: account, context: context),
+              placeholder.isRemotePlaceholder else { return }
 
         // "Pre-cache": instead of waiting for the user to open it, download and analyze the file
         // right away so title/series (from ComicInfo.xml) and the cover show up in the library
@@ -145,7 +156,7 @@ enum RemoteAccountScanner {
     /// both resolve to the identical relativePath, and the second one to download would silently
     /// overwrite the first. This also checks Core Data for the name actually being taken, and
     /// keeps incrementing until it finds one that's free on both.
-    private static func reserveUniqueRelativePath(suggestedName: String, in context: NSManagedObjectContext) -> String {
+    static func reserveUniqueRelativePath(suggestedName: String, in context: NSManagedObjectContext) -> String {
         let ext = (suggestedName as NSString).pathExtension
         let base = (suggestedName as NSString).deletingPathExtension
         var candidate = suggestedName

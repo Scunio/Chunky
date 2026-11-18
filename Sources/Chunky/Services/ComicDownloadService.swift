@@ -47,9 +47,9 @@ enum ComicDownloadService {
                         onProgress?(progress)
                     }
                 }
-                finish(item, error: nil, completion: completion)
+                finish(item, key: url.path, error: nil, completion: completion)
             } catch {
-                finish(item, error: error, completion: completion)
+                finish(item, key: url.path, error: error, completion: completion)
             }
         }
         return item
@@ -103,6 +103,15 @@ enum ComicDownloadService {
             return nil
         }
 
+        // A download for this file is already in flight (e.g. the scan's pre-cache while the user
+        // selects it in the browser): don't start a second transfer, just wait for the first.
+        if let inFlight = DownloadManager.shared.item(forKey: sourcePath) {
+            if let completion {
+                waiters[sourcePath, default: []].append(completion)
+            }
+            return inFlight
+        }
+
         let item = DownloadManager.shared.register(title: comic.title ?? "Fumetto", key: sourcePath)
         let entry = RemoteEntry(title: (relativePath as NSString).lastPathComponent, isContainer: false, url: sourceURL)
         let browser = RemoteBrowsingFactory.makeBrowser(for: account.kind)
@@ -147,9 +156,9 @@ enum ComicDownloadService {
                 comic.coverImageDataInline = analysis?.coverData
                 comic.isRemotePlaceholder = false
                 try? context.save()
-                finish(item, error: nil, completion: completion)
+                finish(item, key: sourcePath, error: nil, completion: completion)
             } catch {
-                finish(item, error: error, completion: completion)
+                finish(item, key: sourcePath, error: error, completion: completion)
             }
         }
         return item
@@ -158,10 +167,16 @@ enum ComicDownloadService {
     /// The row must be removed from `DownloadManager` on every outcome, success or failure:
     /// leaving it would mean a stuck entry in Downloads and, worse, an already-cancelled item
     /// cached that would make the next attempt on the same comic fail immediately.
-    private static func finish(_ item: DownloadItem, error: Error?, completion: ((Error?) -> Void)?) {
+    private static func finish(_ item: DownloadItem, key: String, error: Error?, completion: ((Error?) -> Void)?) {
         DispatchQueue.main.async {
             DownloadManager.shared.remove(item)
             completion?(error)
+            let pending = waiters.removeValue(forKey: key) ?? []
+            for waiter in pending { waiter(error) }
         }
     }
+
+    /// Completions of callers that arrived while a remote download was already running, by
+    /// source path. Only touched on the main queue.
+    nonisolated(unsafe) private static var waiters: [String: [(Error?) -> Void]] = [:]
 }

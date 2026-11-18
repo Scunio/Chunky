@@ -60,6 +60,33 @@ final class TVAddSMBAccountUITests: XCTestCase {
         // actually connect over the network and the listing is real.
         XCTAssertTrue(app.staticTexts["Serie"].waitForExistence(timeout: 20),
                       "Il browser dell'account SMB non ha mostrato la cartella \"Serie\" della condivisione")
+
+        // Re-selecting an already-downloaded file must open the reader, not download it again
+        // into a duplicate "X 1.cbz" record. Needs "Test Comic.cbz" at the root of the share.
+        let comicRow = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "Test Comic")).firstMatch
+        guard comicRow.waitForExistence(timeout: 5) else { return }
+        moveFocus(to: comicRow, direction: .down, app: app)
+        remote.press(.select)
+        let downloaded = app.images["Scaricato"]
+        XCTAssertTrue(downloaded.waitForExistence(timeout: 60), "Il download non è terminato (nessun segno di spunta)")
+        Thread.sleep(forTimeInterval: 1)
+        remote.press(.select)
+        let readerOpened = NSPredicate { _, _ in app.staticTexts["1 / 3"].exists }
+        let opened = XCTNSPredicateExpectation(predicate: readerOpened, object: nil)
+        XCTAssertEqual(XCTWaiter().wait(for: [opened], timeout: 15), .completed, "Il lettore non si è aperto selezionando di nuovo il file scaricato")
+        Thread.sleep(forTimeInterval: 2)
+        remote.press(.menu)
+        let closed = NSPredicate { _, _ in !app.staticTexts["1 / 3"].exists }
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: closed, object: nil)], timeout: 10), .completed, "Il lettore non si è chiuso con Menu")
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertTrue(comicRow.hasFocus, "Il focus non è tornato sulla riga del fumetto dopo la chiusura del lettore")
+
+        // Exactly one library record for it (no "Test Comic 1" duplicate).
+        selectTab("Libreria", in: app)
+        remote.press(.down)
+        Thread.sleep(forTimeInterval: 2)
+        let copies = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Test Comic")).count
+        XCTAssertEqual(copies, 1, "Dovrebbe esserci un solo record \"Test Comic\" in Libreria")
     }
 }
 #endif

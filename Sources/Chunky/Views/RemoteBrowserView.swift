@@ -27,10 +27,19 @@ struct RemoteBrowserView: View {
     /// Download/import failure shown right here: on tvOS the shared `importError` alert lives at
     /// the tab-bar root, and the user is on the Account tab looking at this list when it fails.
     @State private var downloadError: String?
-    /// Rows whose download finished in this session — get a checkmark instead of the cloud
-    /// icon, the only confirmation the remote user otherwise had (the library is on another tab).
-    @State private var downloadedEntryIDs: Set<RemoteEntry.ID> = []
+    @Environment(\.tvOpenReader) private var openReader
+    @Environment(\.tvPresentedReaderComicID) private var presentedReaderComicID
+    @FocusState private var focusedEntryURL: URL?
+    @State private var lastOpenedURL: URL?
+    @State private var openedComicID: NSManagedObjectID?
+    #elseif os(iOS)
+    @State private var readerComic: ComicEntity?
+    #elseif os(macOS)
+    @Environment(\.openWindow) private var openWindow
     #endif
+    /// `entry.url.absoluteString` of this account's files already downloaded into the library
+    /// (non-placeholder records) — they get a checkmark and open in the reader on select.
+    @State private var localSourcePaths: Set<String> = []
 
     private var browser: RemoteBrowsing { RemoteBrowsingFactory.makeBrowser(for: account.kind) }
     private var url: URL { startURL ?? account.serverURL ?? URL(string: "about:blank")! }
@@ -69,6 +78,10 @@ struct RemoteBrowserView: View {
         // instead of popping back (one level, whether that's the Account list or a parent
         // folder — recursion into a subfolder pushes another instance of this same view).
         .onExitCommand { dismiss() }
+        .onChange(of: presentedReaderComicID) { old, new in
+            guard new == nil, old != nil, old == openedComicID, let url = lastOpenedURL else { return }
+            DispatchQueue.main.async { focusedEntryURL = url }
+        }
         .onAppear { startPreflightIfNeeded(); load() }
         .onDisappear { localNetwork.stop() }
         .searchable(text: $searchText, prompt: "Cerca qui")
@@ -102,6 +115,11 @@ struct RemoteBrowserView: View {
             .sheet(isPresented: $isShowingEdit) {
                 AddAccountView(editing: account, onDeleted: { dismiss() })
             }
+            #if os(iOS)
+            .fullScreenCover(item: $readerComic) { comic in
+                ReaderView(comic: comic)
+            }
+            #endif
             .onAppear { startPreflightIfNeeded(); load() }
             .onDisappear { localNetwork.stop() }
         #endif
@@ -202,7 +220,7 @@ struct RemoteBrowserView: View {
             .tvOSRowBackground()
             #endif
         } else {
-            Button(action: { downloadAndImport(entry) }) {
+            Button(action: { select(entry) }) {
                 HStack {
                     #if os(tvOS)
                     tvOSEntryLabel(entry.title, systemImage: "book.closed")
@@ -226,6 +244,7 @@ struct RemoteBrowserView: View {
             }
             .disabled(downloadingEntryIDs.contains(entry.id))
             #if os(tvOS)
+            .focused($focusedEntryURL, equals: entry.url)
             .tvOSRowBackground()
             #endif
         }
@@ -246,11 +265,7 @@ struct RemoteBrowserView: View {
     #endif
 
     private func isDownloaded(_ entry: RemoteEntry) -> Bool {
-        #if os(tvOS)
-        downloadedEntryIDs.contains(entry.id)
-        #else
-        false
-        #endif
+        localSourcePaths.contains(entry.url.absoluteString)
     }
 
     /// Where a download failure goes: the shared library alert on iOS/macOS (unchanged), this
@@ -263,13 +278,11 @@ struct RemoteBrowserView: View {
         #endif
     }
 
-    /// tvOS: marks a finished download with a checkmark. "Finished" means the file arrived and
+    /// Marks a finished download with a checkmark. "Finished" means the file arrived and
     /// its import was queued — `importFiles` has no completion, so a later import failure still
     /// surfaces through the shared alert at the tab-bar root.
     private func markDownloaded(_ entry: RemoteEntry) {
-        #if os(tvOS)
-        downloadedEntryIDs.insert(entry.id)
-        #endif
+        localSourcePaths.insert(entry.url.absoluteString)
     }
 
     private func load() {
@@ -307,6 +320,7 @@ struct RemoteBrowserView: View {
             await MainActor.run {
                 entries = loaded
                 isLoading = false
+                refreshLocalSourcePaths()
             }
         } catch {
             let preflight = await MainActor.run { localNetwork.status }
@@ -330,22 +344,48 @@ struct RemoteBrowserView: View {
         }
     }
 
-    /// Se lo scan ha già registrato un placeholder per questo file, scarica in quello
-    /// invece di importare un secondo record (era il "Topolino 1"): tap sul browser e
-    /// pre-cache dello scan convergono sullo stesso record e non duplicano più.
-    private func downloadAndImport(_ entry: RemoteEntry) {
+    private func refreshLocalSourcePaths() {
+        let request = ComicEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "sourceAccountID == %@ AND isRemotePlaceholder == NO", account.stableID as CVarArg)
+        localSourcePaths = Set(((try? context.fetch(request)) ?? []).compactMap(\.sourceRelativePath))
+    }
+
+    /// Select on a file row: already downloaded -> open it; known placeholder -> download into it
+    /// (the scan's pre-cache and this tap converge on one record, no "X 1" duplicate). With no
+    /// record at all tvOS creates the placeholder like the scan does; iOS/macOS keep importing
+    /// into the regular library (unless a legacy import of the same file name already exists).
+    private func select(_ entry: RemoteEntry) {
         downloadingEntryIDs.insert(entry.id)
         // `@MainActor`: `account` è del view context e `browser.download` lo legge
         // in modo sincrono prima del primo await (stesso vincolo documentato in
         // `ComicDownloadService.downloadRemotePlaceholder`).
         Task { @MainActor in
-            let accountID = account.stableID
             let sourcePath = entry.url.absoluteString
             let request = ComicEntity.fetchRequest()
-            request.predicate = NSPredicate(format: "sourceAccountID == %@ AND sourceRelativePath == %@", accountID as CVarArg, sourcePath)
+            request.predicate = NSPredicate(format: "sourceAccountID == %@ AND sourceRelativePath == %@", account.stableID as CVarArg, sourcePath)
             request.fetchLimit = 1
-            if let placeholder = (try? context.fetch(request))?.first, placeholder.isRemotePlaceholder {
-                ComicDownloadService.downloadIfNeeded(comic: placeholder, completion: { error in
+            var comic = (try? context.fetch(request))?.first
+            #if os(tvOS)
+            if comic == nil {
+                comic = RemoteAccountScanner.findOrCreatePlaceholder(entry: entry, account: account, context: context)
+            }
+            #else
+            if comic == nil {
+                let legacy = ComicEntity.fetchRequest()
+                legacy.predicate = NSPredicate(format: "relativePath ==[c] %@ AND sourceAccountID == nil AND isRemotePlaceholder == NO", entry.title)
+                legacy.fetchLimit = 1
+                comic = (try? context.fetch(legacy))?.first
+            }
+            #endif
+
+            if let comic {
+                if !comic.isRemotePlaceholder {
+                    markDownloaded(entry)
+                    downloadingEntryIDs.remove(entry.id)
+                    open(comic, entry: entry)
+                    return
+                }
+                ComicDownloadService.downloadIfNeeded(comic: comic, completion: { error in
                     Task { @MainActor in
                         if let error {
                             reportDownloadFailure(error)
@@ -371,6 +411,18 @@ struct RemoteBrowserView: View {
                 downloadingEntryIDs.remove(entry.id)
             }
         }
+    }
+
+    private func open(_ comic: ComicEntity, entry: RemoteEntry) {
+        #if os(tvOS)
+        openedComicID = comic.objectID
+        lastOpenedURL = entry.url
+        openReader(comic, libraryComics: [])
+        #elseif os(macOS)
+        if let id = ComicID(comic) { openWindow(value: id) }
+        #else
+        readerComic = comic
+        #endif
     }
 }
 

@@ -43,6 +43,7 @@ extension EnvironmentValues {
 struct TVReaderOverlayModifier: ViewModifier {
     @State private var request: TVReaderRequest?
     @FocusState private var fallbackFocused: Bool
+    @ObservedObject private var lock = ParentalLock.shared
 
     func body(content: Content) -> some View {
         ZStack {
@@ -68,6 +69,12 @@ struct TVReaderOverlayModifier: ViewModifier {
                     .transition(.opacity)
                     .zIndex(1)
             }
+        }
+        // After the parental-lock screen goes away the reader underneath may have lost focus
+        // (Menu would then leave the app): hand it back to the fallback host.
+        .onChange(of: lock.isLocked) { _, locked in
+            guard !locked, request != nil else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { fallbackFocused = true }
         }
     }
 
