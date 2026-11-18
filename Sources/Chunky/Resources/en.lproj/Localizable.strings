@@ -84,7 +84,7 @@
 "Impossibile avviare il server locale: la porta è già in uso." = "Couldn't start the local server: the port is already in use.";
 "Operazione non riuscita. Riprova." = "Something went wrong. Please try again.";
 "Formato non supportato: .%@" = "Unsupported file format: .%@";
-"Avanza al tocco sui bordi" = "Tap to Pan";
+"Avanza al tocco sui bordi" = "Always Advance on Tap";
 "Con il precaricamento attivo, ogni nuovo fumetto trovato viene scaricato subito per intero invece di aspettare che tu lo apra: non è possibile leggerne titolo e copertina senza scaricare il file completo, quindi su librerie grandi può consumare parecchia banda." = "When pre-cache is on, each newly found comic is downloaded in full right away instead of waiting until you open it. Its title and cover can't be read without downloading the whole file, so large libraries may use a lot of bandwidth.";
 "Impossibile elencare le condivisioni: %@" = "Couldn't list shares: %@";
 "Inserisci l'indirizzo del NAS." = "Enter the NAS address.";
