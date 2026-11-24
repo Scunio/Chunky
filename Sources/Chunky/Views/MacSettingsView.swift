@@ -34,7 +34,7 @@ struct MacSettingsView: View {
         var systemImage: String {
             switch self {
             case .reading: "book"
-            case .navigation: "hand.tap"
+            case .navigation: "cursorarrow.click"
             case .appearance: "paintpalette"
             case .imageQuality: "wand.and.stars"
             case .parentalLock: "lock"
@@ -144,26 +144,23 @@ private struct NavigationSettingsTab: View {
     @AppStorage("tapPageTurnStyle") private var tapPageTurnStyle = TapPageTurnStyle.slide
     @AppStorage("swipePageTurnStyle") private var swipePageTurnStyle = TapPageTurnStyle.slide
     @AppStorage("tapToPanEnabled") private var isTapToPanEnabled = false
-    @AppStorage("oneHandedMode") private var isOneHandedModeEnabled = false
     @AppStorage("hotCornersEnabled") private var isHotCornersEnabled = false
     @AppStorage("readerIdleResetSeconds") private var readerIdleReset = ReaderIdleResetOption.never
 
     var body: some View {
         Form {
             Section(header: Text("Navigazione")) {
+                // Mac wording (click, not tap/thumb), and no "one-handed mode": a thumb
+                // affordance for phones that the Mac reader doesn't apply.
                 Toggle(isOn: $isTapToPanEnabled) {
-                    infoLabel("Avanza al tocco sui bordi", info: "Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati. Non si applica con la modalità una mano attiva, che già unifica le due zone a modo suo (vedi sotto).")
-                }
-                .disabled(isOneHandedModeEnabled)
-                Toggle(isOn: $isOneHandedModeEnabled) {
-                    infoLabel("Modalità una mano", info: "Unifica le due zone laterali: toccare il bordo destro o sinistro fa la stessa cosa (avanza di default), così puoi sfogliare con il pollice senza dover raggiungere il lato opposto. La fascia centrale resta per mostrare/nascondere i controlli.")
+                    infoLabel("Avanza sempre al clic", info: "Facendo clic su un bordo qualsiasi della pagina si va sempre avanti, invece che indietro o avanti a seconda del lato.")
                 }
                 .disabled(tapPageTurnStyle == .disabled)
                 Toggle(isOn: $isHotCornersEnabled) {
-                    infoLabel("Angoli attivi", info: "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina.")
+                    infoLabel("Angoli attivi", info: "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Fai clic nell'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina.")
                 }
                 .disabled(tapPageTurnStyle == .disabled)
-                Picker("Cambio pagina al tocco", selection: $tapPageTurnStyle) {
+                Picker("Cambio pagina al clic", selection: $tapPageTurnStyle) {
                     ForEach(TapPageTurnStyle.allCases) { style in
                         Text(style.label).tag(style)
                     }
@@ -214,7 +211,7 @@ private struct ImageQualitySettingsTab: View {
                     infoLabel("Upscaling pagine a bassa risoluzione", info: "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione.")
                 }
                 Toggle(isOn: $isMotionBlurEnabled) {
-                    infoLabel("Sfocatura del movimento", info: "Rende più fluido il movimento quando scorri con il dito una pagina ingrandita.")
+                    infoLabel("Sfocatura del movimento", info: "Rende più fluido il movimento quando trascini una pagina ingrandita.")
                 }
             }
         }
@@ -237,12 +234,13 @@ private struct ParentalLockSettingsTab: View {
 }
 
 private struct AdvancedSettingsTab: View {
-    @AppStorage("includeInBackup") private var isIncludedInBackup = false
+    // Default on, matching `ChunkyApp.init` on macOS (Time Machine included by default).
+    @AppStorage("includeInBackup") private var isIncludedInBackup = true
 
     var body: some View {
         Form {
             Section(
-                footer: Text("Se disattivato, la cartella dei fumetti non viene inclusa nei backup di iCloud/iTunes — utile per risparmiare spazio se hai già una copia altrove.")
+                footer: Text("Se disattivato, la cartella dei fumetti viene esclusa dai backup, Time Machine compreso — utile per risparmiare spazio se hai già una copia altrove.")
             ) {
                 Toggle("Includi fumetti nel backup", isOn: Binding(
                     get: { isIncludedInBackup },

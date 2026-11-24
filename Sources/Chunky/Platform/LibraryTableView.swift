@@ -12,31 +12,43 @@ struct LibraryTableView: View {
     let pendingRelativePaths: Set<String>
     let onSelect: (ComicEntity) -> Void
     let onDelete: (ComicEntity) -> Void
+    /// Delete key with more than one row selected: the library's bulk confirmation.
+    let onDeleteMany: ([ComicEntity]) -> Void
+    /// Mirrors the row selection up to `LibraryView`, so the toolbar's bulk actions (status,
+    /// group, trash) act on the list's selection exactly as they do on the grid's.
+    let onSelectionChange: ([ComicEntity]) -> Void
 
     init(
         comics: [ComicEntity],
         allowsDeletion: Bool,
         pendingRelativePaths: Set<String> = [],
         onSelect: @escaping (ComicEntity) -> Void,
-        onDelete: @escaping (ComicEntity) -> Void
+        onDelete: @escaping (ComicEntity) -> Void,
+        onDeleteMany: @escaping ([ComicEntity]) -> Void = { _ in },
+        onSelectionChange: @escaping ([ComicEntity]) -> Void = { _ in }
     ) {
         self.comics = comics
         self.allowsDeletion = allowsDeletion
         self.pendingRelativePaths = pendingRelativePaths
         self.onSelect = onSelect
         self.onDelete = onDelete
+        self.onDeleteMany = onDeleteMany
+        self.onSelectionChange = onSelectionChange
     }
 
     @State private var sortOrder: [KeyPathComparator<ComicEntity>] = [
         .init(\.wrappedTitle, order: .forward)
     ]
+    /// Without a selection binding the rows couldn't be selected at all, so there was nothing
+    /// for Return (open) or Delete (remove) to act on from the keyboard.
+    @State private var selection: Set<ComicEntity.ID> = []
 
     private var sortedComics: [ComicEntity] {
         comics.sorted(using: sortOrder)
     }
 
     var body: some View {
-        Table(sortedComics, sortOrder: $sortOrder) {
+        Table(sortedComics, selection: $selection, sortOrder: $sortOrder) {
             TableColumn("Titolo", value: \.wrappedTitle)
             TableColumn("Serie", value: \.wrappedSeriesName)
             TableColumn("Pagine", value: \.pageCount) { comic in
@@ -60,6 +72,26 @@ struct LibraryTableView: View {
         } primaryAction: { ids in
             guard let comic = comic(for: ids) else { return }
             onSelect(comic)
+        }
+        .onChange(of: selection) { _, ids in
+            onSelectionChange(sortedComics.filter { ids.contains($0.id) })
+        }
+        .onKeyPress(.return) {
+            let selected = sortedComics.filter { selection.contains($0.id) }
+            guard !selected.isEmpty else { return .ignored }
+            selected.prefix(5).forEach(onSelect)  // same cap as the grid: one window per comic
+            return .handled
+        }
+        // Delete key / Edit ▸ Delete: same confirmation as the context menu's "Rimuovi" for
+        // one row, the bulk one for several (before, only the first selected row went).
+        .onDeleteCommand {
+            guard allowsDeletion else { return }
+            let selected = sortedComics.filter { selection.contains($0.id) }
+            if selected.count == 1 {
+                onDelete(selected[0])
+            } else if selected.count > 1 {
+                onDeleteMany(selected)
+            }
         }
     }
 
@@ -126,8 +158,7 @@ struct LibraryTableView: View {
     }
 
     private func revealInFinder(_ comic: ComicEntity) {
-        let url = LibraryStorage.fileURL(forRelativePath: comic.relativePath ?? "")
-        RevealInFinder.reveal(url)
+        RevealInFinder.reveal(comic.fileURL)
     }
 
     /// Same logic as `LibraryView.status(for:)` (private to that file): it doesn't reimplement

@@ -21,6 +21,14 @@ struct ChunkyCommands: Commands {
             .keyboardShortcut(",", modifiers: .command)
         }
 
+        // On the Mac the Tools panel's wrench opens Settings directly (see `openTools`), so
+        // its one extra entry — feedback — lives in the Help menu, where Mac users look.
+        CommandGroup(after: .help) {
+            Button("Feedback / Segnala un problema") {
+                ToolsPanelView.sendFeedbackEmail()
+            }
+        }
+
         CommandMenu("Vai") {
             Button("Pagina precedente") {
                 readerActions?.previousPage()
@@ -34,19 +42,71 @@ struct ChunkyCommands: Commands {
             .keyboardShortcut(.rightArrow, modifiers: [])
             .disabled(readerActions == nil)
 
-            // Same effect as the right arrow: the space bar must advance a page
-            // just like the right arrow.
+            // Space advances in *reading* order (in manga that's the left page, not the right
+            // arrow's direction), like Page Down below.
             Button("Pagina successiva (Spazio)") {
-                readerActions?.nextPage()
+                readerActions?.forwardInReadingOrder()
             }
             .keyboardShortcut(.space, modifiers: [])
             .disabled(readerActions == nil)
             // Not needed in the menu, only as a shortcut: the right arrow above is enough
             // to make it discoverable.
             .accessibilityHidden(true)
+
+            Divider()
+
+            Button("Prima pagina") {
+                readerActions?.firstPage()
+            }
+            .keyboardShortcut(.home, modifiers: [])
+            .disabled(readerActions == nil)
+
+            Button("Ultima pagina") {
+                readerActions?.lastPage()
+            }
+            .keyboardShortcut(.end, modifiers: [])
+            .disabled(readerActions == nil)
+
+            Button("Vai a pagina...") {
+                readerActions?.goToPage()
+            }
+            .keyboardShortcut("g", modifiers: [.command, .option])
+            .disabled(readerActions == nil)
+
+            Divider()
+
+            Button("Cerca nel fumetto") {
+                readerActions?.find()
+            }
+            .keyboardShortcut("f", modifiers: .command)
+            .disabled(readerActions == nil)
         }
 
-        CommandGroup(after: .newItem) {
+        CommandGroup(after: .toolbar) {
+            Button("Ingrandisci") {
+                readerActions?.zoomIn()
+            }
+            .keyboardShortcut("+", modifiers: .command)
+            .disabled(readerActions == nil)
+
+            Button("Riduci") {
+                readerActions?.zoomOut()
+            }
+            .keyboardShortcut("-", modifiers: .command)
+            .disabled(readerActions == nil)
+
+            Button("Dimensioni reali") {
+                readerActions?.actualSize()
+            }
+            .keyboardShortcut("0", modifiers: .command)
+            .disabled(readerActions == nil)
+        }
+
+        // `replacing`, not `after`: this drops the system "New Window" (⌘N). Every extra
+        // library window ran its own ContentView — its own 3-minute rescan, remote-account
+        // scan and progress-sync loops — against the same store. Closing the library window
+        // and clicking the Dock icon still brings one back.
+        CommandGroup(replacing: .newItem) {
             Button("Importa fumetti…") {
                 libraryActions?.importFiles()
             }

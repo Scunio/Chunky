@@ -46,6 +46,17 @@ struct PageSpreadView: View {
         hotCorners: false, zonesEnabled: false, topInset: 0, bottomInset: 0
     )
     @Environment(\.layoutDirection) private var layoutDirection
+    #elseif os(macOS)
+    /// False for the neighbouring spreads `ReaderContentView.macPersistentPager` keeps mounted
+    /// off-screen: their pages drop any zoom when they leave the screen and ignore ⌘+/⌘−/⌘0.
+    var isActive: Bool = true
+    #endif
+    #if os(macOS) || os(iOS)
+    /// The upscaling target for each page, computed once by `ReaderContentView` and shared
+    /// with its prefetch, so the two always build the same `ProcessingOptions` (part of the
+    /// cache key) — previously the prefetch guessed half the viewport while a paired page
+    /// asked for `height * 2/3`, and every double-page request missed the cache.
+    var upscaleTargetSize: (Int) -> CGSize? = { _ in nil }
     #endif
 
     /// True only if this specific spread contains two pages: with `coverIsAlone`, the
@@ -76,35 +87,43 @@ struct PageSpreadView: View {
                     isZoomed: isZoomed,
                     imageCache: imageCache,
                     isActive: isActive,
-                    tapZoneOptions: tapZoneOptions
+                    tapZoneOptions: tapZoneOptions,
+                    upscaleTargetSize: upscaleTargetSize
                 )
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
             } else {
                 PageView(
                     provider: provider, index: leadingIndex, isDoublePage: pagination.pageStep > 1,
                     isZoomed: isZoomed, imageCache: imageCache, pairedHeight: nil, isActive: isActive,
-                    tapZoneOptions: tapZoneOptions
+                    tapZoneOptions: tapZoneOptions, upscaleTargetSizeOverride: upscaleTargetSize(leadingIndex)
                 )
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
             }
             #else
             HStack(spacing: 0) {
-                PageView(
-                    provider: provider, index: leadingIndex, isDoublePage: pagination.pageStep > 1,
-                    isZoomed: isZoomed, imageCache: imageCache,
-                    pairedHeight: showsSecondPage ? proxy.size.height : nil
-                )
+                pageView(index: leadingIndex, pairedHeight: showsSecondPage ? proxy.size.height : nil)
                 if showsSecondPage {
-                    PageView(
-                        provider: provider, index: leadingIndex + 1, isDoublePage: pagination.pageStep > 1,
-                        isZoomed: isZoomed, imageCache: imageCache, pairedHeight: proxy.size.height
-                    )
+                    pageView(index: leadingIndex + 1, pairedHeight: proxy.size.height)
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
             #endif
         }
     }
+
+    #if !os(iOS)
+    private func pageView(index: Int, pairedHeight: CGFloat?) -> PageView {
+        var view = PageView(
+            provider: provider, index: index, isDoublePage: pagination.pageStep > 1,
+            isZoomed: isZoomed, imageCache: imageCache, pairedHeight: pairedHeight
+        )
+        #if os(macOS)
+        view.upscaleTargetSizeOverride = upscaleTargetSize(index)
+        view.isActive = isActive
+        #endif
+        return view
+    }
+    #endif
 }
 
 #if os(iOS)
@@ -124,6 +143,8 @@ private struct SpreadPairView: View {
         oneHanded: false, oneHandedReversed: false, rightToLeft: false,
         hotCorners: false, zonesEnabled: false, topInset: 0, bottomInset: 0
     )
+    /// See `PageSpreadView.upscaleTargetSize`: the same per-page target the prefetch uses.
+    var upscaleTargetSize: (Int) -> CGSize? = { _ in nil }
 
     @ObservedObject private var theme = AppTheme.shared
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
@@ -215,7 +236,8 @@ private struct SpreadPairView: View {
         let autoTintContrast = isAutoTintContrastEnabled
         // Target width estimated 2:3, only for any upscaling — it doesn't affect the
         // layout, which derives from the real proportions anyway once the image is loaded.
-        let targetSize = CGSize(width: height * 2 / 3, height: height)
+        // The reader's shared function first, so the prefetch's cache key matches exactly.
+        let targetSize = upscaleTargetSize(index) ?? CGSize(width: height * 2 / 3, height: height)
 
         if let imageCache {
             let options = PageImageCache.ProcessingOptions(
@@ -307,6 +329,13 @@ private struct PageView: View {
         hotCorners: false, zonesEnabled: false, topInset: 0, bottomInset: 0
     )
     #endif
+    #if os(macOS) || os(iOS)
+    /// See `PageSpreadView.upscaleTargetSize`. `nil` falls back to the laid-out size.
+    var upscaleTargetSizeOverride: CGSize?
+    #endif
+    #if os(macOS)
+    @Environment(\.readerZoomCommand) private var zoomCommand
+    #endif
     @ObservedObject private var theme = AppTheme.shared
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
     @AppStorage("upscalingEnabled") private var isUpscalingEnabled = false
@@ -352,12 +381,36 @@ private struct PageView: View {
     }
 
     var body: some View {
+        #if os(macOS)
+        pageBody
+            .onChange(of: zoomCommand) { _, command in
+                // Neighbouring pages kept mounted off-screen see the same command (so becoming
+                // the visible page isn't a "change" that replays the last one) but ignore it.
+                if let command, isActive { applyZoomCommand(command.kind) }
+            }
+            // A page that leaves the screen comes back at fit size, as it did when every turn
+            // rebuilt it from scratch (see `macPersistentPager`).
+            .onChange(of: isActive) { _, active in
+                guard !active, scale != 1 || offset != .zero else { return }
+                scale = 1
+                lastScale = 1
+                offset = .zero
+                lastOffset = .zero
+                motionBlurRadius = 0
+            }
+        #else
+        pageBody
+        #endif
+    }
+
+    @ViewBuilder
+    private var pageBody: some View {
         if let pairedHeight, effectiveZoomMode != .fitWidth {
             pairedContent(height: pairedHeight)
         } else {
             GeometryReader { proxy in
                 Group {
-                    if let image = image {
+                    if let image = displayedImage(targetSize: proxy.size) {
                         if effectiveZoomMode == .fitWidth {
                             ScrollView(.vertical, showsIndicators: false) {
                                 image.asSwiftUIImage
@@ -403,6 +456,7 @@ private struct PageView: View {
                                 // even though it then does nothing (guard scale > 1).
                                 .gesture(dragGesture, including: scale > 1 ? .all : .subviews)
                                 .onTapGesture(count: 2) { toggleZoom() }
+                                .background(zoomedScrollPanMonitor(size: proxy.size))
                             #endif
                         }
                     } else {
@@ -428,7 +482,7 @@ private struct PageView: View {
         // in size when the image arrives.
         let estimatedWidth = height * 2 / 3
         Group {
-            if let image = image {
+            if let image = displayedImage(targetSize: CGSize(width: estimatedWidth, height: height)) {
                 #if os(iOS)
                 // `sizeThatFits` on ZoomableImageView computes the width from the proposed
                 // height, the way `Image().scaledToFit()` would — see the comment there.
@@ -460,6 +514,7 @@ private struct PageView: View {
                     .gesture(magnifyGesture)
                     .gesture(dragGesture, including: scale > 1 ? .all : .subviews)
                     .onTapGesture(count: 2) { toggleZoom() }
+                    .background(zoomedScrollPanMonitor(size: CGSize(width: height * image.size.width / max(image.size.height, 1), height: height)))
                 #endif
             } else {
                 pageSlot(targetSize: CGSize(width: estimatedWidth, height: height)) {
@@ -515,6 +570,31 @@ private struct PageView: View {
         }
     }
 
+    /// The image to draw: the loaded one or, on macOS, one the prefetch already finished,
+    /// read synchronously so a prefetched page appears on the view's very first frame
+    /// (before `onAppear`/`loadImage` even run) instead of flashing a spinner.
+    private func displayedImage(targetSize: CGSize) -> PlatformImage? {
+        if let image { return image }
+        #if os(macOS)
+        return imageCache?.readyImages.image(at: index, options: processingOptions(targetSize: targetSize))
+        #else
+        return nil
+        #endif
+    }
+
+    private func processingOptions(targetSize: CGSize) -> PageImageCache.ProcessingOptions {
+        #if os(macOS) || os(iOS)
+        let upscaleTarget = upscaleTargetSizeOverride ?? targetSize
+        #else
+        let upscaleTarget = targetSize
+        #endif
+        return PageImageCache.ProcessingOptions(
+            autoCrop: isAutoCropEnabled,
+            autoTintContrast: isAutoTintContrastEnabled,
+            upscaleTargetSize: isUpscalingEnabled ? upscaleTarget : nil
+        )
+    }
+
     private func loadImage(targetSize: CGSize) {
         guard image == nil else { return }
         let generation = imageLoadGeneration
@@ -526,11 +606,13 @@ private struct PageView: View {
             // macOS path: the cache is almost always already warm thanks to the prefetch
             // started by `ReaderContentView` when `currentPage` changes — this call returns
             // almost immediately instead of re-decoding from disk.
-            let options = PageImageCache.ProcessingOptions(
-                autoCrop: autoCrop,
-                autoTintContrast: autoTintContrast,
-                upscaleTargetSize: upscale ? targetSize : nil
-            )
+            let options = processingOptions(targetSize: targetSize)
+            #if os(macOS)
+            if let ready = imageCache.readyImages.image(at: index, options: options) {
+                image = ready
+                return
+            }
+            #endif
             Task {
                 let loaded = await imageCache.image(at: index, options: options)
                 await MainActor.run {
@@ -599,6 +681,29 @@ private struct PageView: View {
     }
 
     #if os(macOS)
+    /// Two-finger trackpad scrolling (or the mouse wheel) pans a zoomed page, the way it
+    /// scrolls any oversized content on the Mac — click-dragging alone was the only way
+    /// before. Mounted only while zoomed: at fit size the same scroll events turn the page
+    /// (`ScrollSwipeMonitor`, which ignores them while zoomed). The deltas are applied as-is
+    /// (they already follow the user's "natural scrolling" preference) and the offset is
+    /// clamped so the page edge never leaves the frame.
+    @ViewBuilder
+    private func zoomedScrollPanMonitor(size: CGSize) -> some View {
+        if scale > 1 {
+            ScrollPanMonitor { dx, dy in
+                let maxX = max(size.width * (scale - 1) / 2, 0)
+                let maxY = max(size.height * (scale - 1) / 2, 0)
+                offset = CGSize(
+                    width: min(max(offset.width + dx, -maxX), maxX),
+                    height: min(max(offset.height + dy, -maxY), maxY)
+                )
+                lastOffset = offset
+            }
+        }
+    }
+    #endif
+
+    #if os(macOS)
     private var dragGesture: some Gesture {
         DragGesture()
             .onChanged { value in
@@ -619,6 +724,35 @@ private struct PageView: View {
                 lastOffset = offset
                 withAnimation(.easeOut(duration: 0.15)) { motionBlurRadius = 0 }
             }
+    }
+    #endif
+
+    #if os(macOS)
+    /// ⌘+ / ⌘− / ⌘0 from the View menu: same 1…5 range as the pinch.
+    private func applyZoomCommand(_ kind: ReaderZoomCommand.Kind) {
+        // Only where the pinch zoom itself applies: not in "Fit width" (a plain scroll view,
+        // no `scaleEffect` — zooming there would flag `isZoomed` and suspend page turns with
+        // nothing visibly zoomed), not before the image exists, and not on the two halves of
+        // a spread (each would zoom around its own center and overlap the other).
+        guard image != nil, effectiveZoomMode != .fitWidth, pairedHeight == nil else { return }
+        withAnimation(.easeInOut(duration: 0.15)) {
+            switch kind {
+            case .zoomIn: scale = min(scale * 1.25, 5)
+            case .zoomOut: scale = max(scale / 1.25, 1)
+            case .reset: scale = 1
+            }
+            if scale <= 1.01 {
+                scale = 1
+                offset = .zero
+                lastOffset = .zero
+            } else {
+                // Keep the current pan inside the new, possibly smaller, overflow.
+                offset = CGSize(width: offset.width * scale / max(lastScale, 1), height: offset.height * scale / max(lastScale, 1))
+                lastOffset = offset
+            }
+            lastScale = scale
+        }
+        syncZoomedState()
     }
     #endif
 

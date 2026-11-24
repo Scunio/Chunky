@@ -120,6 +120,17 @@ struct RemoteBrowserView: View {
                 ReaderView(comic: comic)
             }
             #endif
+            // Same reason as `LibraryView`: presented above the root lock screen.
+            .onReceive(ParentalLock.shared.$isLocked.removeDuplicates().filter { $0 }) { _ in
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    #if os(iOS)
+                    readerComic = nil
+                    #endif
+                    isShowingEdit = false
+                }
+            }
             .onAppear { startPreflightIfNeeded(); load() }
             .onDisappear { localNetwork.stop() }
         #endif

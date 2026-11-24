@@ -476,3 +476,32 @@
 "Tinta pagina (lettore)" = "Seitentönung (Reader)";
 "Nessun download in corso" = "Keine laufenden Downloads";
 "I fumetti che scarichi da un account remoto compaiono qui." = "Comics, die du von einem entfernten Konto lädst, erscheinen hier.";
+"Prima pagina" = "Erste Seite";
+"Ultima pagina" = "Letzte Seite";
+"Ingrandisci" = "Vergrößern";
+"Riduci" = "Verkleinern";
+"Dimensioni reali" = "Originalgröße";
+"Avanza sempre al clic" = "Beim Klicken immer weiterblättern";
+"Facendo clic su un bordo qualsiasi della pagina si va sempre avanti, invece che indietro o avanti a seconda del lato." = "Ein Klick auf einen beliebigen Seitenrand blättert immer weiter, statt je nach Seite vor- oder zurückzublättern.";
+"Cambio pagina al clic" = "Umblättern durch Klicken";
+"Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Fai clic nell'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Nutze die Ecken, um häufig verwendete Steuerelemente zu erreichen, ohne die Symbolleiste einzublenden. Klicke auf die obere linke Ecke, um den Reader zu verlassen, auf die obere rechte für die Einstellungen oder auf die untere rechte, um den Doppelseitenmodus umzuschalten.";
+"Rende più fluido il movimento quando trascini una pagina ingrandita." = "Glättet die Bewegung, wenn du eine vergrößerte Seite ziehst.";
+"Se disattivato, la cartella dei fumetti viene esclusa dai backup, Time Machine compreso — utile per risparmiare spazio se hai già una copia altrove." = "Wenn deaktiviert, wird der Comic-Ordner von Backups ausgeschlossen, auch von Time Machine. Das spart Platz, wenn du bereits eine weitere Kopie hast.";
+"Usa Touch ID" = "Touch ID verwenden";
+"Sblocca con Touch ID" = "Mit Touch ID entsperren";
+
+/* Audit fixes */
+"Sblocca Chunky" = "Chunky entsperren";
+"Password richiesta su questo dispositivo: modifica l'account per inserirla." = "Auf diesem Gerät ist ein Passwort erforderlich: Bearbeite den Account, um es einzugeben.";
+"Sincronizzazione CloudKit" = "CloudKit-Synchronisierung";
+"Verifica in corso…" = "Wird geprüft …";
+"Disponibile" = "Verfügbar";
+"Nessun account iCloud" = "Kein iCloud-Account";
+"Con restrizioni" = "Eingeschränkt";
+"Temporaneamente non disponibile" = "Vorübergehend nicht verfügbar";
+"Non determinabile" = "Unbekannt";
+"File troppo grande per il caricamento." = "Datei zu groß für den Upload.";
+"Pagina" = "Seite";
+
+"Condividi vignetta" = "Panel teilen";
+"Griglia / Lista" = "Raster / Liste";

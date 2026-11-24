@@ -73,16 +73,90 @@ extension ReaderContentView {
             footer
                 .padding(.bottom, 40)
             #else
-            header
+            // Mac: no in-content header. The reader is its own window, so the title bar
+            // already names the comic and the header's actions live in the window toolbar
+            // (`macReaderToolbar`) — a second bar under the title bar was double chrome. What's
+            // left is the page counter/slider as a floating HUD over the bottom of the page,
+            // like QuickTime's controls: it never takes layout space, so showing or hiding it
+            // (click in the middle, or the pointer going idle) doesn't resize the page.
             Spacer()
             footer
+                .onHover { isPointerOverMacFooter = $0 }
+                // Removed from under the pointer (⌘F, panel selection): no hover-exit arrives,
+                // and a stuck flag would disable the auto-hide for this window.
+                .onDisappear { isPointerOverMacFooter = false }
             #endif
         }
     }
 
+    #if os(macOS)
+    /// The reader header's actions as native window-toolbar items (each a `Label`, so the
+    /// overflow menu of a narrow window and "Customize Toolbar" have text for them). The title
+    /// is the window's own (`navigationTitle`), so the old click-on-title for comic info
+    /// becomes the Info item (⌘I).
+    @ToolbarContentBuilder
+    var macReaderToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button(action: { isPanelSelectionPresented = true }) {
+                Label("Condividi vignetta", systemImage: "ellipsis.bubble")
+            }
+            .help("Condividi vignetta")
+            .disabled(provider == nil)
+            Button(action: presentFind) {
+                Label("Cerca nel testo", systemImage: "text.magnifyingglass")
+            }
+            .help("Cerca nel testo")
+            .disabled(provider == nil)
+            Button(action: { isInfoPresented = true }) {
+                Label("Info fumetto", systemImage: "info.circle")
+            }
+            .help("Info fumetto")
+            .keyboardShortcut("i", modifiers: .command)
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button(action: { isNewComicsPresented = true }) {
+                Label("Nuovi fumetti", systemImage: "envelope")
+            }
+            .help("Nuovi fumetti")
+            .popover(isPresented: $isNewComicsPresented, arrowEdge: .bottom) {
+                NewComicsView(comics: recentComics) {
+                    isNewComicsPresented = false
+                    if $0 != comic { onSwitchComic($0) }
+                } onClear: {
+                    newTrayClearedAtTimestamp = Date().timeIntervalSince1970
+                    isNewComicsPresented = false
+                }
+            }
+            if let lastRead = lastReadComic {
+                Button(action: { isNowReadingPresented = true }) {
+                    Label("Ora in lettura", systemImage: "book")
+                }
+                .help("Ora in lettura")
+                .popover(isPresented: $isNowReadingPresented, arrowEdge: .bottom) {
+                    NowReadingView(comic: lastRead) {
+                        isNowReadingPresented = false
+                        if lastRead != comic { onSwitchComic(lastRead) }
+                    }
+                }
+            }
+            Button(action: { isAccountsPresented = true }) {
+                Label("Account", systemImage: "cloud")
+            }
+            .help("Account")
+            Button(action: openTools) {
+                Label("Strumenti", systemImage: "wrench.and.screwdriver")
+            }
+            .help("Strumenti")
+        }
+    }
+    #endif
+
     /// Leading icon group, isolated so its width can be measured (see `header`).
     private var headerLeadingActions: some View {
         HStack(spacing: tvOSHeaderIconSpacing) {
+            // Not on the Mac: the reader is its own window, closed with ⌘W / the title bar's
+            // close button — a "‹ Libreria" back button there just duplicated the window chrome.
+            #if !os(macOS)
             Button(action: exitReader) {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
@@ -102,6 +176,7 @@ extension ReaderContentView {
             // guess, and this binding keeps `readerFocus` from going `nil` while it's focused.
             .focused($readerFocus, equals: .libreria)
             .onMoveCommand(perform: handleHeaderMoveCommand)
+            #endif
             #endif
             // Crop: opens the panel selection (an area is always selected, there's no
             // separate "share the whole page" button). Not on tvOS: the selection is
@@ -211,6 +286,15 @@ extension ReaderContentView {
                 .font(.subheadline.bold())
                 .lineLimit(1)
                 .onLongPressGesture { isInfoPresented = true }
+                // The long press is invisible to VoiceOver: expose it as the default action.
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(Text("Info fumetto"))
+                .accessibilityAction { isInfoPresented = true }
+                #if os(macOS)
+                // A long press is a touch gesture nobody tries with a mouse: a plain click
+                // opens the info too.
+                .onTapGesture { isInfoPresented = true }
+                #endif
             Spacer(minLength: 4)
             headerTrailingActions
                 .background(GeometryReader { proxy in
@@ -222,6 +306,12 @@ extension ReaderContentView {
         .onPreferenceChange(HeaderTrailingWidthKey.self) { headerTrailingWidth = $0 }
         .foregroundColor(chromeForeground)
         .padding(.horizontal, 10)
+        #if os(iOS)
+        // Landscape iPhone: clear of the notch / Dynamic Island and the rounded corners
+        // (the host reports no safe area — see `PlatformSafeArea.leftInset`).
+        .padding(.leading, PlatformSafeArea.leftInset)
+        .padding(.trailing, PlatformSafeArea.rightInset)
+        #endif
         .padding(.vertical, 4)
         // The host reports no safe area (see `StatusBarControllingHost`), so the inset that
         // keeps the buttons and title clear of the status bar has to be added here. Inside the
@@ -288,7 +378,7 @@ extension ReaderContentView {
             #endif
             // Tools opens Settings/Parental Lock/Colors, none of which exist on tvOS in v1.
             #if !os(tvOS)
-            Button(action: { isToolsPresented = true }) {
+            Button(action: openTools) {
                 Image(systemName: "wrench.and.screwdriver").frame(width: 44, height: 44)
             }
             #endif
@@ -329,7 +419,7 @@ extension ReaderContentView {
                 Button(action: { isAccountsPresented = true }) {
                     Label("Account", systemImage: "cloud")
                 }
-                Button(action: { isToolsPresented = true }) {
+                Button(action: openTools) {
                     Label("Strumenti", systemImage: "wrench.and.screwdriver")
                 }
             } label: {

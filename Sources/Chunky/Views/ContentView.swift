@@ -49,6 +49,8 @@ struct ContentView: View {
                 }
                 ICloudDownloadTracker.shared.start()
                 RemoteProgressSync.logAccountStatus()
+                // Once per process (guarded inside), however many library windows exist.
+                RemoteProgressSync.startObservingAccountChanges()
                 // Crea una volta la subscription ai cambi della zona progressi: da qui
                 // in poi gli update dell'altro dispositivo arrivano via silent push
                 // (fetch immediato) invece che solo al poll ogni ~3 minuti.
@@ -56,6 +58,15 @@ struct ContentView: View {
                 // Catches imports that landed while the app was closed (the remote-change
                 // notification above only fires while we're alive to observe it).
                 MirrorHistoryLogger.logNewImports(in: context)
+                #if os(macOS)
+                // One pass per launch, *before* the rebuild is queued (same serial worker):
+                // comics imported while iCloud Drive was off sit in the sandbox's local
+                // Documents, and once the root is the ubiquity container their records point
+                // at files the rebuild can't see. Moving them in first keeps those records
+                // valid. A no-op when there's nothing there; when iCloud is off, local
+                // Documents *is* the root and this only registers unknown files.
+                viewModel.adoptFilesDroppedInDocuments(context: context)
+                #endif
                 syncSyncFolderIfNeeded()
                 adoptFilesDroppedInDocuments()
                 viewModel.deduplicateLibrary(context: context)

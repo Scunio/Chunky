@@ -14,9 +14,20 @@ extension ComicEntity {
     /// may be backed by a missing external sidecar. An unreadable legacy value degrades to `nil`;
     /// the cover backfill can then regenerate it from the comic archive.
     var safeCoverImageData: Data? {
+        // A comic deleted from the library can still be rendered for a frame or two by a view
+        // that holds it. Writing to it below (the "clear the unreadable reference" step) made
+        // Core Data's fault handler find no row and re-register the deletion; that posted
+        // ObjectsDidChange again, which re-rendered the cover, which wrote again, in a loop of
+        // ~40k notifications/s. That loop starved the library's refetch, so the deleted comic
+        // stayed on screen as an untitled ghost (verified live, with a swizzled `delete(_:)`).
+        // A deleted or detached object has no cover to read and nothing to repair.
+        guard !isDeleted, managedObjectContext != nil else { return nil }
         if let data = ObjCExceptionCatcher.safeBinaryValue(for: self, key: "coverImageDataInline") {
             return data as Data
         }
+        // The read above may itself have found the row gone (a fault whose object was deleted
+        // and saved elsewhere): Core Data has then just marked it deleted. Same reasoning.
+        guard !isDeleted else { return nil }
         ObjCExceptionCatcher.clearBinaryValue(for: self, key: "coverImageDataInline")
 
         // Existing CloudKit records can still have the old synced field populated, especially

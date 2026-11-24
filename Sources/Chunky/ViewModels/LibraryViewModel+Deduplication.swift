@@ -38,7 +38,10 @@ extension LibraryViewModel {
             guard !paths.isEmpty else { return }
 
             let request = ComicEntity.fetchRequest()
-            request.predicate = NSPredicate(format: "relativePath IN %@", paths)
+            // Remote-account comics never take part: their `relativePath` is only unique on
+            // this device, so an iCloud comic synced from another device can share it — and
+            // merging the two would delete one of them (and its progress).
+            request.predicate = NSPredicate(format: "relativePath IN %@ AND sourceAccountID == nil", paths)
             // The scanning context lives as long as the app and may already have these objects in
             // memory from a previous pass: without forcing a refresh, the merge would read the
             // old values and throw away reading progress that arrived from CloudKit in the meantime.
@@ -127,6 +130,8 @@ extension LibraryViewModel {
         let request = NSFetchRequest<NSDictionary>(entityName: "ComicEntity")
         request.resultType = .dictionaryResultType
         request.propertiesToFetch = ["relativePath"]
+        // Same exclusion as `deduplicateComics`: remote-account records are never duplicates.
+        request.predicate = NSPredicate(format: "sourceAccountID == nil")
         guard let rows = try? context.fetch(request) else { return nil }
 
         var counts: [String: Int] = [:]

@@ -187,7 +187,13 @@ struct PersistenceController {
             }
             cloudDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
             cloudDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-            let localStoreURL = NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("ChunkyLocal.sqlite")
+            let storeDirectory = LibraryStorage.uiTestingSandboxURL?.appendingPathComponent("Stores", isDirectory: true)
+                ?? NSPersistentContainer.defaultDirectoryURL()
+            if uiTesting, LibraryStorage.uiTestingSandboxURL != nil {
+                try? FileManager.default.createDirectory(at: storeDirectory, withIntermediateDirectories: true)
+                cloudDescription.url = storeDirectory.appendingPathComponent("Chunky.sqlite")
+            }
+            let localStoreURL = storeDirectory.appendingPathComponent("ChunkyLocal.sqlite")
             localDescription.url = localStoreURL
             if !uiTesting {
                 localDescription.setOption(
@@ -225,6 +231,7 @@ struct PersistenceController {
         // Su main all'avvio: sincrono e una tantum (idempotente).
         if loadError == nil {
             RemoteAccountEntity.backfillMissingIDs(in: container.viewContext)
+            RemoteAccountEntity.markAccountsWithLocalComicsAsConfigured(in: container.viewContext)
         }
     }
 

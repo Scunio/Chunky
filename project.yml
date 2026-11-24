@@ -252,8 +252,10 @@ targets:
           - CloudDocuments
           - CloudKit
         com.apple.developer.ubiquity-kvstore-identifier: "$(TeamIdentifierPrefix)com.scunio.Chunky"
-        # Come su iOS: silent push di CloudKit per il sync progressi realtime.
-        aps-environment: development
+        # Silent push di CloudKit per il sync progressi realtime. Su macOS la chiave ha il
+        # prefisso "com.apple.developer.": la chiave nuda (spelling iOS/tvOS) non finisce
+        # nel binario firmato e la registrazione alle push fallisce.
+        com.apple.developer.aps-environment: development
     settings:
       base:
         # La 1.0.8 è già pubblicata su Mac App Store: la prossima versione macOS è la 1.0.9.

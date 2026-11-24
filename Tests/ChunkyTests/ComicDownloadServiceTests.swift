@@ -86,9 +86,12 @@ struct ComicDownloadServiceTests {
         let comic = try makeComic(in: context)
         let relativePath = comic.relativePath ?? ""
         let sourcePath = comic.sourceRelativePath ?? ""
-        // Il download scrive nella libreria reale (~/Documents su macOS): va ripulita, altrimenti
-        // altri test (es. LibraryRebuildSafetyTests) vedono file "sconosciuti" e li importano.
+        let accountID = try #require(comic.sourceAccountID)
+        // Il download scrive su disco (cache remota dell'account; nelle versioni precedenti la
+        // libreria reale, ~/Documents su macOS): va ripulito, altrimenti altri test (es.
+        // LibraryRebuildSafetyTests) vedono file "sconosciuti" e li importano.
         defer {
+            try? FileManager.default.removeItem(at: LibraryStorage.remoteCacheFolderURL(accountID: accountID))
             try? FileManager.default.removeItem(at: LibraryStorage.fileURL(forRelativePath: relativePath))
             withExtendedLifetime(context) {}
         }

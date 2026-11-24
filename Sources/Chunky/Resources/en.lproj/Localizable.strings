@@ -476,3 +476,32 @@
 "Tinta pagina (lettore)" = "Page Tint (Reader)";
 "Nessun download in corso" = "No Downloads in Progress";
 "I fumetti che scarichi da un account remoto compaiono qui." = "Comics you download from a remote account appear here.";
+"Prima pagina" = "First Page";
+"Ultima pagina" = "Last Page";
+"Ingrandisci" = "Zoom In";
+"Riduci" = "Zoom Out";
+"Dimensioni reali" = "Actual Size";
+"Avanza sempre al clic" = "Always Advance on Click";
+"Facendo clic su un bordo qualsiasi della pagina si va sempre avanti, invece che indietro o avanti a seconda del lato." = "Clicking either edge of the page always moves forward, instead of going back or forward depending on the side.";
+"Cambio pagina al clic" = "Click page-turn";
+"Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Fai clic nell'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Use the corners to reach common controls without showing the toolbar. Click the top-left corner to leave the reader, the top-right for settings, or the bottom-right to toggle two-page mode.";
+"Rende più fluido il movimento quando trascini una pagina ingrandita." = "Smooths movement when you drag a zoomed-in page.";
+"Se disattivato, la cartella dei fumetti viene esclusa dai backup, Time Machine compreso — utile per risparmiare spazio se hai già una copia altrove." = "When off, the comics folder is excluded from backups, including Time Machine. This can save space if you already have another copy.";
+"Usa Touch ID" = "Use Touch ID";
+"Sblocca con Touch ID" = "Unlock with Touch ID";
+
+/* Audit fixes */
+"Sblocca Chunky" = "Unlock Chunky";
+"Password richiesta su questo dispositivo: modifica l'account per inserirla." = "Password required on this device: edit the account to enter it.";
+"Sincronizzazione CloudKit" = "CloudKit Sync";
+"Verifica in corso…" = "Checking…";
+"Disponibile" = "Available";
+"Nessun account iCloud" = "No iCloud Account";
+"Con restrizioni" = "Restricted";
+"Temporaneamente non disponibile" = "Temporarily Unavailable";
+"Non determinabile" = "Unknown";
+"File troppo grande per il caricamento." = "File too large to upload.";
+"Pagina" = "Page";
+
+"Condividi vignetta" = "Share Panel";
+"Griglia / Lista" = "Grid / List";

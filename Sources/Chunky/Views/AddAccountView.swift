@@ -119,10 +119,12 @@ struct AddAccountView: View {
                         Button("Salva", action: save)
                     }
                     #else
-                    ToolbarItem {
+                    // Standard sheet placements: Cancel on the left with Esc, Save on the
+                    // right as the default button with Return.
+                    ToolbarItem(placement: .cancellationAction) {
                         Button("Annulla") { dismiss() }
                     }
-                    ToolbarItem {
+                    ToolbarItem(placement: .confirmationAction) {
                         Button("Salva", action: save)
                     }
                     #endif
@@ -702,6 +704,8 @@ struct AddAccountView: View {
             // la prossima scansione riprova da zero.
             existing.lastScanError = nil
             RemoteProgressSync.setSyncKeyOverride(syncKeyOverride, forAccountID: existing.stableID)
+            // Saved here: an empty password is now this device's deliberate choice.
+            RemoteAccountEntity.markConfiguredOnThisDevice(existing.stableID)
             try? context.save()
             if let onSaved { onSaved() } else { dismiss() }
             return
@@ -895,6 +899,8 @@ struct AddAccountView: View {
             existing.preCacheCoversEnabled = preCacheCoversEnabled
             existing.lastScanError = nil
             RemoteProgressSync.setSyncKeyOverride(syncKeyOverride, forAccountID: existing.stableID)
+            // Saved here: an empty password is now this device's deliberate choice.
+            RemoteAccountEntity.markConfiguredOnThisDevice(existing.stableID)
             do {
                 try context.save()
                 AppLog.log("Salva Modifica id=\(existing.stableID.uuidString): Core Data ok")

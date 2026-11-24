@@ -67,13 +67,19 @@ struct ToolsPanelView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Fatto") { dismiss() }
+                        #if !os(tvOS)
+                        .keyboardShortcut(.cancelAction)
+                        #endif
                 }
             }
         }
         .sheetSized()
     }
 
-    private func sendFeedbackEmail() {
+    private func sendFeedbackEmail() { Self.sendFeedbackEmail() }
+
+    /// Shared with the Mac Help menu (`ChunkyCommands`).
+    static func sendFeedbackEmail() {
         var components = URLComponents()
         components.scheme = "mailto"
         components.path = "support@scunio.com"

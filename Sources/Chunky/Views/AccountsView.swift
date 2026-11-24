@@ -91,6 +91,12 @@ struct AccountsView: View {
                 Button("Elimina", role: .destructive, action: confirmDeleteAccounts)
                 Button("Annulla", role: .cancel) { accountsToDelete = [] }
             }
+            // Presented above the root lock screen, like the library's own sheets.
+            .onReceive(ParentalLock.shared.$isLocked.removeDuplicates().filter { $0 }) { _ in
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { activeSheet = nil }
+            }
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
                 case .add(let kind):
@@ -376,6 +382,13 @@ struct AccountsView: View {
 
     /// Stato ultima scansione: errore (rosso) o data (grigia).
     private func accountStatus(for account: RemoteAccountEntity) -> (text: String, isError: Bool) {
+        // Before the scan status: that one may come from the device where the account works.
+        if account.needsPasswordOnThisDevice {
+            return (AppLocalization.localizedString(
+                "Password richiesta su questo dispositivo: modifica l'account per inserirla.",
+                comment: "Remote account synced from another device without its password"
+            ), true)
+        }
         if let error = account.lastScanError, !error.isEmpty {
             return (error, true)
         }

@@ -15,6 +15,9 @@ extension View {
         toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Chiudi", action: action)
+                    // Esc closes the sheet, as Mac users expect from any dismissable sheet
+                    // (and an iPad with a hardware keyboard, the same way).
+                    .keyboardShortcut(.cancelAction)
             }
         }
         #endif

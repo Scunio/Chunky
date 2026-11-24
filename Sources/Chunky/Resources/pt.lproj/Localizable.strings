@@ -476,3 +476,32 @@
 "Tinta pagina (lettore)" = "Tonalidade das páginas (leitor)";
 "Nessun download in corso" = "Nenhuma transferência em curso";
 "I fumetti che scarichi da un account remoto compaiono qui." = "As bandas desenhadas que transferir de uma conta remota aparecem aqui.";
+"Prima pagina" = "Primeira página";
+"Ultima pagina" = "Última página";
+"Ingrandisci" = "Ampliar";
+"Riduci" = "Reduzir";
+"Dimensioni reali" = "Tamanho real";
+"Avanza sempre al clic" = "Avançar sempre ao clicar";
+"Facendo clic su un bordo qualsiasi della pagina si va sempre avanti, invece che indietro o avanti a seconda del lato." = "Clicar em qualquer margem da página avança sempre, em vez de recuar ou avançar consoante o lado.";
+"Cambio pagina al clic" = "Virar página ao clicar";
+"Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Fai clic nell'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Use os cantos para aceder aos controlos mais usados sem mostrar a barra de ferramentas. Clique no canto superior esquerdo para sair do leitor, no superior direito para abrir as definições ou no inferior direito para alternar o modo de duas páginas.";
+"Rende più fluido il movimento quando trascini una pagina ingrandita." = "Suaviza o movimento ao arrastar uma página ampliada.";
+"Se disattivato, la cartella dei fumetti viene esclusa dai backup, Time Machine compreso — utile per risparmiare spazio se hai già una copia altrove." = "Quando está desativada, a pasta de bandas desenhadas é excluída das cópias de segurança, incluindo o Time Machine. Isto pode poupar espaço se já tiver outra cópia.";
+"Usa Touch ID" = "Usar Touch ID";
+"Sblocca con Touch ID" = "Desbloquear com Touch ID";
+
+/* Audit fixes */
+"Sblocca Chunky" = "Desbloquear o Chunky";
+"Password richiesta su questo dispositivo: modifica l'account per inserirla." = "Palavra-passe necessária neste dispositivo: edite a conta para a introduzir.";
+"Sincronizzazione CloudKit" = "Sincronização CloudKit";
+"Verifica in corso…" = "A verificar…";
+"Disponibile" = "Disponível";
+"Nessun account iCloud" = "Sem conta iCloud";
+"Con restrizioni" = "Restrito";
+"Temporaneamente non disponibile" = "Temporariamente indisponível";
+"Non determinabile" = "Desconhecido";
+"File troppo grande per il caricamento." = "Ficheiro demasiado grande para carregar.";
+"Pagina" = "Página";
+
+"Condividi vignetta" = "Partilhar vinheta";
+"Griglia / Lista" = "Grelha / Lista";

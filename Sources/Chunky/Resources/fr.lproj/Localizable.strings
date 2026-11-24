@@ -476,3 +476,32 @@
 "Tinta pagina (lettore)" = "Teinte de page (lecteur)";
 "Nessun download in corso" = "Aucun téléchargement en cours";
 "I fumetti che scarichi da un account remoto compaiono qui." = "Les BD téléchargées depuis un compte distant apparaissent ici.";
+"Prima pagina" = "Première page";
+"Ultima pagina" = "Dernière page";
+"Ingrandisci" = "Zoom avant";
+"Riduci" = "Zoom arrière";
+"Dimensioni reali" = "Taille réelle";
+"Avanza sempre al clic" = "Toujours avancer au clic";
+"Facendo clic su un bordo qualsiasi della pagina si va sempre avanti, invece che indietro o avanti a seconda del lato." = "Un clic sur l’un ou l’autre bord de la page avance toujours, au lieu de reculer ou d’avancer selon le côté.";
+"Cambio pagina al clic" = "Tourner la page au clic";
+"Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Fai clic nell'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Utilisez les coins pour accéder aux commandes courantes sans afficher la barre d’outils. Cliquez sur le coin supérieur gauche pour quitter le lecteur, le coin supérieur droit pour les réglages ou le coin inférieur droit pour activer ou désactiver le mode deux pages.";
+"Rende più fluido il movimento quando trascini una pagina ingrandita." = "Lisse le mouvement lorsque vous faites glisser une page agrandie.";
+"Se disattivato, la cartella dei fumetti viene esclusa dai backup, Time Machine compreso — utile per risparmiare spazio se hai già una copia altrove." = "Lorsque cette option est désactivée, le dossier des BD est exclu des sauvegardes, y compris Time Machine. Cela permet d’économiser de l’espace si vous avez déjà une autre copie.";
+"Usa Touch ID" = "Utiliser Touch ID";
+"Sblocca con Touch ID" = "Déverrouiller avec Touch ID";
+
+/* Audit fixes */
+"Sblocca Chunky" = "Déverrouiller Chunky";
+"Password richiesta su questo dispositivo: modifica l'account per inserirla." = "Mot de passe requis sur cet appareil : modifiez le compte pour le saisir.";
+"Sincronizzazione CloudKit" = "Synchronisation CloudKit";
+"Verifica in corso…" = "Vérification…";
+"Disponibile" = "Disponible";
+"Nessun account iCloud" = "Aucun compte iCloud";
+"Con restrizioni" = "Restreint";
+"Temporaneamente non disponibile" = "Temporairement indisponible";
+"Non determinabile" = "Inconnu";
+"File troppo grande per il caricamento." = "Fichier trop volumineux pour l’envoi.";
+"Pagina" = "Page";
+
+"Condividi vignetta" = "Partager la case";
+"Griglia / Lista" = "Grille / Liste";

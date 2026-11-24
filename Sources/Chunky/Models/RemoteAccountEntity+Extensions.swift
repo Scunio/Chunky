@@ -96,6 +96,51 @@ extension RemoteAccountEntity {
         }
     }
 
+    // MARK: - Password on this device
+
+    /// UserDefaults (per device, never synced) marker: this device created or saved this
+    /// account, so a missing Keychain password here is the user's choice, not a sync gap.
+    private static func configuredOnThisDeviceKey(_ id: UUID) -> String {
+        "remoteAccountConfiguredOnThisDevice_" + id.uuidString
+    }
+
+    static func markConfiguredOnThisDevice(_ id: UUID) {
+        UserDefaults.standard.set(true, forKey: configuredOnThisDeviceKey(id))
+    }
+
+    /// True for an account that arrived through the CloudKit mirror from another device: the
+    /// configuration syncs, the password (device-local Keychain) does not. Such an account has
+    /// a user name but no password here, and was never saved on this device. Scanning it would
+    /// only fail every few minutes — and write that failure into the mirrored `lastScanError`/
+    /// `lastScanDate`, overwriting the other device's status — so scans skip it and the
+    /// Accounts list asks for the password instead.
+    ///
+    /// Reads `id` directly, not `stableID`/`password`: those can save the context as a side
+    /// effect, which a status check must never do.
+    /// Accounts created before the marker existed: remote-account comics live in the
+    /// local-only store, so an account with at least one comic *on this device* was set up
+    /// here — including one with a user name and a deliberately empty password (SMB guest),
+    /// which must keep scanning instead of asking for a password.
+    static func markAccountsWithLocalComicsAsConfigured(in context: NSManagedObjectContext) {
+        let request = NSFetchRequest<NSDictionary>(entityName: "ComicEntity")
+        request.resultType = .dictionaryResultType
+        request.propertiesToFetch = ["sourceAccountID"]
+        request.returnsDistinctResults = true
+        request.predicate = NSPredicate(format: "sourceAccountID != nil")
+        guard let rows = try? context.fetch(request) else { return }
+        for row in rows {
+            if let id = row["sourceAccountID"] as? UUID { markConfiguredOnThisDevice(id) }
+        }
+    }
+
+    var needsPasswordOnThisDevice: Bool {
+        guard let id else { return false }
+        let user = (username ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !user.isEmpty else { return false }
+        guard !UserDefaults.standard.bool(forKey: Self.configuredOnThisDeviceKey(id)) else { return false }
+        return KeychainStore.password(forAccount: id) == nil
+    }
+
     var password: String? {
         get { KeychainStore.password(forAccount: stableID) }
         set {
@@ -146,6 +191,7 @@ extension RemoteAccountEntity {
         if let password = password, !password.isEmpty {
             KeychainStore.savePassword(password, forAccount: newID)
         }
+        markConfiguredOnThisDevice(newID)
         return account
     }
 }

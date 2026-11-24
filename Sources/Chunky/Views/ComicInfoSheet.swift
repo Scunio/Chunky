@@ -49,6 +49,9 @@ struct ComicInfoSheet: View {
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Chiudi") { close() }
+                            #if !os(tvOS)
+                            .keyboardShortcut(.cancelAction)
+                            #endif
                     }
                 }
         }

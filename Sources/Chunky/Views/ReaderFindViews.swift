@@ -86,6 +86,10 @@ struct ReaderFindView: View {
                 #else
                 .buttonStyle(PlainButtonStyle())
                 #endif
+                #if !os(tvOS)
+                // Esc closes the search, from the field too (iPad hardware keyboard included).
+                .keyboardShortcut(.cancelAction)
+                #endif
             }
         }
         .padding(12)

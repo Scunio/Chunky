@@ -31,6 +31,13 @@ enum ComicFormat: String {
 }
 
 extension ComicEntity {
+    /// The comic's file on disk: the library root for local/iCloud comics, the per-account
+    /// remote cache for remote-account ones (see `LibraryStorage.fileURL(forRelativePath:sourceAccountID:)`).
+    /// Read on the object's own context queue, like any other attribute.
+    var fileURL: URL {
+        LibraryStorage.fileURL(forRelativePath: relativePath ?? "", sourceAccountID: sourceAccountID)
+    }
+
     var format: ComicFormat {
         ComicFormat(rawValue: formatRawValue ?? "") ?? .cbz
     }

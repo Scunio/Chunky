@@ -28,6 +28,19 @@ struct LibraryRebuildSafetyTests {
         return try context.fetch(request).compactMap(\.title).sorted()
     }
 
+    #if os(macOS)
+    /// Il rebuild scansiona la cartella della libreria: nei test deve essere la sandbox
+    /// temporanea (`LibraryStorage.uiTestingSandboxURL`), mai `~/Documents` o iCloud Drive reali.
+    @Test("I test usano una cartella libreria temporanea")
+    func libraryRootIsTemporarySandbox() throws {
+        let root = LibraryStorage.rootFolderURL().standardizedFileURL.path
+        let temp = FileManager.default.temporaryDirectory.standardizedFileURL.path
+        #expect(root.hasPrefix(temp))
+        #expect(LibraryStorage.localDocumentsURL.standardizedFileURL.path.hasPrefix(temp))
+        #expect(LibraryStorage.remoteCacheFolderURL(accountID: UUID()).standardizedFileURL.path.hasPrefix(temp))
+    }
+    #endif
+
     @Test("Con stato iCloud sconosciuto non cancella, solo aggiunge")
     func unknownCloudStateNeverDeletes() throws {
         let context = try TestStore.makeContext()

@@ -35,6 +35,22 @@ enum PlatformSafeArea {
             .safeAreaInsets.bottom ?? 0
     }
 
+    /// Left/right insets (notch / Dynamic Island and rounded corners of an iPhone in
+    /// landscape), read the same way as `topInset`. The reader's host reports no safe area,
+    /// so the header and footer add these to their horizontal padding themselves — otherwise
+    /// their outermost buttons sit under the sensor housing.
+    static var leftInset: CGFloat {
+        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
+            .windows.first(where: \.isKeyWindow)?
+            .safeAreaInsets.left ?? 0
+    }
+
+    static var rightInset: CGFloat {
+        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
+            .windows.first(where: \.isKeyWindow)?
+            .safeAreaInsets.right ?? 0
+    }
+
     /// Last non-zero `topInset`, i.e. the height the status bar has when it's showing. The
     /// reader's host reports no safe area of its own (see `StatusBarControllingHost`), so its
     /// header has to pad by this to clear the status bar — and it can't read `topInset` live:

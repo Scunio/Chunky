@@ -82,8 +82,31 @@ struct ReaderContentView: View {
     @State private var turnStyle = TapPageTurnStyle.slide
     /// +1 = the page index increases, -1 = it decreases (already adjusted for reading direction).
     @State private var turnDirection = 1
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
+    #if os(macOS)
+    /// The pointer is over the floating page-counter HUD: it must not auto-hide from under it.
+    @State var isPointerOverMacFooter = false
+    /// Pending auto-hide and last pointer location — see `macPointerMoved`. A reference held in
+    /// `@State`, not two `@State` values: it changes on every mouse move, and mutating a
+    /// `@State` value there would re-evaluate the whole reader body at pointer rate.
+    @State private var macChromeIdle = MacChromeIdleState()
+    private static let macChromeIdleDelay: TimeInterval = 2.5
+    #endif
+    @ScaledMetric(relativeTo: .callout) private var pageCounterCharWidth: CGFloat = 7
+    @ScaledMetric(relativeTo: .callout) private var pageCounterMinWidth: CGFloat = 70
     #if os(iOS)
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    /// Keeps the pager in the focus chain so `.onKeyPress` sees an iPad hardware keyboard.
+    @FocusState private var isIOSPagerFocused: Bool
+    #endif
+    #if os(macOS)
+    /// Last ⌘+/⌘−/⌘0 request, handed to the visible `PageView`s via the environment.
+    @State private var macZoomCommand: ReaderZoomCommand?
+    /// Target of a page turn whose `currentPage` assignment is deferred by `macTurnPage`:
+    /// further turns requested meanwhile step from here, not from the stale `currentPage`.
+    @State private var macPendingTarget: Int?
     #endif
 
     /// Viewport dimensions, to figure out whether there's really horizontal space for
@@ -342,6 +365,20 @@ struct ReaderContentView: View {
         // insetting its SwiftUI content, this stops SwiftUI from handing the representable a
         // frame already reduced to the safe area. Either one alone leaves the reader short.
         .ignoresSafeArea()
+        #elseif os(macOS)
+        // Names the window (title bar, Window menu, Mission Control) after the comic instead
+        // of the generic scene title.
+        readerContent
+            .navigationTitle(comic.title ?? "")
+            .toolbar { macReaderToolbar }
+            // Mouse-idle auto-hide of the page-counter HUD (see `controlsChrome`): moving the
+            // pointer over the page shows it (`PageClickZones.onPointerMoved`), a few idle
+            // seconds hide it again.
+            .onAppear { scheduleMacChromeAutoHide() }
+            .onDisappear { macChromeIdle.hideWorkItem?.cancel() }
+            .onChange(of: isPointerOverMacFooter) { _, isOver in
+                if isOver { macChromeIdle.hideWorkItem?.cancel() } else { scheduleMacChromeAutoHide() }
+            }
         #else
         readerContent
         #endif
@@ -445,7 +482,8 @@ struct ReaderContentView: View {
                 // no tap/click surface for page-turning at all (it's `.onMoveCommand` on the
                 // remote — see `tvOSPager`), so this hint is meaningless there: confirmed via
                 // on-device review it renders as pure dead visual weight, never wired to input.
-                #if !os(tvOS)
+                // macOS shows the arrow only while the pointer hovers a zone (`PageClickZones`).
+                #if os(iOS)
                 if tapPageTurnStyle != .disabled {
                     if isOneHandedModeEnabled {
                         // In one-handed mode both sides do the same action, so the arrows
@@ -563,7 +601,7 @@ struct ReaderContentView: View {
             #if os(tvOS)
             resetTVZoom()
             #endif
-            guard let provider = provider else { return }
+            guard let provider = provider, provider.pageCount > 0 else { return }
             #if os(tvOS)
             // `currentPage` is the spread's *first* page: in double page the last spread
             // (n-2, n-1) never reached `pageCount - 1`, so `isFinished` stayed false and the
@@ -636,6 +674,32 @@ struct ReaderContentView: View {
                 .sheetSized()
             #endif
         }
+        // The reader's own sheets sit above the lock screen too: closed here as well, not
+        // just by dismissing the reader's cover from `LibraryView` — tearing down a cover
+        // while one of its children is still presented isn't reliable mid-backgrounding.
+        .onReceive(ParentalLock.shared.$isLocked.removeDuplicates().filter { $0 }) { _ in
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                #if os(iOS)
+                isSharePresented = false
+                #endif
+                isInfoPresented = false
+                isToolsPresented = false
+                isAccountsPresented = false
+            }
+        }
+    }
+
+    /// Wrench / settings hot corner. On the Mac, Settings is its own window (⌘,) with every
+    /// section the iOS Tools panel links to: opening the iOS-style sheet there meant a second,
+    /// differently laid-out copy of the same preferences.
+    func openTools() {
+        #if os(macOS)
+        openWindow(id: "settings")
+        #else
+        isToolsPresented = true
+        #endif
     }
 
     private func presentShareImage(_ image: PlatformImage) {
@@ -644,7 +708,13 @@ struct ReaderContentView: View {
         isSharePresented = true
         #elseif os(macOS)
         if let window = NSApp.keyWindow, let contentView = window.contentView {
-            NSSharingServicePicker(items: [image]).show(relativeTo: .zero, of: contentView, preferredEdge: .minY)
+            // Anchored at the top center, under the header, instead of a zero rect (which put
+            // the picker in the window's corner, far from anything the user clicked).
+            let bounds = contentView.bounds
+            let anchorY = contentView.isFlipped ? bounds.minY + 44 : bounds.maxY - 44
+            let anchor = NSRect(x: bounds.midX, y: anchorY, width: 1, height: 1)
+            // "Below the anchor" is the max-Y edge in a flipped view, the min-Y one otherwise.
+            NSSharingServicePicker(items: [image]).show(relativeTo: anchor, of: contentView, preferredEdge: contentView.isFlipped ? .maxY : .minY)
         }
         #endif
     }
@@ -740,6 +810,9 @@ struct ReaderContentView: View {
                 #if os(tvOS)
                 .focused($readerFocus, equals: .dialogCancel)
                 #endif
+                #if !os(tvOS)
+                .keyboardShortcut(.cancelAction)
+                #endif
                 Button(action: confirmPageJump) {
                     Text("Vai")
                         .frame(maxWidth: .infinity)
@@ -753,6 +826,9 @@ struct ReaderContentView: View {
                 #if os(tvOS)
                 .focused($readerFocus, equals: .dialogConfirm)
                 .tint(.accentColor)
+                #endif
+                #if !os(tvOS)
+                .keyboardShortcut(.defaultAction)
                 #endif
             }
             #if os(tvOS)
@@ -789,11 +865,15 @@ struct ReaderContentView: View {
     private func jumpToMatch(_ match: ComicTextMatch) {
         guard let provider = provider else { return }
         let target = pagination(pageCount: provider.pageCount).realigned(match.pageIndex)
+        #if os(macOS)
+        macTurnPage(to: target, style: tapPageTurnStyle)
+        #else
         turnStyle = tapPageTurnStyle
         turnDirection = target > currentPage ? 1 : -1
         withAnimation(.easeInOut(duration: 0.2)) {
             currentPage = target
         }
+        #endif
         isFindPresented = false
         #if os(tvOS)
         readerFocus = .pager
@@ -805,11 +885,15 @@ struct ReaderContentView: View {
     private func confirmPageJump() {
         guard let provider = provider else { return }
         let target = pagination(pageCount: provider.pageCount).realigned(jumpPageNumber - 1)
+        #if os(macOS)
+        macTurnPage(to: target, style: tapPageTurnStyle)
+        #else
         turnStyle = tapPageTurnStyle
         turnDirection = target > currentPage ? 1 : -1
         withAnimation(.easeInOut(duration: 0.2)) {
             currentPage = target
         }
+        #endif
         isPageJumpPresented = false
         #if os(tvOS)
         readerFocus = .pager
@@ -826,12 +910,25 @@ struct ReaderContentView: View {
     /// Prefetch around the current page, on both platforms.
     private func prefetchAroundCurrentPage(provider: ComicPageProvider) async {
         guard let pageCache else { return }
-        // Must match the `proxy.size` that `PageView.loadImage` will actually use: in
-        // double page each `PageView` takes up about half the viewport's width
-        // (HStack(spacing: 0) in `PageSpreadView`), not the whole viewport. Without this,
-        // `ProcessingOptions` never matches between prefetch and the real request, and the
-        // cache misses on every page — exactly in the mode (double page + upscaling) where
-        // it costs the most.
+        #if os(macOS) || os(iOS)
+        // Nearest pages first, forward-biased (the next spread is by far the most likely
+        // request), each with exactly the options its `PageView` will ask for.
+        let pageCount = provider.pageCount
+        let offsets = [0, 1, 2, 3, -1, 4, -2]
+        var seen = Set<Int>()
+        let requests: [(index: Int, options: PageImageCache.ProcessingOptions)] = offsets.compactMap { offset in
+            let index = currentPage + offset
+            guard index >= 0, index < pageCount, seen.insert(index).inserted else { return nil }
+            return (index, PageImageCache.ProcessingOptions(
+                autoCrop: isAutoCropEnabled,
+                autoTintContrast: isAutoTintContrastEnabled,
+                upscaleTargetSize: isUpscalingEnabled ? pageUpscaleTargetSize(for: index, pageCount: pageCount) : nil
+            ))
+        }
+        await pageCache.prefetch(requests)
+        return
+        #else
+        // tvOS: one target for every page (no per-page override in its `PageView`s yet).
         let pageTargetSize = effectiveDoublePage
             ? CGSize(width: viewportSize.width / 2, height: viewportSize.height)
             : viewportSize
@@ -841,7 +938,20 @@ struct ReaderContentView: View {
             upscaleTargetSize: isUpscalingEnabled ? pageTargetSize : nil
         )
         await pageCache.prefetch(around: currentPage, radius: 3, pageCount: provider.pageCount, options: options)
+        #endif
     }
+
+    #if os(macOS) || os(iOS)
+    /// The upscaling target for one page, as laid out by `PageSpreadView`: a page paired with
+    /// another gets the spread's height and a 2:3 width estimate (on iOS that's exactly what
+    /// `SpreadPairView` lays out), a lone page the whole viewport. Shared by the prefetch and
+    /// the page views so their cache keys match by construction.
+    private func pageUpscaleTargetSize(for index: Int, pageCount: Int) -> CGSize {
+        let pag = pagination(pageCount: pageCount)
+        guard pag.showsSecondPage(from: pag.realigned(index)) else { return viewportSize }
+        return CGSize(width: viewportSize.height * 2 / 3, height: viewportSize.height)
+    }
+    #endif
 
     #if os(macOS) || os(tvOS)
     /// The current page (or spread), with the last page change's transition.
@@ -850,7 +960,7 @@ struct ReaderContentView: View {
     /// the transition layer, so `.move(edge:)`'s edges always resolve in LTR and we decide
     /// the direction ourselves in `pageTurnTransition`; the inner one mirrors the spread for manga.
     private func pagerContent(provider: ComicPageProvider) -> some View {
-        PageSpreadView(provider: provider, leadingIndex: currentPage, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache)
+        spreadView(provider: provider)
             .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
             .id(currentPage)
             .transition(pageTurnTransition)
@@ -862,6 +972,62 @@ struct ReaderContentView: View {
                 await prefetchAroundCurrentPage(provider: provider)
             }
     }
+
+    private func spreadView(provider: ComicPageProvider, start: Int? = nil) -> PageSpreadView {
+        var view = PageSpreadView(provider: provider, leadingIndex: start ?? currentPage, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache)
+        #if os(macOS)
+        let pageCount = provider.pageCount
+        view.upscaleTargetSize = { pageUpscaleTargetSize(for: $0, pageCount: pageCount) }
+        view.isActive = (start ?? currentPage) == currentPage
+        #endif
+        return view
+    }
+
+    #if os(macOS)
+    /// Persistent pager: the current spread *and its two neighbours* stay mounted side by side
+    /// (each keyed by its start index, so a spread keeps its identity — and its already decoded
+    /// image — as it moves), and a page turn just animates their horizontal offsets. Before,
+    /// `.id(currentPage)` + `.transition` built the incoming spread from scratch on every turn,
+    /// mid-animation; now the page sliding in has been laid out and decoded while it waited
+    /// off-screen. Jumps further than one spread (Home/End, slider, Go to page) insert a spread
+    /// that wasn't mounted: it arrives with the same transition the old pager used.
+    ///
+    /// Only the visible spread takes hits (click zones, double-click zoom) and ⌘+/⌘−/⌘0, and a
+    /// neighbour drops its zoom when it leaves the screen (see `PageSpreadView.isActive`).
+    /// "Fade" stacks the spreads in place and cross-fades their opacity instead.
+    private func macPersistentPager(provider: ComicPageProvider) -> some View {
+        let starts = spreadStarts(pageCount: provider.pageCount)
+        let currentPosition = starts.firstIndex(of: currentPage) ?? starts.lastIndex(where: { $0 <= currentPage }) ?? 0
+        let window = starts.isEmpty ? [] : Array(starts[max(currentPosition - 1, 0)...min(currentPosition + 1, starts.count - 1)])
+        let rightToLeft = comic.readingDirection == .rightToLeft
+        let isFade = turnStyle == .fade
+        return GeometryReader { proxy in
+            ZStack {
+                ForEach(window, id: \.self) { start in
+                    let slot = (starts.firstIndex(of: start) ?? currentPosition) - currentPosition
+                    // The higher-index spread sits on the right in LTR, on the left in manga.
+                    let visualSlot = CGFloat(rightToLeft ? -slot : slot)
+                    spreadView(provider: provider, start: start)
+                        .environment(\.layoutDirection, rightToLeft ? .rightToLeft : .leftToRight)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .offset(x: isFade ? 0 : visualSlot * proxy.size.width)
+                        .opacity(slot == 0 || !isFade ? 1 : 0)
+                        .allowsHitTesting(slot == 0)
+                        .accessibilityHidden(slot != 0)
+                        .transition(pageTurnTransition)
+                        .zIndex(slot == 0 ? 1 : 0)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        // Outside the per-spread manga mirroring, so offsets and `.move(edge:)` resolve in LTR
+        // and the direction is decided above / in `pageTurnTransition`.
+        .environment(\.layoutDirection, .leftToRight)
+        .task(id: currentPage) {
+            await prefetchAroundCurrentPage(provider: provider)
+        }
+    }
+    #endif
 
     /// Translates the style of the gesture that triggered the change into the corresponding
     /// transition: side slide, fade or hard cut (for "Immediate" the animation is already
@@ -934,9 +1100,29 @@ struct ReaderContentView: View {
             return .handled
         }
         .onKeyPress(.space) {
-            advancePage(1, provider: provider, style: tapPageTurnStyle)
+            // Space always moves forward in *reading* order (like Page Down), not toward
+            // the right: in a manga that's the left neighbour — same as the Mac's
+            // `forwardInReadingOrder`. The arrows above stay spatial.
+            advancePage(comic.readingDirection == .rightToLeft ? -1 : 1, provider: provider, style: tapPageTurnStyle)
             return .handled
         }
+        // `onKeyPress` only fires on a view in the focus chain: without being focusable the
+        // pager never received hardware-keyboard events on iPad. No focus ring — it's the
+        // whole page. Re-focused whenever an overlay that takes the keyboard goes away.
+        .focusable()
+        .focusEffectDisabled()
+        .focused($isIOSPagerFocused)
+        .onAppear { isIOSPagerFocused = true }
+        .onChange(of: isIOSKeyboardOverlayPresented) { _, presented in
+            if !presented { isIOSPagerFocused = true }
+        }
+    }
+
+    /// Something on screen with its own keyboard handling (text fields, cards, sheets):
+    /// the pager gives focus up while it's there and takes it back afterwards.
+    private var isIOSKeyboardOverlayPresented: Bool {
+        isFindPresented || isPageJumpPresented || isPanelSelectionPresented || isInfoPresented
+            || isToolsPresented || isAccountsPresented || isSharePresented || pendingNextComic != nil
     }
 
     /// Same options `tapZonesOrControlsToggle` builds for `PageTapZones`, handed down to the
@@ -958,7 +1144,10 @@ struct ReaderContentView: View {
     }
 
     private func pageContent(provider: ComicPageProvider, start: Int) -> some View {
-        PageSpreadView(provider: provider, leadingIndex: start, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache, isActive: start == currentPage, tapZoneOptions: tapZoneOptions)
+        var view = PageSpreadView(provider: provider, leadingIndex: start, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache, isActive: start == currentPage, tapZoneOptions: tapZoneOptions)
+        let pageCount = provider.pageCount
+        view.upscaleTargetSize = { pageUpscaleTargetSize(for: $0, pageCount: pageCount) }
+        return view
             .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
     }
 
@@ -1055,7 +1244,7 @@ struct ReaderContentView: View {
         } onExit: {
             exitReader()
         } onOpenSettings: {
-            isToolsPresented = true
+            openTools()
         } onToggleDoublePage: {
             if isDoublePageAllowed { isDoublePageEnabled.toggle() }
         }
@@ -1068,40 +1257,101 @@ struct ReaderContentView: View {
     #elseif os(macOS)
     private func macOSPager(provider: ComicPageProvider) -> some View {
         ZStack {
-            pagerContent(provider: provider)
-
-            if tapPageTurnStyle != .disabled {
-                PageTapZones(oneHanded: isOneHandedModeEnabled, oneHandedReversed: isOneHandedZonesReversed, hotCorners: isHotCornersEnabled, rightToLeft: comic.readingDirection == .rightToLeft) {
-                    advancePage(-1, provider: provider, style: tapPageTurnStyle)
-                } onNext: {
-                    advancePage(1, provider: provider, style: tapPageTurnStyle)
-                } onToggleControls: {
-                    toggleControls()
-                } onExit: {
-                    exitReader()
-                } onOpenSettings: {
-                    isToolsPresented = true
-                } onToggleDoublePage: {
-                    if isDoublePageAllowed { isDoublePageEnabled.toggle() }
-                }
-            } else {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture { toggleControls() }
-            }
+            macPersistentPager(provider: provider)
         }
+        // No padding for the chrome any more: the actions are in the window toolbar and the
+        // page counter is a floating HUD, so the page keeps one size whether or not the HUD is
+        // showing (it used to shrink/grow by the bars' height on every toggle).
+        // Scoped to the pager: the page-turn animation used to be a global `withAnimation`,
+        // which also animated every other view depending on `currentPage` (page counter,
+        // slider, header) on each turn. `nil` for "Immediate".
+        .animation(macPageTurnAnimation, value: currentPage)
+        .clipped()
+        // A gesture on the pager, not views layered over it: see `PageClickZones`.
+        .modifier(PageClickZones(
+            zonesEnabled: tapPageTurnStyle != .disabled,
+            hotCorners: isHotCornersEnabled,
+            rightToLeft: comic.readingDirection == .rightToLeft,
+            isZoomed: isZoomed,
+            onPrevious: {
+                // "Always advance on tap": the back zone advances too (as on iOS).
+                advancePage(isTapToPanEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
+            },
+            onNext: { advancePage(1, provider: provider, style: tapPageTurnStyle) },
+            onToggleControls: { toggleControls() },
+            onExit: { exitReader() },
+            onOpenSettings: { openTools() },
+            onToggleDoublePage: { if isDoublePageAllowed { isDoublePageEnabled.toggle() } },
+            hintColor: chromeForeground,
+            onPointerMoved: { macPointerMoved(to: $0) }
+        ))
         .background(ScrollSwipeMonitor { direction in
             guard swipePageTurnStyle != .disabled, !isZoomed else { return }
             advancePage(direction, provider: provider, style: swipePageTurnStyle)
+        })
+        .background(ReaderKeyMonitor(isEnabled: isReaderKeyboardActive) { key in
+            let readingForward = comic.readingDirection == .rightToLeft ? -1 : 1
+            switch key {
+            case .left: advancePage(-1, provider: provider, style: tapPageTurnStyle)
+            case .right: advancePage(1, provider: provider, style: tapPageTurnStyle)
+            case .forward: advancePage(readingForward, provider: provider, style: tapPageTurnStyle)
+            case .backward: advancePage(-readingForward, provider: provider, style: tapPageTurnStyle)
+            case .first:
+                macTurnPage(to: spreadStarts(pageCount: provider.pageCount).first ?? 0, style: tapPageTurnStyle)
+            case .last:
+                macTurnPage(to: spreadStarts(pageCount: provider.pageCount).last ?? 0, style: tapPageTurnStyle)
+            case .escape:
+                // Esc dismisses the "page N on another device" banner; otherwise it's
+                // left to the system (e.g. leaving full screen).
+                guard pendingRemotePage != nil else { return false }
+                pendingRemotePage = nil
+            }
+            return true
         })
         // Published only while this view is alive, so only while a reader window is really
         // on stage — no parental-lock filter here, because with `lock.isLocked`
         // `ReaderWindowContainer` shows `ParentalLockGateView` instead of `ReaderView`, so
         // this code simply isn't mounted at all.
-        .focusedSceneValue(\.readerActions, ReaderCommandActions(
+        .focusedSceneValue(\.readerActions, isReaderKeyboardActive ? macReaderCommandActions(provider: provider) : nil)
+        .environment(\.readerZoomCommand, macZoomCommand)
+    }
+
+    /// False while something with its own keyboard handling is on screen (a text field, a
+    /// card, a sheet): the menu items go disabled, and a disabled item doesn't steal its bare
+    /// Left/Right/Space key equivalent from the search or page-jump fields.
+    private var isReaderKeyboardActive: Bool {
+        !(isFindPresented || isPageJumpPresented || isPanelSelectionPresented || isInfoPresented
+          || isToolsPresented || isAccountsPresented || isNewComicsPresented || isNowReadingPresented
+          || pendingNextComic != nil)
+    }
+
+    private func macReaderCommandActions(provider: ComicPageProvider) -> ReaderCommandActions {
+        let readingForward = comic.readingDirection == .rightToLeft ? -1 : 1
+        return ReaderCommandActions(
             previousPage: { advancePage(-1, provider: provider, style: tapPageTurnStyle) },
-            nextPage: { advancePage(1, provider: provider, style: tapPageTurnStyle) }
-        ))
+            nextPage: { advancePage(1, provider: provider, style: tapPageTurnStyle) },
+            forwardInReadingOrder: { advancePage(readingForward, provider: provider, style: tapPageTurnStyle) },
+            firstPage: {
+                let starts = spreadStarts(pageCount: provider.pageCount)
+                macTurnPage(to: starts.first ?? 0, style: tapPageTurnStyle)
+            },
+            lastPage: {
+                let starts = spreadStarts(pageCount: provider.pageCount)
+                macTurnPage(to: starts.last ?? 0, style: tapPageTurnStyle)
+            },
+            find: { presentFind() },
+            goToPage: {
+                jumpPageNumber = currentPage + 1
+                isPageJumpPresented = true
+            },
+            zoomIn: { sendZoomCommand(.zoomIn) },
+            zoomOut: { sendZoomCommand(.zoomOut) },
+            actualSize: { sendZoomCommand(.reset) }
+        )
+    }
+
+    private func sendZoomCommand(_ kind: ReaderZoomCommand.Kind) {
+        macZoomCommand = ReaderZoomCommand(id: (macZoomCommand?.id ?? 0) + 1, kind: kind)
     }
     #endif
 
@@ -1112,7 +1362,12 @@ struct ReaderContentView: View {
     /// "Scroll") the swipe's slide doesn't go through here: the TabView handles it by
     /// following the finger.
     private func advancePage(_ direction: Int, provider: ComicPageProvider, style: TapPageTurnStyle) {
-        switch pagination(pageCount: provider.pageCount).step(from: currentPage, direction: direction) {
+        #if os(macOS)
+        let origin = macPendingTarget ?? currentPage
+        #else
+        let origin = currentPage
+        #endif
+        switch pagination(pageCount: provider.pageCount).step(from: origin, direction: direction) {
         case .endReached(let triggersNextComic):
             #if os(tvOS)
             markFinishedIfNeeded(pageCount: provider.pageCount)
@@ -1132,6 +1387,9 @@ struct ReaderContentView: View {
             break
         case .page(let next):
             resetIdleTimerIfNeeded()
+            #if os(macOS)
+            macTurnPage(to: next, style: style)
+            #else
             turnStyle = style
             turnDirection = next > currentPage ? 1 : -1
             switch style {
@@ -1142,15 +1400,91 @@ struct ReaderContentView: View {
             default:
                 withAnimation(.easeInOut(duration: 0.2)) { currentPage = next }
             }
+            #endif
         }
     }
+
+    #if os(macOS)
+    /// The pager's own animation (see `.animation(_:value:)` on `macOSPager`): the "Fade" style
+    /// honors the user's duration setting, which before only the iOS pager read.
+    private var macPageTurnAnimation: Animation? {
+        switch turnStyle {
+        case .fade: return .easeInOut(duration: fadeTransitionDuration)
+        case .slide: return .easeInOut(duration: 0.2)
+        case .immediate, .disabled: return nil
+        }
+    }
+
+    /// Every macOS page turn goes through here. When the style or direction differs from the
+    /// previous turn, they are committed one runloop tick *before* the page changes: the
+    /// outgoing page keeps the removal transition from its last render, so updating both in the
+    /// same transaction made it leave toward the old direction (e.g. after going back, the next
+    /// "forward" turn slid the old page out the wrong side) or with the old style.
+    private func macTurnPage(to target: Int, style: TapPageTurnStyle) {
+        let origin = macPendingTarget ?? currentPage
+        guard target != origin else { return }
+        let direction = target > origin ? 1 : -1
+        guard style != turnStyle || direction != turnDirection else {
+            if macPendingTarget != nil {
+                // A deferred turn is still in flight: just retarget it.
+                macPendingTarget = target
+            } else {
+                currentPage = target
+            }
+            return
+        }
+        turnStyle = style
+        turnDirection = direction
+        macPendingTarget = target
+        // About one frame later, not a plain `async`: the main queue is drained before
+        // SwiftUI renders in the same run-loop pass, so both changes would land in a single
+        // update and the outgoing page would still leave with its stale transition.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 60) {
+            guard let pending = macPendingTarget else { return }
+            macPendingTarget = nil
+            currentPage = pending
+        }
+    }
+    #endif
 
     private func toggleControls() {
         resetIdleTimerIfNeeded()
         withAnimation(.easeInOut(duration: 0.22)) {
             isControlsVisible.toggle()
         }
+        #if os(macOS)
+        if isControlsVisible { scheduleMacChromeAutoHide() } else { macChromeIdle.hideWorkItem?.cancel() }
+        #endif
     }
+
+    #if os(macOS)
+    /// Pointer moved over the reader: reveal the HUD and restart the idle countdown.
+    private func macPointerMoved(to location: CGPoint) {
+        // Zero-distance hover updates (content changing under a still pointer) aren't the
+        // user moving the mouse.
+        if let last = macChromeIdle.lastPointerLocation, hypot(location.x - last.x, location.y - last.y) < 1 { return }
+        macChromeIdle.lastPointerLocation = location
+        if !isControlsVisible {
+            withAnimation(.easeInOut(duration: 0.22)) { isControlsVisible = true }
+        }
+        scheduleMacChromeAutoHide()
+    }
+
+    /// Hides the HUD after a few idle seconds, the way
+    /// QuickTime/Preview's slideshow do — never while the pointer is over the HUD itself.
+    private func scheduleMacChromeAutoHide() {
+        macChromeIdle.hideWorkItem?.cancel()
+        guard !isPointerOverMacFooter else { return }
+        let idle = macChromeIdle
+        let work = DispatchWorkItem {
+            idle.hideWorkItem = nil
+            guard isControlsVisible, !isPointerOverMacFooter, isReaderKeyboardActive else { return }
+            withAnimation(.easeInOut(duration: 0.3)) { isControlsVisible = false }
+        }
+        macChromeIdle.hideWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.macChromeIdleDelay, execute: work)
+    }
+    #endif
 
     /// "Showcase/kiosk" timer: if the reader stays inactive for the time chosen in
     /// Settings, it automatically returns to page 1. Every interaction (tap, page change)
@@ -1159,9 +1493,13 @@ struct ReaderContentView: View {
         idleResetWorkItem?.cancel()
         guard readerIdleReset.rawValue > 0 else { return }
         let workItem = DispatchWorkItem {
+            #if os(macOS)
+            macTurnPage(to: 0, style: tapPageTurnStyle)
+            #else
             turnStyle = tapPageTurnStyle
             turnDirection = -1
             withAnimation(.easeInOut(duration: 0.2)) { currentPage = 0 }
+            #endif
         }
         idleResetWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + Double(readerIdleReset.rawValue), execute: workItem)
@@ -1244,6 +1582,9 @@ struct ReaderContentView: View {
                 #if os(tvOS)
                 .focused($readerFocus, equals: .dialogCancel)
                 #endif
+                #if !os(tvOS)
+                .keyboardShortcut(.cancelAction)
+                #endif
                 Button(action: { switchToComic(next) }) {
                     Text("Apri")
                         .frame(maxWidth: .infinity)
@@ -1257,6 +1598,9 @@ struct ReaderContentView: View {
                 #if os(tvOS)
                 .focused($readerFocus, equals: .dialogConfirm)
                 .tint(.accentColor)
+                #endif
+                #if !os(tvOS)
+                .keyboardShortcut(.defaultAction)
                 #endif
             }
             #if os(tvOS)
@@ -1317,7 +1661,13 @@ struct ReaderContentView: View {
             try? context.save()
             DiagnosticLog.log("Progresso salvato all'uscita: pagina \(Int(comic.lastReadPage) + 1) (\(comic.title ?? "fumetto"))")
         }
+        #if os(iOS)
+        // Held open by a background task: called on backgrounding, where iOS would otherwise
+        // suspend the app before the CloudKit round-trip completes.
+        RemoteProgressSync.flushPushInBackgroundTask()
+        #else
         RemoteProgressSync.flushPush()
+        #endif
     }
 
     /// A change to `comic.lastReadPage` that didn't come from `currentPage` is a remote
@@ -1327,7 +1677,7 @@ struct ReaderContentView: View {
     /// exit/reopen. Local page turns already set both to the same value, so they fall
     /// into the `target == currentPage` early return and never raise the banner.
     private func handleRemotePageChange(_ newRemote: Int) {
-        guard let provider else { return }
+        guard let provider, provider.pageCount > 0 else { return }
         let clamped = min(max(newRemote, 0), provider.pageCount - 1)
         let target = pagination(pageCount: provider.pageCount).realigned(clamped)
         guard target != currentPage else {
@@ -1341,9 +1691,13 @@ struct ReaderContentView: View {
     private func jumpToRemotePage() {
         guard let target = pendingRemotePage, provider != nil else { return }
         pendingRemotePage = nil
+        #if os(macOS)
+        macTurnPage(to: target, style: tapPageTurnStyle)
+        #else
         turnStyle = tapPageTurnStyle
         turnDirection = target > currentPage ? 1 : -1
         withAnimation(.easeInOut(duration: 0.2)) { currentPage = target }
+        #endif
         #if os(tvOS)
         readerFocus = .pager
         isAwaitingPagerReturn = true
@@ -1476,7 +1830,9 @@ struct ReaderContentView: View {
                 // grow with the digit count and with double page, otherwise the label wraps.
                 let digits = String(provider.pageCount).count
                 let labelChars = effectiveDoublePage ? digits * 3 + 4 : digits * 2 + 3
-                let labelWidth = max(70, CGFloat(labelChars) * 7 + 8)
+                // Scaled with Dynamic Type: at accessibility sizes the fixed 7pt/char estimate
+                // clipped the label (it's `.fixedSize`, so it overflowed onto the slider).
+                let labelWidth = max(pageCounterMinWidth, CGFloat(labelChars) * pageCounterCharWidth + 8)
                 HStack(spacing: 4) {
                     // Fixed-width column: the page number's width varies (e.g. "1 / 20" vs
                     // "10–11 / 20") and without pre-allocating the space, the slider next to
@@ -1486,6 +1842,24 @@ struct ReaderContentView: View {
                     // half (top/bottom) advances/goes back in one-handed mode. A `Button`
                     // wrapping both, not a separate one on just the small icon — the label
                     // alone was an easy-to-miss target compared to the rest of the bar.
+                    #if os(macOS)
+                    // On the Mac the counter opens "Go to page" instead: one-handed mode
+                    // (whose side the chevron used to flip) is a thumb affordance with no
+                    // meaning for a pointer, and the reader ignores it here.
+                    Button(action: {
+                        jumpPageNumber = currentPage + 1
+                        isPageJumpPresented = true
+                    }) {
+                        Text(label)
+                            .font(.callout.monospacedDigit())
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .frame(maxHeight: .infinity)
+                            .contentShape(Rectangle())
+                    }
+                    .frame(width: labelWidth, height: 32)
+                    .accessibilityHint(Text("Vai a pagina"))
+                    #else
                     Button(action: { isOneHandedZonesReversed.toggle() }) {
                         VStack(spacing: 2) {
                             Text(label)
@@ -1500,6 +1874,8 @@ struct ReaderContentView: View {
                         .contentShape(Rectangle())
                     }
                     .frame(width: labelWidth, height: 44)
+                    .accessibilityLabel(Text("Pagina \(currentPage + 1) di \(provider.pageCount)"))
+                    #endif
                     pageSlider(provider: provider)
                     if isDoublePageAllowed {
                         // Cycles single → double → automatic page.
@@ -1513,22 +1889,45 @@ struct ReaderContentView: View {
                                         .frame(width: 26, height: 20)
                                 )
                         }
+                        .accessibilityLabel(Text("Layout pagine"))
+                        .accessibilityValue(Text(pageLayoutModeAccessibilityValue))
                     }
                 }
                 .foregroundColor(chromeForeground)
                 .padding(.horizontal, 10)
                 #if os(iOS)
+                // Same landscape insets as the header (see `PlatformSafeArea.leftInset`).
+                .padding(.leading, PlatformSafeArea.leftInset)
+                .padding(.trailing, PlatformSafeArea.rightInset)
                 // Extra padding, equal to the home indicator's height, keeps the content clear
                 // of it while the background reaches the true bottom edge; split top/bottom on iPad,
                 // where piling it all on the bottom left the content visibly off-center
                 // (iPhone's smaller inset didn't show that, so it keeps the old padding).
                 .padding(.top, 4 + (UIDevice.current.userInterfaceIdiom == .pad ? PlatformSafeArea.bottomInset / 2 : 0))
                 .padding(.bottom, 4 + (UIDevice.current.userInterfaceIdiom == .pad ? PlatformSafeArea.bottomInset / 2 : PlatformSafeArea.bottomInset))
-                #else
-                .padding(.vertical, 4)
-                #endif
                 .frame(maxWidth: .infinity)
                 .background(chromeBackground)
+                #elseif os(macOS)
+                // Floating HUD over the page (see `controlsChrome`), not an edge-to-edge bar.
+                .padding(.vertical, 4)
+                .padding(.horizontal, 4)
+                .frame(maxWidth: 620)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(chromeBackground.opacity(0.94))
+                        .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(chromeForeground.opacity(0.12), lineWidth: 1)
+                )
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
+                #else
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity)
+                .background(chromeBackground)
+                #endif
                 #if os(iOS)
                 .background(GeometryReader { proxy in
                     Color.clear.preference(key: ChromeFooterHeightKey.self, value: proxy.size.height)
@@ -1615,6 +2014,23 @@ struct ReaderContentView: View {
         }
         .frame(height: 24)
         .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
+        // A custom drawing, not a `Slider`: without this VoiceOver saw nothing to adjust.
+        // Swipe up/down moves one spread in reading order.
+        .accessibilityElement()
+        .accessibilityLabel(Text("Pagina"))
+        .accessibilityValue(Text("Pagina \(currentPage + 1) di \(provider.pageCount)"))
+        .accessibilityAdjustableAction { direction in
+            let starts = spreadStarts(pageCount: provider.pageCount)
+            let target: Int?
+            switch direction {
+            case .increment: target = starts.first(where: { $0 > currentPage })
+            case .decrement: target = starts.last(where: { $0 < currentPage })
+            @unknown default: target = nil
+            }
+            guard let target else { return }
+            turnStyle = .immediate
+            currentPage = target
+        }
     }
 
     /// Shown while the comic is being downloaded from iCloud: real percentage and the
@@ -1656,7 +2072,7 @@ struct ReaderContentView: View {
         // archive twice.
         guard provider == nil, !isLoadingComic else { return }
         isLoadingComic = true
-        let url = LibraryStorage.fileURL(forRelativePath: comic.relativePath ?? "")
+        let url = comic.fileURL
         let format = comic.format
         let startingPage = Int(comic.lastReadPage)
 
@@ -1702,6 +2118,9 @@ struct ReaderContentView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let loaded = try ComicPageProviderFactory.makeProvider(for: url, format: format)
+                // An archive with no readable image opens "successfully" with zero pages: the
+                // reader would then show an empty pager and clamp `lastReadPage` to -1.
+                guard loaded.pageCount > 0 else { throw ComicReadError.corruptArchive }
                 DispatchQueue.main.async {
                     isLoadingComic = false
                     provider = loaded
@@ -1995,3 +2414,12 @@ extension ReaderContentView {
     return ReaderView(comic: comic)
         .environment(\.managedObjectContext, context)
 }
+
+#if os(macOS)
+/// Mutable, non-observed state for the reader HUD's mouse-idle auto-hide (see
+/// `ReaderContentView.macPointerMoved`).
+final class MacChromeIdleState {
+    var hideWorkItem: DispatchWorkItem?
+    var lastPointerLocation: CGPoint?
+}
+#endif

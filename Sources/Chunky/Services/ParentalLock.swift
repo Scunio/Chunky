@@ -16,6 +16,8 @@ final class ParentalLock: ObservableObject {
     @Published private(set) var isLocked: Bool
 
     private let defaults = UserDefaults.standard
+    /// Main thread only (set before the evaluation, cleared in its main-queue callback).
+    private var isEvaluatingBiometrics = false
     private let enabledKey = "parentalLock.enabled"
     private let biometricsKey = "parentalLock.biometricsEnabled"
     private let hashKey = "parentalLock.passcodeHash"
@@ -88,14 +90,25 @@ final class ParentalLock: ObservableObject {
         #if os(tvOS)
         completion(false)
         #else
+        // One prompt at a time: on the Mac every window shows its own lock screen, and each
+        // used to start its own Touch ID evaluation, stacking several system prompts.
+        guard !isEvaluatingBiometrics else {
+            completion(false)
+            return
+        }
         let context = LAContext()
         var error: NSError?
         guard isBiometricsEnabled, context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
             completion(false)
             return
         }
-        context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "Sblocca Chunky") { [weak self] success, _ in
+        isEvaluatingBiometrics = true
+        context.evaluatePolicy(
+            .deviceOwnerAuthenticationWithBiometrics,
+            localizedReason: AppLocalization.localizedString("Sblocca Chunky", comment: "Face ID / Touch ID prompt reason")
+        ) { [weak self] success, _ in
             DispatchQueue.main.async {
+                self?.isEvaluatingBiometrics = false
                 if success { self?.isLocked = false }
                 completion(success)
             }

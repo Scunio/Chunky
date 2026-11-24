@@ -35,6 +35,10 @@ enum RemoteAccountScanner {
 
     static func scan(account: RemoteAccountEntity, context: NSManagedObjectContext) async {
         guard let rootURL = account.serverURL, let accountID = account.id else { return }
+        // Synced from another device without its password (see `needsPasswordOnThisDevice`):
+        // the scan could only fail, and recording that failure would overwrite the mirrored
+        // status of the device where the account does work. The Accounts list shows why.
+        guard !account.needsPasswordOnThisDevice else { return }
         let browser = RemoteBrowsingFactory.makeBrowser(for: account.kind)
 
         let request = ComicEntity.fetchRequest()

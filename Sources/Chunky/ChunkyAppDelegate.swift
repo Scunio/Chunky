@@ -42,6 +42,14 @@ final class ChunkyAppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.registerForRemoteNotifications()
     }
 
+    /// ⌘Q non garantisce onDisappear/scenePhase: si salva il contesto e si spingono i
+    /// progressi in sospeso prima di uscire, così le ultime pagine lette non si perdono.
+    func applicationWillTerminate(_ notification: Notification) {
+        let context = PersistenceController.shared.container.viewContext
+        if context.hasChanges { try? context.save() }
+        RemoteProgressSync.flushPush()
+    }
+
     func application(_ application: NSApplication, didReceiveRemoteNotification userInfo: [String: Any]) {
         RemoteProgressSync.handlePushNotification(userInfo) { _ in }
     }

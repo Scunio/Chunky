@@ -1,5 +1,6 @@
-import SwiftUI
+import CloudKit
 import CoreData
+import SwiftUI
 
 /// iCloud sync status, reachable from Settings > Advanced.
 struct ICloudStatusView: View {
@@ -21,8 +22,25 @@ struct ICloudStatusSections: View {
     /// Count only: materializing every `ComicEntity` via `@FetchRequest` just to show
     /// the total stalled opening this panel on large libraries.
     @State private var comicsCount = 0
+    /// `nil` while loading or when the build can't query CloudKit (no entitlement).
+    @State private var cloudKitStatus: CKAccountStatus?
+    @State private var hasLoadedCloudKitStatus = false
 
     private var isActive: Bool { LibraryStorage.isICloudAvailable }
+
+    /// iCloud Drive (files) and CloudKit (library records, progress) are separate switches:
+    /// Drive can be on while the CloudKit account is restricted or signed out, which is
+    /// exactly the "files arrive but progress never does" case worth showing here.
+    private var cloudKitStatusText: LocalizedStringKey {
+        guard hasLoadedCloudKitStatus else { return "Verifica in corso…" }
+        switch cloudKitStatus {
+        case .available: return "Disponibile"
+        case .noAccount: return "Nessun account iCloud"
+        case .restricted: return "Con restrizioni"
+        case .temporarilyUnavailable: return "Temporaneamente non disponibile"
+        default: return "Non determinabile"
+        }
+    }
 
     var body: some View {
         Group {
@@ -32,6 +50,12 @@ struct ICloudStatusSections: View {
                     systemImage: isActive ? "checkmark.icloud" : "xmark.icloud"
                 )
                 .foregroundColor(isActive ? .primary : .secondary)
+                HStack {
+                    Text("Sincronizzazione CloudKit")
+                    Spacer()
+                    Text(cloudKitStatusText)
+                        .foregroundColor(cloudKitStatus == .available || !hasLoadedCloudKitStatus ? .secondary : .orange)
+                }
                 HStack {
                     Text("Fumetti nella libreria")
                     Spacer()
@@ -56,7 +80,13 @@ struct ICloudStatusSections: View {
                 }
             }
         }
-        .onAppear(perform: refreshCount)
+        .onAppear {
+            refreshCount()
+            RemoteProgressSync.fetchAccountStatus { status in
+                cloudKitStatus = status
+                hasLoadedCloudKitStatus = true
+            }
+        }
     }
 
     private func refreshCount() {

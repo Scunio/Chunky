@@ -67,7 +67,7 @@ enum ComicDownloadService {
         if comic.isRemotePlaceholder {
             return downloadRemotePlaceholder(comic: comic, onProgress: onProgress, completion: completion)
         }
-        let url = LibraryStorage.fileURL(forRelativePath: comic.relativePath ?? "")
+        let url = comic.fileURL
         return downloadIfNeeded(
             title: comic.title ?? "Fumetto",
             at: url,
@@ -133,21 +133,24 @@ enum ComicDownloadService {
                 } else {
                     tempURL = try await browser.download(entry, account: account)
                 }
-                defer {
-                    let temporaryDirectory = tempURL.deletingLastPathComponent()
-                    if temporaryDirectory.deletingLastPathComponent().standardizedFileURL
-                        == FileManager.default.temporaryDirectory.standardizedFileURL,
-                       temporaryDirectory.lastPathComponent.hasPrefix("Chunky-Remote-") {
-                        try? FileManager.default.removeItem(at: temporaryDirectory)
-                    } else {
-                        try? FileManager.default.removeItem(at: tempURL)
-                    }
-                }
-                let destinationURL = LibraryStorage.fileURL(forRelativePath: relativePath)
-                try? FileManager.default.removeItem(at: destinationURL)
-                try FileManager.default.copyItem(at: tempURL, to: destinationURL)
+                // Copy + archive analysis (cover thumbnail, page count, ComicInfo.xml) off the
+                // main actor: on a large CBR this is seconds of I/O and decoding, and running it
+                // in this `@MainActor` task froze the UI for the whole time. Only plain values
+                // (URLs, format) cross over; the managed object is touched again below, on main.
+                let destinationURL = LibraryStorage.remoteCacheFileURL(relativePath: relativePath, accountID: sourceAccountID)
+                let analysis = try await Task.detached(priority: .userInitiated) { () throws -> LibraryViewModel.ComicAnalysis? in
+                    defer { Self.removeDownloadTemporaryFile(tempURL) }
+                    try? FileManager.default.removeItem(at: destinationURL)
+                    try FileManager.default.copyItem(at: tempURL, to: destinationURL)
+                    return LibraryViewModel.analyzeComic(at: destinationURL, format: format)
+                }.value
 
-                let analysis = LibraryViewModel.analyzeComic(at: destinationURL, format: format)
+                // The comic may have been deleted (or its context torn down) during the download.
+                guard !comic.isDeleted, comic.managedObjectContext != nil else {
+                    try? FileManager.default.removeItem(at: destinationURL)
+                    finish(item, key: sourcePath, error: nil, completion: completion)
+                    return
+                }
                 let fallbackTitle = (relativePath as NSString).deletingPathExtension
                 comic.title = LibraryViewModel.displayTitle(from: analysis?.metadata, fallbackTitle: fallbackTitle)
                 comic.seriesName = analysis?.metadata?.series ?? comic.seriesName
@@ -162,6 +165,19 @@ enum ComicDownloadService {
             }
         }
         return item
+    }
+
+    /// Removes the browser's temporary download: its whole `Chunky-Remote-*` folder when it
+    /// made one in the temporary directory, otherwise just the file.
+    private static func removeDownloadTemporaryFile(_ tempURL: URL) {
+        let temporaryDirectory = tempURL.deletingLastPathComponent()
+        if temporaryDirectory.deletingLastPathComponent().standardizedFileURL
+            == FileManager.default.temporaryDirectory.standardizedFileURL,
+           temporaryDirectory.lastPathComponent.hasPrefix("Chunky-Remote-") {
+            try? FileManager.default.removeItem(at: temporaryDirectory)
+        } else {
+            try? FileManager.default.removeItem(at: tempURL)
+        }
     }
 
     /// The row must be removed from `DownloadManager` on every outcome, success or failure:

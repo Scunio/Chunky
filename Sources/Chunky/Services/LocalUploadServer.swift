@@ -103,6 +103,20 @@ final class LocalUploadServer: ObservableObject {
 
     // MARK: - Connection handling
 
+    /// Largest upload accepted (headers excluded). The whole request body is held in memory
+    /// until it's complete, so without a cap a single huge (or malicious) POST from anyone on
+    /// the Wi-Fi could exhaust the device's memory. 1.5 GB is well above any real CBZ/CBR.
+    static let maximumBodyLength = 1_536 * 1_024 * 1_024
+
+    /// Per-connection receive state. A reference type on purpose: with a `Data` value passed
+    /// from one `receive` callback to the next, every `append` copied the entire buffer
+    /// (the previous callback still held a reference), and re-parsing the request on every
+    /// 1 MB chunk copied the body again — quadratic in the upload size.
+    private final class ReceiveState {
+        var buffer = Data()
+        var header: HTTPRequestParser.Header?
+    }
+
     private func accept(_ connection: NWConnection) {
         let key = ObjectIdentifier(connection)
         connections[key] = connection
@@ -111,26 +125,66 @@ final class LocalUploadServer: ObservableObject {
             if case .failed = state { self?.connections.removeValue(forKey: key) }
         }
         connection.start(queue: queue)
-        receiveRequest(on: connection, buffer: Data())
+        receiveRequest(on: connection, state: ReceiveState())
     }
 
-    private func receiveRequest(on connection: NWConnection, buffer: Data) {
+    private func receiveRequest(on connection: NWConnection, state: ReceiveState) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 1 << 20) { [weak self] data, _, isComplete, error in
             guard let self = self else { return }
-            var buffer = buffer
-            if let data = data { buffer.append(data) }
+            if let data = data { state.buffer.append(data) }
 
-            if let request = HTTPRequestParser.parse(buffer), request.isComplete {
-                self.handle(request, on: connection)
-                return
+            // Headers are parsed once, as soon as they're all in; after that only the byte
+            // count is compared against Content-Length.
+            if state.header == nil {
+                state.header = HTTPRequestParser.parseHeader(state.buffer)
+                if let header = state.header, header.contentLength > Self.maximumBodyLength {
+                    DiagnosticLog.log("Upload rifiutato: \(header.contentLength) byte oltre il limite")
+                    self.respondTooLarge(on: connection)
+                    return
+                }
+                // No header terminator after a generous amount of data: not a request we serve.
+                if state.header == nil, state.buffer.count > 64 * 1_024 {
+                    connection.cancel()
+                    return
+                }
+            }
+
+            if let header = state.header {
+                let bodyLength = state.buffer.count - header.bodyOffset
+                if bodyLength >= header.contentLength {
+                    let request = HTTPRequestParser.ParsedRequest(
+                        method: header.method,
+                        headers: header.headers,
+                        // A slice: shares the buffer's storage instead of copying the body.
+                        body: state.buffer[(state.buffer.startIndex + header.bodyOffset)...],
+                        isComplete: true
+                    )
+                    self.handle(request, on: connection)
+                    return
+                }
+                // Content-Length missing/lower than what keeps arriving is caught above
+                // (complete as soon as the declared length is reached); this guards a body
+                // that keeps growing past the cap anyway.
+                if bodyLength > Self.maximumBodyLength {
+                    self.respondTooLarge(on: connection)
+                    return
+                }
             }
 
             if isComplete || error != nil {
                 connection.cancel()
                 return
             }
-            self.receiveRequest(on: connection, buffer: buffer)
+            self.receiveRequest(on: connection, state: state)
         }
+    }
+
+    private func respondTooLarge(on connection: NWConnection) {
+        let body = AppLocalization.localizedString(
+            "File troppo grande per il caricamento.",
+            comment: "Local upload server: request body over the size limit"
+        )
+        respond(on: connection, status: "413 Payload Too Large", contentType: "text/plain; charset=utf-8", body: Data(body.utf8))
     }
 
     private func handle(_ request: HTTPRequestParser.ParsedRequest, on connection: NWConnection) {
@@ -157,14 +211,28 @@ final class LocalUploadServer: ObservableObject {
         var savedCount = 0
         for part in parts {
             guard let filename = part.filename, !filename.isEmpty else { continue }
-            let destination = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+            // Il nome arriva dalla rete: solo l'ultimo componente, mai percorsi relativi,
+            // e in una cartella dedicata per upload così nomi uguali non si sovrascrivono.
+            let safeName = URL(fileURLWithPath: filename).lastPathComponent
+            guard !safeName.isEmpty, safeName != ".", safeName != ".." else { continue }
+            let uploadDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ChunkyUpload-\(UUID().uuidString)", isDirectory: true)
+            let destination = uploadDirectory.appendingPathComponent(safeName)
             do {
+                try FileManager.default.createDirectory(at: uploadDirectory, withIntermediateDirectories: true)
                 try part.data.write(to: destination)
                 savedCount += 1
                 DispatchQueue.main.async { [weak self] in
-                    self?.onFileReceived?(destination)
+                    // The importer deletes the folder once the file is in the library; with
+                    // nobody to hand it to (screen closed meanwhile) it would stay in tmp.
+                    guard let onFileReceived = self?.onFileReceived else {
+                        try? FileManager.default.removeItem(at: uploadDirectory)
+                        return
+                    }
+                    onFileReceived(destination)
                 }
             } catch {
+                try? FileManager.default.removeItem(at: uploadDirectory)
                 continue
             }
         }
@@ -247,6 +315,42 @@ enum HTTPRequestParser {
         let isComplete: Bool
     }
 
+    /// Request line + headers, parsed once per connection (see `LocalUploadServer.ReceiveState`).
+    struct Header {
+        let method: String
+        let headers: [String: String]
+        /// Offset of the first body byte from the buffer's start.
+        let bodyOffset: Int
+        let contentLength: Int
+    }
+
+    static func parseHeader(_ data: Data) -> Header? {
+        guard let headerEndRange = data.range(of: Data("\r\n\r\n".utf8)) else { return nil }
+        guard let (method, headers) = parseHeaderFields(data[data.startIndex..<headerEndRange.lowerBound]) else { return nil }
+        return Header(
+            method: method,
+            headers: headers,
+            bodyOffset: headerEndRange.upperBound - data.startIndex,
+            contentLength: headers["content-length"].flatMap(Int.init) ?? 0
+        )
+    }
+
+    private static func parseHeaderFields(_ headerData: Data) -> (String, [String: String])? {
+        guard let headerString = String(data: headerData, encoding: .utf8) else { return nil }
+        let lines = headerString.components(separatedBy: "\r\n")
+        guard let requestLine = lines.first else { return nil }
+        let method = requestLine.components(separatedBy: " ").first ?? "GET"
+
+        var headers: [String: String] = [:]
+        for line in lines.dropFirst() {
+            guard let colonIndex = line.firstIndex(of: ":") else { continue }
+            let key = line[line.startIndex..<colonIndex].trimmingCharacters(in: .whitespaces).lowercased()
+            let value = line[line.index(after: colonIndex)...].trimmingCharacters(in: .whitespaces)
+            headers[key] = value
+        }
+        return (method, headers)
+    }
+
     static func parse(_ data: Data) -> ParsedRequest? {
         guard let headerEndRange = data.range(of: Data("\r\n\r\n".utf8)) else { return nil }
         let headerData = data.subdata(in: data.startIndex..<headerEndRange.lowerBound)
@@ -293,7 +397,7 @@ enum MultipartParser {
 
         for segment in segments {
             guard let headerEndRange = segment.range(of: Data("\r\n\r\n".utf8)) else { continue }
-            let headerData = segment.subdata(in: segment.startIndex..<headerEndRange.lowerBound)
+            let headerData = segment[segment.startIndex..<headerEndRange.lowerBound]
             guard let headerString = String(data: headerData, encoding: .utf8),
                   headerString.contains("Content-Disposition") else { continue }
 
@@ -311,7 +415,9 @@ enum MultipartParser {
                 contentEnd = segment.index(segment.endIndex, offsetBy: -trailing.count)
             }
             guard headerEndRange.upperBound <= contentEnd else { continue }
-            let content = segment.subdata(in: headerEndRange.upperBound..<contentEnd)
+            // Slices (here and in `split`) share the request buffer's storage: a 1 GB upload
+            // used to be copied twice more on its way to disk.
+            let content = segment[headerEndRange.upperBound..<contentEnd]
             parts.append(Part(filename: filename, data: content))
         }
         return parts
@@ -325,12 +431,12 @@ private extension Data {
         var searchStart = startIndex
         while let range = self.range(of: separator, in: searchStart..<endIndex) {
             if range.lowerBound > searchStart {
-                result.append(subdata(in: searchStart..<range.lowerBound))
+                result.append(self[searchStart..<range.lowerBound])
             }
             searchStart = range.upperBound
         }
         if searchStart < endIndex {
-            result.append(subdata(in: searchStart..<endIndex))
+            result.append(self[searchStart..<endIndex])
         }
         return result
     }

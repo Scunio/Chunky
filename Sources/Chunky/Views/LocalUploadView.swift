@@ -31,7 +31,7 @@ struct LocalUploadView: View {
         .onExitCommand { dismiss() }
         .onAppear {
             server.onFileReceived = { url in
-                viewModel.importFiles([url], into: context)
+                viewModel.importFiles([url], into: context, cleaningTemporaryDirectories: [url.deletingLastPathComponent()])
             }
         }
         #else
@@ -40,7 +40,7 @@ struct LocalUploadView: View {
             .navigationTitle("Upload dalla rete")
             .onAppear {
                 server.onFileReceived = { url in
-                    viewModel.importFiles([url], into: context)
+                    viewModel.importFiles([url], into: context, cleaningTemporaryDirectories: [url.deletingLastPathComponent()])
                 }
             }
             .onDisappear {

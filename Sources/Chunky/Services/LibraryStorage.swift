@@ -7,11 +7,49 @@ import Foundation
 enum LibraryStorage {
     private static let ubiquityContainerID = "iCloud.com.scunio.Chunky"
     private static let comicsFolderName = "Comics"
+    /// True for `--uitesting` app runs *and* (macOS only) for the unit-test bundle: both get
+    /// the temporary sandbox below instead of the real library folders. The unit tests compile
+    /// the app sources straight into an unsandboxed test bundle, so without this
+    /// `LibraryRebuildSafetyTests` scanned — and could import/move/delete files in — the
+    /// user's real `~/Documents` (or iCloud Drive container), and the download tests wrote
+    /// into the real Application Support.
     private static var isRunningUITests: Bool {
-        CommandLine.arguments.contains("--uitesting")
+        CommandLine.arguments.contains("--uitesting") || isRunningUnitTests
+    }
+
+    /// macOS unit-test process (xctest host). Not on iOS/tvOS: the simulator's app container
+    /// is already isolated there.
+    private static var isRunningUnitTests: Bool {
+        #if os(macOS)
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || NSClassFromString("XCTestCase") != nil
+        #else
+        false
+        #endif
+    }
+
+    /// Dedicated sandbox for `--uitesting` runs on macOS: library files, fixtures and Core Data
+    /// stores all live here, never in the user's real `~/Documents` or Application Support
+    /// (an unsigned Debug build is not sandboxed, so those would be the real folders and
+    /// `--uitesting-reset` would wipe them). On iOS the simulator's app container is already
+    /// isolated, so nothing changes there. nil = no redirection.
+    static var uiTestingSandboxURL: URL? {
+        #if os(macOS)
+        guard isRunningUITests else { return nil }
+        let folder = isRunningUnitTests ? "ChunkyUnitTests" : "ChunkyUITests"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(folder, isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+        #else
+        return nil
+        #endif
     }
 
     nonisolated(unsafe) private static var cachedRootURL: URL?
+    /// Whether `cachedRootURL` is the ubiquity container (decided when it was cached).
+    /// Compared against `isICloudAvailable` by `isRootConsistentWithICloudAvailability`.
+    nonisolated(unsafe) private static var cachedRootIsUbiquitous = false
+    nonisolated(unsafe) private static var ubiquityIdentityObserver: (any NSObjectProtocol)?
     /// Guards `cachedRootURL`'s check-and-set below: without it, two callers racing on the
     /// first-ever call (e.g. a batch import overlapping the periodic rescan right after launch)
     /// could both run `migrateLegacyComicsSubfolderIfNeeded` concurrently — one thread moving a
@@ -66,22 +104,72 @@ enum LibraryStorage {
         #endif
     }
 
+    /// Forgets the cached root and the cached availability when the iCloud account changes
+    /// (sign-in, sign-out, iCloud Drive toggled for the app): without this the root picked at
+    /// launch stayed in use for the whole process, pointing at a container that may no longer
+    /// be reachable — or at local Documents while iCloud had become available. Installed once,
+    /// at the first `rootFolderURL()` call.
+    private static func observeUbiquityIdentityChangesIfNeeded() {
+        #if !os(tvOS)
+        guard ubiquityIdentityObserver == nil else { return }
+        ubiquityIdentityObserver = NotificationCenter.default.addObserver(
+            forName: .NSUbiquityIdentityDidChange, object: nil, queue: nil
+        ) { _ in
+            rootFolderLock.lock()
+            cachedRootURL = nil
+            cachedRootIsUbiquitous = false
+            rootFolderLock.unlock()
+            availabilityLock.lock()
+            cachedAvailability = nil
+            availabilityLock.unlock()
+            DiagnosticLog.log("Identità iCloud cambiata: cartella libreria e disponibilità ricalcolate al prossimo accesso")
+        }
+        #endif
+    }
+
+    /// False when the cached library root and the current iCloud availability disagree —
+    /// e.g. the root was resolved to the ubiquity container but iCloud is now unavailable,
+    /// or the reverse, until the root is recomputed. In that window the files a rebuild sees
+    /// are those of the wrong folder, so `performRebuildLibrary` must not delete records
+    /// based on them. Always true on tvOS and under UI tests (fixed local roots).
+    static var isRootConsistentWithICloudAvailability: Bool {
+        if isRunningUITests { return true }
+        #if os(tvOS)
+        return true
+        #else
+        _ = rootFolderURL()
+        rootFolderLock.lock()
+        let rootIsUbiquitous = cachedRootIsUbiquitous
+        rootFolderLock.unlock()
+        return rootIsUbiquitous == isICloudAvailable
+        #endif
+    }
+
     static func rootFolderURL() -> URL {
         if isRunningUITests {
             #if os(tvOS)
             return FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("ComicsLibrary")
             #else
+            if let sandbox = uiTestingSandboxURL {
+                // Created here too: a UI-test run gets it from `UITestReset`, a unit-test run
+                // (where nothing else creates it) would otherwise fail every move into it.
+                let library = sandbox.appendingPathComponent("Library", isDirectory: true)
+                try? FileManager.default.createDirectory(at: library, withIntermediateDirectories: true)
+                return library
+            }
             return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             #endif
         }
         rootFolderLock.lock()
         defer { rootFolderLock.unlock() }
 
+        observeUbiquityIdentityChangesIfNeeded()
         if let cached = cachedRootURL {
             return cached
         }
         let root: URL
+        var isUbiquitous = false
         #if os(tvOS)
         // Not `.documentDirectory`: tvOS gives apps no persistent Documents storage at all —
         // confirmed on a physical Apple TV, every write API (Cocoa and raw POSIX) fails with
@@ -97,6 +185,7 @@ enum LibraryStorage {
             // to put comics directly "inside Chunky", so the actual behavior
             // must match that message.
             root = ubiquityURL.appendingPathComponent("Documents")
+            isUbiquitous = true
         } else {
             root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         }
@@ -104,6 +193,7 @@ enum LibraryStorage {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         migrateLegacyComicsSubfolderIfNeeded(newRoot: root)
         cachedRootURL = root
+        cachedRootIsUbiquitous = isUbiquitous
         return root
     }
 
@@ -168,7 +258,8 @@ enum LibraryStorage {
         #if os(tvOS)
         rootFolderURL()
         #else
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        uiTestingSandboxURL?.appendingPathComponent("Library", isDirectory: true)
+            ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         #endif
     }
 
@@ -177,11 +268,15 @@ enum LibraryStorage {
     /// already that folder (no iCloud) it moves nothing and lists them where they were.
     /// It doesn't delete or register anything: deduplication against the existing library is
     /// up to the caller, which knows what's already in Core Data.
-    static func adoptFilesDroppedInLocalDocuments() -> [String] {
+    /// `excluding`: file names (relative paths) left untouched — remote-account downloads.
+    static func adoptFilesDroppedInLocalDocuments(excluding excluded: Set<String> = []) -> [String] {
         let inbox = localDocumentsURL
         let root = rootFolderURL()
         let files = (try? FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
-        let comicFiles = files.filter { ComicFormat(fileExtension: $0.pathExtension) != nil && !isBeingWritten($0) }
+        let comicFiles = files.filter {
+            ComicFormat(fileExtension: $0.pathExtension) != nil && !isBeingWritten($0)
+                && !excluded.contains($0.lastPathComponent)
+        }
 
         guard inbox.standardizedFileURL != root.standardizedFileURL else {
             return comicFiles.map { $0.lastPathComponent }
@@ -202,6 +297,66 @@ enum LibraryStorage {
 
     static func fileURL(forRelativePath relativePath: String) -> URL {
         rootFolderURL().appendingPathComponent(relativePath)
+    }
+
+    // MARK: - Remote-account downloads
+
+    /// Where files downloaded from a remote account (SMB/WebDAV/OPDS) live: a per-account
+    /// folder in Application Support, *not* the library root. The root is usually the iCloud
+    /// Drive container, and remote downloads written there were uploaded to iCloud and then
+    /// "discovered" by every other device's rebuild as brand-new local comics — while their
+    /// records (local-only store) never travel. Excluded from backup: it's a re-downloadable
+    /// copy of what's on the NAS.
+    ///
+    /// tvOS keeps the root (Caches, never synced): nothing to fix there, and moving files
+    /// would only orphan existing downloads.
+    static func remoteCacheFolderURL(accountID: UUID) -> URL {
+        #if os(tvOS)
+        return rootFolderURL()
+        #else
+        if isRunningUITests { return rootFolderURL() }
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("RemoteCache", isDirectory: true)
+        let folder = base.appendingPathComponent(accountID.uuidString, isDirectory: true)
+        if !FileManager.default.fileExists(atPath: folder.path) {
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            var excluded = base
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try? excluded.setResourceValues(values)
+        }
+        return folder
+        #endif
+    }
+
+    /// Destination for a *new* download of a remote-account comic (always the remote cache).
+    static func remoteCacheFileURL(relativePath: String, accountID: UUID) -> URL {
+        remoteCacheFolderURL(accountID: accountID).appendingPathComponent(relativePath)
+    }
+
+    /// The file of a library record. Local/iCloud comics (`sourceAccountID == nil`) live in
+    /// the root; remote-account comics in the remote cache — except those downloaded by
+    /// earlier versions, which still sit in the root under the same `relativePath`. Those are
+    /// used where they are, never moved: they are in the iCloud container, and moving them
+    /// out would delete them on every other device too (where a rebuild may already have
+    /// registered them as local comics).
+    static func fileURL(forRelativePath relativePath: String, sourceAccountID: UUID?) -> URL {
+        guard let sourceAccountID, !relativePath.isEmpty else {
+            return fileURL(forRelativePath: relativePath)
+        }
+        let cached = remoteCacheFileURL(relativePath: relativePath, accountID: sourceAccountID)
+        if FileManager.default.fileExists(atPath: cached.path) { return cached }
+        let legacy = fileURL(forRelativePath: relativePath)
+        if isPresent(legacy) { return legacy }
+        return cached
+    }
+
+    /// True if the file exists locally *or* is an iCloud item whose bytes were evicted:
+    /// `fileExists` is false for an offloaded file at its logical path, which would make an
+    /// older remote download in the iCloud root look gone (see `isPendingDownload` for the
+    /// same logical-URL check).
+    static func isPresent(_ url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.path) || FileManager.default.isUbiquitousItem(at: url)
     }
 
     /// Copies a file chosen by the user (via file importer / document picker) into the library,

@@ -83,6 +83,9 @@ struct PanelSelectionView: View {
                             .padding(10)
                             .background(Circle().fill(Color.red))
                     }
+                    #if !os(tvOS)
+                    .keyboardShortcut(.cancelAction)
+                    #endif
                 }
                 // This overlay fills the reader's edge-to-edge hosting view, so it must
                 // account for the status bar/notch itself instead of relying on safe areas.

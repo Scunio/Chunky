@@ -47,10 +47,14 @@ final class LibraryViewModel: ObservableObject {
 
     // MARK: - Explicit import
 
+    /// `completion` (optional, on the main queue) receives the library-relative paths of the
+    /// files actually copied in, once the whole batch — dedup included — is done: the Mac uses
+    /// it to open a comic double-clicked in the Finder right after importing it.
     func importFiles(
         _ urls: [URL],
         into context: NSManagedObjectContext,
-        cleaningTemporaryDirectories temporaryDirectories: [URL] = []
+        cleaningTemporaryDirectories temporaryDirectories: [URL] = [],
+        completion: (([String]) -> Void)? = nil
     ) {
         let backgroundContext = sharedScanContext(for: context)
         let statusToken = beginStatus(urls.count == 1
@@ -65,17 +69,23 @@ final class LibraryViewModel: ObservableObject {
             }
             guard let self = self else { return }
             defer { self.endStatus(token: statusToken) }
+            var importedPaths: [String] = []
             for (index, url) in urls.enumerated() {
                 if urls.count > 1 {
                     self.updateStatus(self.localizedProgress("Importazione di %@ di %@…", index + 1, urls.count), token: statusToken)
                 }
-                self.importSingleFile(url, into: backgroundContext, saveImmediately: urls.count == 1)
+                if let path = self.importSingleFile(url, into: backgroundContext, saveImmediately: urls.count == 1) {
+                    importedPaths.append(path)
+                }
             }
             if urls.count > 1 {
                 backgroundContext.performAndWait { try? backgroundContext.save() }
             }
             self.deduplicateComics(in: backgroundContext)
             self.backfillSeriesNames(in: backgroundContext)
+            if let completion {
+                DispatchQueue.main.async { completion(importedPaths) }
+            }
         }
     }
 
@@ -102,7 +112,8 @@ final class LibraryViewModel: ObservableObject {
 
     /// Copies `url` into the library folder, then registers it. Used for external files
     /// (system picker, download from a remote account, "open with").
-    private func importSingleFile(_ url: URL, into context: NSManagedObjectContext, saveImmediately: Bool = true) {
+    @discardableResult
+    private func importSingleFile(_ url: URL, into context: NSManagedObjectContext, saveImmediately: Bool = true) -> String? {
         let ext = url.pathExtension
         guard let format = ComicFormat(fileExtension: ext) else {
             reportError(AppLocalization.format(
@@ -110,15 +121,17 @@ final class LibraryViewModel: ObservableObject {
                 comment: "Unsupported imported comic file format",
                 arguments: [ext as NSString]
             ))
-            return
+            return nil
         }
 
         do {
             let relativePath = try LibraryStorage.importFile(from: url)
             registerComic(relativePath: relativePath, format: format, into: context, saveImmediately: saveImmediately)
+            return relativePath
         } catch {
             DiagnosticLog.log("Import file failed: \(error.localizedDescription)")
             reportError(AppLocalization.userFacingError(error))
+            return nil
         }
     }
 
@@ -326,13 +339,16 @@ final class LibraryViewModel: ObservableObject {
     /// the shared file and leave its twin pointing at nothing — the comic would disappear.
     func delete(_ comic: ComicEntity, from context: NSManagedObjectContext) {
         let relativePath = comic.relativePath ?? ""
+        // Resolved before the delete: a remote-account comic's file lives in the remote
+        // cache (or, if downloaded by an older version, in the root), not always the root.
+        let fileURL = comic.fileURL
         let identifier = comic.objectID.uriRepresentation().absoluteString
         context.delete(comic)
         try? context.save()
         ComicTextIndex.deleteIndex(forComicIdentifier: identifier)
 
         guard shouldRemoveFile(forRelativePath: relativePath, in: context) else { return }
-        LibraryStorage.removeFile(relativePath: relativePath)
+        try? FileManager.default.removeItem(at: fileURL)
     }
 
     /// There's only one file on disk and duplicate records share it: it can only be deleted
@@ -418,7 +434,16 @@ final class LibraryViewModel: ObservableObject {
     }
 
     func performAdoptFilesDroppedInDocuments(in context: NSManagedObjectContext) {
-        let candidates = LibraryStorage.adoptFilesDroppedInLocalDocuments()
+        // Files of remote-account comics (downloaded by older versions into local Documents
+        // while iCloud was off) must stay out of the iCloud root: moved there they'd upload
+        // and show up on other devices as new local comics.
+        var remotePaths: Set<String> = []
+        context.performAndWait {
+            let request = ComicEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "sourceAccountID != nil")
+            remotePaths = Set(((try? context.fetch(request)) ?? []).compactMap(\.relativePath))
+        }
+        let candidates = LibraryStorage.adoptFilesDroppedInLocalDocuments(excluding: remotePaths)
         guard !candidates.isEmpty else { return }
 
         var knownPaths: Set<String> = []
@@ -475,9 +500,14 @@ final class LibraryViewModel: ObservableObject {
     func performRebuildLibrary(in context: NSManagedObjectContext, cloudKnownPaths: Set<String>? = nil) {
         var removedCount = 0
         var keptCloudOnlyCount = 0
+        var revertedRemoteCount = 0
         var knownPaths: Set<String> = []
         // Solo un set noto autorizza le cancellazioni; con `nil` è censimento soltanto.
-        let deletionsAllowed = cloudKnownPaths != nil
+        // Né quando la cartella libreria in uso e la disponibilità di iCloud non concordano
+        // (account iCloud appena cambiato, root ancora da ricalcolare): i file che vediamo
+        // sarebbero quelli della cartella sbagliata, e cancellare svuoterebbe la libreria.
+        let rootIsConsistent = LibraryStorage.isRootConsistentWithICloudAvailability
+        let deletionsAllowed = cloudKnownPaths != nil && rootIsConsistent
         context.performAndWait {
             // Prima gli orfani (segnaposto di account eliminati, che il ciclo sotto
             // salterebbe come tutti i placeholder): senza questo Ricostruisci
@@ -502,6 +532,21 @@ final class LibraryViewModel: ObservableObject {
                     continue
                 }
                 let path = comic.relativePath ?? ""
+                // Remote-account comic already downloaded: its file is in the remote cache
+                // (or the root, if downloaded by an older version) and has nothing to do with
+                // iCloud's state. A missing file isn't a reason to drop the record (and its
+                // progress): it goes back to being a placeholder and downloads again on open.
+                if comic.sourceAccountID != nil {
+                    if !path.isEmpty { knownPaths.insert(path) }
+                    // Same guards as the deletion below: an older download can live in the
+                    // iCloud root, where `fileExists` lies while iCloud reconciles.
+                    if !path.isEmpty, deletionsAllowed, !(cloudKnownPaths?.contains(path) ?? false),
+                       !LibraryStorage.isPresent(comic.fileURL) {
+                        comic.isRemotePlaceholder = true
+                        revertedRemoteCount += 1
+                    }
+                    continue
+                }
                 // Stato cloud sconosciuto: censimento soltanto, mai cancellare — cancellare
                 // qui svuoterebbe la libreria a ogni avvio a freddo finché iCloud riconcilia.
                 guard deletionsAllowed else {
@@ -556,8 +601,13 @@ final class LibraryViewModel: ObservableObject {
             context.performAndWait { try? context.save() }
         }
 
-        if !deletionsAllowed {
+        if !rootIsConsistent {
+            DiagnosticLog.log("Rebuild library: cartella libreria e disponibilità iCloud non concordano, nessuna cancellazione (solo aggiunte)")
+        } else if !deletionsAllowed {
             DiagnosticLog.log("Rebuild library: stato iCloud sconosciuto, nessuna cancellazione (solo aggiunte)")
+        }
+        if revertedRemoteCount > 0 {
+            DiagnosticLog.log("Rebuild library: \(revertedRemoteCount) fumetti remoti senza file tornati segnaposto (si riscaricano all'apertura)")
         }
         if removedCount > 0 || !unknownComicFiles.isEmpty {
             let elapsed = Self.formatted(duration: Date().timeIntervalSince(startedAt))
@@ -583,7 +633,7 @@ final class LibraryViewModel: ObservableObject {
     }
 
     func performBackfillPlaceholderMetadata(in context: NSManagedObjectContext) {
-        var candidates: [(objectID: NSManagedObjectID, relativePath: String, format: ComicFormat)] = []
+        var candidates: [(objectID: NSManagedObjectID, relativePath: String, url: URL, format: ComicFormat)] = []
         var missingCoverCount = 0
         var legacyCoverCount = 0
         var missingFileCount = 0
@@ -626,7 +676,7 @@ final class LibraryViewModel: ObservableObject {
                 }
                 guard let relativePath = comic.relativePath, !relativePath.isEmpty else { continue }
                 guard !pathsWithUnreadableArchive.contains(relativePath) else { continue }
-                let url = LibraryStorage.fileURL(forRelativePath: relativePath)
+                let url = comic.fileURL
                 guard FileManager.default.fileExists(atPath: url.path) else {
                     missingFileCount += 1
                     continue
@@ -635,7 +685,7 @@ final class LibraryViewModel: ObservableObject {
                     pendingDownloadCount += 1
                     continue
                 }
-                candidates.append((comic.objectID, relativePath, comic.format))
+                candidates.append((comic.objectID, relativePath, url, comic.format))
             }
             if context.hasChanges { try? context.save() }
         }
@@ -657,7 +707,7 @@ final class LibraryViewModel: ObservableObject {
             if candidates.count > 1 {
                 updateStatus(localizedProgress("Preparo %@ di %@…", index + 1, candidates.count), token: statusToken)
             }
-            let url = LibraryStorage.fileURL(forRelativePath: candidate.relativePath)
+            let url = candidate.url
             // An archive that opens but doesn't yield a cover would leave the record a
             // candidate again on the next pass too: for this list it counts as unreadable,
             // otherwise every scan would reopen it for nothing.

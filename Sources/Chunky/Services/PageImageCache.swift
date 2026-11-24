@@ -1,7 +1,10 @@
 import CoreGraphics
 import Foundation
+import ImageIO
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
 #endif
 
 /// Cache of already-processed page images (crop, upscaling, tint), with prefetch around
@@ -53,6 +56,51 @@ actor PageImageCache {
     private let maximumEntries: Int
     private var totalCost = 0
     private var memoryWarningObserver: (any NSObjectProtocol)?
+
+    #if os(macOS)
+    /// macOS: a synchronous, main-thread-readable mirror of the pages already processed, so a
+    /// freshly created `PageView` (the pager rebuilds it on every turn via `.id(currentPage)`)
+    /// can show a prefetched page on its very first frame instead of a spinner while it waits
+    /// for an `await` hop into this actor. `NSCache` is thread-safe; entries are only ever
+    /// written by the actor and only ever read elsewhere.
+    nonisolated let readyImages = ReadyImageStore()
+
+    final class ReadyImageStore: @unchecked Sendable {
+        private final class Box {
+            let image: PlatformImage
+            let options: ProcessingOptions
+            init(image: PlatformImage, options: ProcessingOptions) {
+                self.image = image
+                self.options = options
+            }
+        }
+
+        private let cache: NSCache<NSNumber, Box> = {
+            let cache = NSCache<NSNumber, Box>()
+            // Small on purpose: the actor's own LRU is the real budget, this only needs to
+            // cover the prefetch window around the current page.
+            cache.countLimit = 12
+            return cache
+        }()
+
+        func image(at index: Int, options: ProcessingOptions) -> PlatformImage? {
+            guard let box = cache.object(forKey: NSNumber(value: index)), box.options == options else { return nil }
+            return box.image
+        }
+
+        fileprivate func set(_ image: PlatformImage, at index: Int, options: ProcessingOptions) {
+            cache.setObject(Box(image: image, options: options), forKey: NSNumber(value: index))
+        }
+
+        fileprivate func remove(_ index: Int) {
+            cache.removeObject(forKey: NSNumber(value: index))
+        }
+
+        fileprivate func removeAll() {
+            cache.removeAllObjects()
+        }
+    }
+    #endif
 
     /// Registered on the first request and not in `init`: `init` isn't isolated on the actor, so
     /// it can't touch its properties (in Swift 6 this is an error). Here we're already inside the actor.
@@ -107,6 +155,9 @@ actor PageImageCache {
         startObservingMemoryWarningsIfNeeded()
         if let cached = entries[index], cached.options == options {
             touch(index)
+            #if os(macOS)
+            readyImages.set(cached.image, at: index, options: options)
+            #endif
             return cached.image
         }
         guard let processed = process(index: index, options: options) else { return nil }
@@ -140,12 +191,37 @@ actor PageImageCache {
         }
     }
 
+    #if os(macOS) || os(iOS)
+    /// Processes ahead of time exactly the given pages, in the given order (the caller
+    /// sorts them by distance from the current page, forward first), each with its own
+    /// options — in double page a paired page and a lone one are laid out at different sizes,
+    /// so their upscaling target (part of the cache key) differs too.
+    func prefetch(_ requests: [(index: Int, options: ProcessingOptions)]) async {
+        for request in requests {
+            guard !Task.isCancelled else { return }
+            if let existing = entries[request.index], existing.options == request.options {
+                #if os(macOS)
+                // Keep it warm in the synchronous mirror too (it may have been evicted there).
+                readyImages.set(existing.image, at: request.index, options: request.options)
+                #endif
+                continue
+            }
+            guard let processed = process(index: request.index, options: request.options) else { continue }
+            store(index: request.index, image: processed, options: request.options)
+            await Task.yield()
+        }
+    }
+    #endif
+
     /// To be called when the processing settings change (crop, tint, upscaling):
     /// the entries in cache were processed with the previous options.
     func purge() {
         entries.removeAll()
         accessOrder.removeAll()
         totalCost = 0
+        #if os(macOS)
+        readyImages.removeAll()
+        #endif
     }
 
     /// Response to a memory warning: only the most recently used page is kept, which is
@@ -165,10 +241,17 @@ actor PageImageCache {
     func invalidate(_ index: Int) {
         if let removed = entries.removeValue(forKey: index) { totalCost -= removed.cost }
         accessOrder.removeAll { $0 == index }
+        #if os(macOS)
+        readyImages.remove(index)
+        #endif
     }
 
     private func process(index: Int, options: ProcessingOptions) -> PlatformImage? {
+        #if os(macOS)
+        guard var loaded = Self.decodedPage(provider: provider, index: index) else { return nil }
+        #else
         guard var loaded = try? provider.image(atPage: index) else { return nil }
+        #endif
         if options.autoCrop {
             loaded = ImageProcessing.autoCropWhiteBorders(loaded)
         }
@@ -178,6 +261,14 @@ actor PageImageCache {
         if let targetSize = options.upscaleTargetSize {
             loaded = ImageProcessing.upscaleIfNeeded(loaded, targetSize: targetSize)
         }
+        #if os(iOS) || os(tvOS)
+        // `UIImage(data:)` decodes lazily, at first draw — on the main thread, mid page-turn.
+        // Decoding here, on the actor, is the UIKit counterpart of what `decodedPage` does
+        // with ImageIO on macOS. Falls back to the lazy image if the decode isn't possible.
+        if let prepared = loaded.preparingForDisplay() {
+            loaded = prepared
+        }
+        #endif
         return loaded
     }
 
@@ -187,6 +278,9 @@ actor PageImageCache {
         entries[index] = Entry(image: image, options: options, cost: cost)
         totalCost += cost
         touch(index)
+        #if os(macOS)
+        readyImages.set(image, at: index, options: options)
+        #endif
         evictIfNeeded()
     }
 
@@ -195,8 +289,39 @@ actor PageImageCache {
             guard entries.count > minimumEntries, let oldest = accessOrder.first else { return }
             if let removed = entries.removeValue(forKey: oldest) { totalCost -= removed.cost }
             accessOrder.removeFirst()
+            #if os(macOS)
+            readyImages.remove(oldest)
+            #endif
         }
     }
+
+    #if os(macOS)
+    /// `NSImage(data:)` (what `provider.image(atPage:)` returns for CBZ/CBR) decodes lazily,
+    /// at first draw — i.e. on the main thread, in the middle of the page-turn animation,
+    /// however early the prefetch ran. ImageIO with `ShouldCacheImmediately` decodes here, on
+    /// the actor, at full resolution (zoom goes up to 5×, so no downsampling to the viewport)
+    /// and with the EXIF orientation applied, the same way `CoverThumbnailCache` does for
+    /// covers. Formats without raw bytes (PDF, already rendered eagerly into a bitmap) or bytes
+    /// ImageIO can't read fall back to the provider's own image.
+    private static func decodedPage(provider: ComicPageProvider, index: Int) -> PlatformImage? {
+        if let data = try? provider.rawData(atPage: index),
+           let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+           let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+           let pixelWidth = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+           let pixelHeight = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+           pixelWidth > 0, pixelHeight > 0,
+           let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+               kCGImageSourceCreateThumbnailFromImageAlways: true,
+               kCGImageSourceShouldCacheImmediately: true,
+               kCGImageSourceCreateThumbnailWithTransform: true,
+               kCGImageSourceThumbnailMaxPixelSize: max(pixelWidth, pixelHeight)
+           ] as CFDictionary) {
+            // Real size, not `.zero`: `Image(nsImage:)` derives the aspect ratio from it.
+            return PlatformImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        }
+        return try? provider.image(atPage: index)
+    }
+    #endif
 
     /// `bytesPerRow * height` and not `width * height * 4`: it's the actual allocation, row
     /// alignment included. If the bitmap isn't reachable a large page is assumed, so

@@ -476,3 +476,32 @@
 "Tinta pagina (lettore)" = "Paginatint (lezer)";
 "Nessun download in corso" = "Geen downloads bezig";
 "I fumetti che scarichi da un account remoto compaiono qui." = "Strips die je van een extern account downloadt, verschijnen hier.";
+"Prima pagina" = "Eerste pagina";
+"Ultima pagina" = "Laatste pagina";
+"Ingrandisci" = "Zoom in";
+"Riduci" = "Zoom uit";
+"Dimensioni reali" = "Werkelijke grootte";
+"Avanza sempre al clic" = "Altijd vooruit bij klikken";
+"Facendo clic su un bordo qualsiasi della pagina si va sempre avanti, invece che indietro o avanti a seconda del lato." = "Klikken op een willekeurige rand van de pagina gaat altijd vooruit, in plaats van terug of vooruit afhankelijk van de kant.";
+"Cambio pagina al clic" = "Pagina omslaan door klikken";
+"Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Fai clic nell'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Gebruik de hoeken om veelgebruikte bedieningselementen te bereiken zonder de knoppenbalk te tonen. Klik op de linkerbovenhoek om de lezer te verlaten, op de rechterbovenhoek voor instellingen of op de rechteronderhoek om de modus met twee pagina's in of uit te schakelen.";
+"Rende più fluido il movimento quando trascini una pagina ingrandita." = "Maakt de beweging vloeiender wanneer je een ingezoomde pagina sleept.";
+"Se disattivato, la cartella dei fumetti viene esclusa dai backup, Time Machine compreso — utile per risparmiare spazio se hai già una copia altrove." = "Als dit uitstaat, wordt de stripmap uitgesloten van reservekopieën, ook van Time Machine. Dit kan ruimte besparen als je al een andere kopie hebt.";
+"Usa Touch ID" = "Gebruik Touch ID";
+"Sblocca con Touch ID" = "Ontgrendel met Touch ID";
+
+/* Audit fixes */
+"Sblocca Chunky" = "Chunky ontgrendelen";
+"Password richiesta su questo dispositivo: modifica l'account per inserirla." = "Wachtwoord vereist op dit apparaat: wijzig het account om het in te voeren.";
+"Sincronizzazione CloudKit" = "CloudKit-synchronisatie";
+"Verifica in corso…" = "Controleren…";
+"Disponibile" = "Beschikbaar";
+"Nessun account iCloud" = "Geen iCloud-account";
+"Con restrizioni" = "Beperkt";
+"Temporaneamente non disponibile" = "Tijdelijk niet beschikbaar";
+"Non determinabile" = "Onbekend";
+"File troppo grande per il caricamento." = "Bestand te groot om te uploaden.";
+"Pagina" = "Pagina";
+
+"Condividi vignetta" = "Paneel delen";
+"Griglia / Lista" = "Raster / Lijst";

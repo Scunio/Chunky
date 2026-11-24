@@ -183,7 +183,9 @@ struct PageTapZones: View {
         Color.clear
             .accessibilityElement()
             .accessibilityAddTraits(.isButton)
-            .accessibilityLabel(label)
+            // `label` is an Italian source key: the `String` overload would read it verbatim
+            // whatever the app language — VoiceOver always said "Pagina successiva".
+            .accessibilityLabel(AppLocalization.localizedString(label, comment: "Page turn zone"))
             .accessibilityAction(.default, action)
     }
 }
@@ -594,17 +596,271 @@ struct PageTapZones: View {
             .contentShape(Rectangle())
             .simultaneousGesture(TapGesture().onEnded(action))
             .accessibilityAddTraits(.isButton)
-            .accessibilityLabel(label)
+            .accessibilityLabel(AppLocalization.localizedString(label, comment: "Page turn zone"))
     }
 }
 #endif
 
 #if os(macOS)
+/// macOS click zones to turn the page, attached as a *gesture on the pager itself* instead
+/// of the transparent views `PageTapZones` lays over it. Those views sat on top of the page in
+/// the hit-test, so the page's own double-click-to-zoom and pinch (`PageView`) never received
+/// a single event on the Mac. Here the page stays the hit-test target and this
+/// `SpatialTapGesture` runs simultaneously from the parent, picking the zone from the click
+/// location (same idea as the iOS `TapZoneRelay`).
+///
+/// Side zones fire immediately (and are suspended while the page is zoomed, as on iOS). The
+/// central zone (show/hide the controls) waits a short moment and is dropped if a second click
+/// lands nearby — that click is a double-click to zoom, not two toggles.
+///
+/// No "one-handed" mode here: it's a thumb affordance for phones, meaningless with a pointer.
+struct PageClickZones: ViewModifier {
+    let zonesEnabled: Bool
+    let hotCorners: Bool
+    let rightToLeft: Bool
+    let isZoomed: Bool
+    let onPrevious: () -> Void
+    let onNext: () -> Void
+    let onToggleControls: () -> Void
+    let onExit: () -> Void
+    let onOpenSettings: () -> Void
+    let onToggleDoublePage: () -> Void
+
+    /// Smaller than iOS's 88pt finger-sized corners: a pointer is precise.
+    static let cornerSize: CGFloat = 60
+
+    /// Hint color, matching the reader chrome over the page background.
+    var hintColor: Color = .white
+    /// Every pointer movement over the page, for the reader's mouse-idle chrome auto-hide.
+    /// Reported from here because this hover handler is the one that receives the events: a
+    /// second `onContinuousHover` on an ancestor never fired (verified live).
+    var onPointerMoved: ((CGPoint) -> Void)?
+    @State private var pendingToggle: DispatchWorkItem?
+    @State private var pendingPoint: CGPoint?
+    /// Side zone under the pointer, if any: its arrow is shown only then — a permanent pair of
+    /// arrows on the page edges is a touch-screen cue, the pointer gives a better one.
+    @State private var hoveredSide: Zone?
+
+    private enum Zone { case previous, next, toggleControls, exit, openSettings, toggleDoublePage }
+
+    func body(content: Content) -> some View {
+        GeometryReader { proxy in
+            content
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .contentShape(Rectangle())
+                .simultaneousGesture(
+                    SpatialTapGesture().onEnded { value in
+                        handleClick(at: value.location, in: proxy.size)
+                    }
+                )
+                .overlay(accessibilityZones(size: proxy.size).allowsHitTesting(false))
+                .overlay(hoverHint(size: proxy.size).allowsHitTesting(false))
+                .onContinuousHover { phase in
+                    switch phase {
+                    case .active(let location):
+                        onPointerMoved?(location)
+                        let zone = zonesEnabled && !isZoomed ? zone(at: location, in: proxy.size) : .toggleControls
+                        let side: Zone? = (zone == .previous || zone == .next) ? zone : nil
+                        if side != hoveredSide { hoveredSide = side }
+                    case .ended:
+                        if hoveredSide != nil { hoveredSide = nil }
+                    }
+                }
+        }
+    }
+
+    @ViewBuilder
+    private func hoverHint(size: CGSize) -> some View {
+        HStack {
+            Image(systemName: "arrowtriangle.left")
+                .opacity(hoveredSide == .previous ? 1 : 0)
+            Spacer()
+            Image(systemName: "arrowtriangle.right")
+                .opacity(hoveredSide == .next ? 1 : 0)
+        }
+        .font(.title2)
+        .foregroundColor(hintColor.opacity(0.45))
+        .padding(.horizontal, 14)
+        .animation(.easeInOut(duration: 0.15), value: hoveredSide)
+    }
+
+    private static func sideWidth(for totalWidth: CGFloat) -> CGFloat {
+        min(totalWidth * 0.18, 90)
+    }
+
+    private func zone(at point: CGPoint, in size: CGSize) -> Zone {
+        guard zonesEnabled else { return .toggleControls }
+        let corner = Self.cornerSize
+        if hotCorners {
+            if point.x <= corner, point.y <= corner { return .exit }
+            if point.x >= size.width - corner, point.y <= corner { return .openSettings }
+            if point.x >= size.width - corner, point.y >= size.height - corner { return .toggleDoublePage }
+        }
+        let side = Self.sideWidth(for: size.width)
+        if point.x <= side { return .previous }
+        if point.x >= size.width - side { return .next }
+        return .toggleControls
+    }
+
+    private func handleClick(at point: CGPoint, in size: CGSize) {
+        let zone = zone(at: point, in: size)
+        switch zone {
+        case .previous, .next:
+            flushPendingToggle()
+            guard !isZoomed else { return }
+            if zone == .previous { onPrevious() } else { onNext() }
+        case .exit:
+            flushPendingToggle()
+            onExit()
+        case .openSettings:
+            flushPendingToggle()
+            onOpenSettings()
+        case .toggleDoublePage:
+            flushPendingToggle()
+            onToggleDoublePage()
+        case .toggleControls:
+            if let pendingPoint, hypot(point.x - pendingPoint.x, point.y - pendingPoint.y) <= 40 {
+                // Second click of a double-click: it zooms (handled by the page), it doesn't
+                // toggle the controls twice.
+                pendingToggle?.cancel()
+                pendingToggle = nil
+                self.pendingPoint = nil
+                return
+            }
+            flushPendingToggle()
+            let work = DispatchWorkItem {
+                pendingToggle = nil
+                pendingPoint = nil
+                onToggleControls()
+            }
+            pendingToggle = work
+            pendingPoint = point
+            DispatchQueue.main.asyncAfter(deadline: .now() + min(NSEvent.doubleClickInterval, 0.3), execute: work)
+        }
+    }
+
+    /// A pending toggle that is followed by an unrelated click was a genuine single click:
+    /// run it now instead of dropping it.
+    private func flushPendingToggle() {
+        guard let work = pendingToggle else { return }
+        pendingToggle = nil
+        pendingPoint = nil
+        work.cancel()
+        onToggleControls()
+    }
+
+    /// VoiceOver equivalents of the zones (the gesture itself has no accessibility surface).
+    @ViewBuilder
+    private func accessibilityZones(size: CGSize) -> some View {
+        if zonesEnabled {
+            let side = Self.sideWidth(for: size.width)
+            HStack(spacing: 0) {
+                accessibilityZone(label: rightToLeft ? "Pagina successiva" : "Pagina precedente", action: onPrevious)
+                    .frame(width: side)
+                accessibilityZone(label: "Mostra o nascondi i controlli", action: onToggleControls)
+                accessibilityZone(label: rightToLeft ? "Pagina precedente" : "Pagina successiva", action: onNext)
+                    .frame(width: side)
+            }
+        }
+    }
+
+    private func accessibilityZone(label: String, action: @escaping () -> Void) -> some View {
+        Color.clear
+            .accessibilityElement()
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(Text(LocalizedStringKey(label)))
+            .accessibilityAction(.default, action)
+    }
+}
+
 /// On the Mac there's no finger swipe: the equivalent is horizontal two-finger scrolling on
 /// the trackpad (or the mouse's horizontal wheel), which SwiftUI doesn't expose — Mac's
 /// DragGesture follows a drag with the button held down, not two fingers. We therefore read
 /// it from scrollWheel events, with a threshold and a single trigger per gesture so as not
 /// to skip several pages at once.
+/// macOS: page-turning keys for the reader window, handled by a window-scoped local event
+/// monitor. The bare-key equivalents in the "Vai" menu (←, →, Space) proved unreliable from a
+/// real key press — AppKit only matches unmodified menu key equivalents in some cases, and a
+/// focused control can swallow the arrows first — while the menu items themselves worked.
+/// A local monitor runs before both, so it decides deterministically. Text input (the find
+/// field, the page-jump stepper's field) always wins: the event goes through untouched
+/// whenever a text view is first responder, and `isEnabled` is false while a card/sheet
+/// with its own keyboard handling is up.
+struct ReaderKeyMonitor: NSViewRepresentable {
+    enum Key {
+        /// Spatial: the arrow's own direction (the pagination flips it for manga).
+        case left, right
+        /// Reading order (Space, Page Down / Shift-Space, Page Up), like the menu's Space item.
+        case forward, backward
+        /// Home / End: first and last spread. Same reason as the arrows: the "Vai" menu's bare
+        /// Home/End key equivalents aren't reliable from a real key press.
+        case first, last
+        case escape
+    }
+
+    var isEnabled: Bool
+    /// Returns true when the key was consumed.
+    let onKey: (Key) -> Bool
+
+    func makeNSView(context: Context) -> NSView {
+        let view = MonitoringView()
+        view.isEnabled = isEnabled
+        view.onKey = onKey
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let view = nsView as? MonitoringView else { return }
+        view.isEnabled = isEnabled
+        view.onKey = onKey
+    }
+
+    final class MonitoringView: NSView {
+        var isEnabled = true
+        var onKey: ((Key) -> Bool)?
+        private var monitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil else {
+                if let monitor { NSEvent.removeMonitor(monitor) }
+                monitor = nil
+                return
+            }
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, self.handle(event) else { return event }
+                return nil
+            }
+        }
+
+        deinit {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+        }
+
+        private func handle(_ event: NSEvent) -> Bool {
+            guard isEnabled, let window, event.window === window, window.isKeyWindow else { return false }
+            // Typing in a text field (the field editor is an NSTextView): never steal keys.
+            if window.firstResponder is NSText { return false }
+            let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            let key: Key
+            switch event.keyCode {
+            case 123 where modifiers.isEmpty: key = .left
+            case 124 where modifiers.isEmpty: key = .right
+            case 49 where modifiers.isEmpty: key = .forward
+            case 49 where modifiers == .shift: key = .backward
+            case 121 where modifiers.isEmpty: key = .forward   // Page Down
+            case 116 where modifiers.isEmpty: key = .backward  // Page Up
+            case 115 where modifiers.isEmpty: key = .first     // Home
+            case 119 where modifiers.isEmpty: key = .last      // End
+            case 53 where modifiers.isEmpty: key = .escape
+            default: return false
+            }
+            return onKey?(key) ?? false
+        }
+    }
+}
+
 struct ScrollSwipeMonitor: NSViewRepresentable {
     /// +1 = next page, -1 = previous (in reading order, like the swipe on iOS).
     let onSwipe: (Int) -> Void
@@ -649,6 +905,11 @@ struct ScrollSwipeMonitor: NSViewRepresentable {
             // The inertia after releasing the fingers is the tail of the same gesture:
             // counting it would turn a second page on its own.
             guard event.momentumPhase == [] else { return }
+            // The page follows the fingers' physical direction (fingers to the left = next
+            // page, like the swipe on iOS) whatever the "natural scrolling" preference: with it
+            // on (the default, what this was tuned for) the deltas already match; with it off
+            // they arrive inverted and used to turn the page the wrong way.
+            let deltaX = event.isDirectionInvertedFromDevice ? event.scrollingDeltaX : -event.scrollingDeltaX
 
             // A traditional mouse wheel (not a trackpad) never sends `.began`/`.ended`:
             // `event.phase` always stays empty, so the phase-based reset below never
@@ -657,7 +918,7 @@ struct ScrollSwipeMonitor: NSViewRepresentable {
             // check.
             if event.phase.isEmpty {
                 guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return }
-                accumulated += event.scrollingDeltaX
+                accumulated += deltaX
                 guard abs(accumulated) > 40 else { return }
                 let direction = accumulated < 0 ? 1 : -1
                 accumulated = 0
@@ -679,10 +940,64 @@ struct ScrollSwipeMonitor: NSViewRepresentable {
                 return
             }
             guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return }
-            accumulated += event.scrollingDeltaX
+            accumulated += deltaX
             guard !didFireForCurrentGesture, abs(accumulated) > 40 else { return }
             didFireForCurrentGesture = true
             onSwipe?(accumulated < 0 ? 1 : -1)
+        }
+
+        private func removeMonitor() {
+            if let monitor = monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        deinit {
+            removeMonitor()
+        }
+    }
+}
+
+/// Scroll events over a zoomed page, forwarded as a pan (see `PageView.zoomedScrollPanMonitor`).
+/// Same app-wide local monitor as `ScrollSwipeMonitor`, filtered to this view's window and
+/// bounds, and never consuming the event.
+struct ScrollPanMonitor: NSViewRepresentable {
+    let onPan: (CGFloat, CGFloat) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = MonitoringView()
+        view.onPan = onPan
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? MonitoringView)?.onPan = onPan
+    }
+
+    final class MonitoringView: NSView {
+        var onPan: ((CGFloat, CGFloat) -> Void)?
+        private var monitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil else {
+                removeMonitor()
+                return
+            }
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                self?.handle(event)
+                return event
+            }
+        }
+
+        private func handle(_ event: NSEvent) {
+            guard let window = window, event.window === window,
+                  bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+            // A classic mouse wheel reports lines, not points.
+            let factor: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 10
+            onPan?(event.scrollingDeltaX * factor, event.scrollingDeltaY * factor)
         }
 
         private func removeMonitor() {
@@ -719,7 +1034,7 @@ struct HeaderTrailingWidthKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
-#if os(iOS)
+#if os(iOS) || os(macOS)
 /// Measured height of the top control bar (see `ReaderView.headerHeight`).
 struct ChromeHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0

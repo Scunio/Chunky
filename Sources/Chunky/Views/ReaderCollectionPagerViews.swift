@@ -303,8 +303,12 @@ struct PageCollectionPager<Content: View>: UIViewRepresentable {
                   let item = visualOrder.firstIndex(of: start) else { return }
             let width = collectionView.bounds.width
             guard width > 0 else { return }
-            isRunningProgrammaticScroll = animated
-            collectionView.setContentOffset(CGPoint(x: CGFloat(item) * width, y: 0), animated: animated)
+            let target = CGPoint(x: CGFloat(item) * width, y: 0)
+            // Only when the offset will really move: `setContentOffset(_:animated: true)` to
+            // the current offset never calls `scrollViewDidEndScrollingAnimation`, so the flag
+            // stayed latched and the next finger swipe was treated as programmatic.
+            isRunningProgrammaticScroll = animated && abs(collectionView.contentOffset.x - target.x) > 0.5
+            collectionView.setContentOffset(target, animated: animated)
         }
 
         /// After a rotation (or any size change) the same offset in points no longer

@@ -203,10 +203,35 @@ enum RemoteProgressSync {
 
     /// Pushes anything debounced immediately (best-effort, async). Called on exit and
     /// backgrounding so the last pages are never left only in memory.
-    static func flushPush() {
-        guard isEnabled else { return }
-        Engine.flush()
+    static func flushPush(completion: (() -> Void)? = nil) {
+        guard isEnabled else { completion?(); return }
+        Engine.flush(completion: completion)
     }
+
+    #if os(iOS)
+    /// `flushPush` held open by a UIKit background task: on backgrounding iOS suspends the
+    /// app within moments, usually before the CloudKit round-trip (fetch + save) finishes, so
+    /// the last pages read never left the device. The task ends when every push reached a
+    /// terminal outcome, or when the system's allowance expires — whichever comes first.
+    @MainActor
+    static func flushPushInBackgroundTask() {
+        var taskID = UIBackgroundTaskIdentifier.invalid
+        var ended = false
+        // Main thread only (expiration handler and the hop below), so the flag needs no lock.
+        let end = {
+            guard !ended else { return }
+            ended = true
+            if taskID != .invalid {
+                UIApplication.shared.endBackgroundTask(taskID)
+                taskID = .invalid
+            }
+        }
+        taskID = UIApplication.shared.beginBackgroundTask(withName: "RemoteProgressFlush") { end() }
+        flushPush {
+            DispatchQueue.main.async { end() }
+        }
+    }
+    #endif
 
     // MARK: - Fetch
 
@@ -254,11 +279,35 @@ enum RemoteProgressSync {
         Engine.logAccountStatus()
     }
 
+    /// Current `CKAccountStatus` for the status panel, delivered on main; `nil` when this
+    /// build can't touch CloudKit at all (entitlement-less) or the check itself failed.
+    static func fetchAccountStatus(completion: @escaping (CKAccountStatus?) -> Void) {
+        Engine.fetchAccountStatus(completion: completion)
+    }
+
+    /// Installs (once per process) the `CKAccountChanged` observer: after a sign-out or a
+    /// switch to another Apple ID, the saved zone change token and the "subscription saved"
+    /// flag belong to the previous account's database. Both are reset so the next fetch is
+    /// a full one and the push subscription is recreated in the new account.
+    static func startObservingAccountChanges() {
+        Engine.startObservingAccountChanges()
+    }
+
     // MARK: - Private
 
     private static var currentDeviceName: String {
         #if canImport(UIKit)
-        return UIDevice.current.name
+        // Since iOS 16 `name` is just "iPhone"/"iPad" without a special entitlement: then
+        // the hardware model ("iPhone (iPhone15,2)") at least tells two devices apart in the
+        // progress logs and the "page N on another device" banner.
+        let name = UIDevice.current.name
+        guard name == UIDevice.current.model else { return name }
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let machine = withUnsafeBytes(of: &systemInfo.machine) { buffer in
+            String(decoding: buffer.prefix(while: { $0 != 0 }), as: UTF8.self)
+        }
+        return machine.isEmpty ? name : "\(name) (\(machine))"
         #else
         return Host.current().localizedName ?? "Mac"
         #endif
@@ -364,8 +413,11 @@ enum RemoteProgressSync {
             }
         }
 
-        static func flush() {
-            guard cloudKitUsable else { return }
+        /// `completion` (any thread) runs exactly once, when every flushed snapshot reached
+        /// a terminal outcome (saved, superseded, or failed) — or right away when there was
+        /// nothing to push. Lets the iOS caller hold a background task for exactly that long.
+        static func flush(completion: (() -> Void)? = nil) {
+            guard cloudKitUsable else { completion?(); return }
             lock.lock()
             let snaps = latest
             latest = [:]
@@ -373,8 +425,29 @@ enum RemoteProgressSync {
             scheduled = [:]
             for name in snaps.keys { lastPush[name] = Date() }
             lock.unlock()
+            guard !snaps.isEmpty else { completion?(); return }
+            let group = DispatchGroup()
             for snapshot in snaps.values {
-                queue.async { push(snapshot) }
+                group.enter()
+                queue.async { push(snapshot, done: once { group.leave() }) }
+            }
+            if let completion {
+                group.notify(queue: .global(qos: .utility), execute: completion)
+            }
+        }
+
+        /// Wraps `body` so it runs at most once, whatever path calls it: the push chain has
+        /// several terminal points (and retries that re-enter `push`), and a `DispatchGroup`
+        /// leave too many would crash.
+        private static func once(_ body: @escaping () -> Void) -> () -> Void {
+            let onceLock = NSLock()
+            var called = false
+            return {
+                onceLock.lock()
+                let shouldRun = !called
+                called = true
+                onceLock.unlock()
+                if shouldRun { body() }
             }
         }
 
@@ -388,22 +461,25 @@ enum RemoteProgressSync {
             push(snapshot)
         }
 
-        private static func push(_ snapshot: RemoteProgressSync.Snapshot) {
+        /// `done` is called once the push reaches a terminal outcome (see `flush(completion:)`).
+        /// A zone-not-found retry re-enters `push` with the same `done`.
+        private static func push(_ snapshot: RemoteProgressSync.Snapshot, done: @escaping () -> Void = {}) {
             let recordID = CKRecord.ID(recordName: snapshot.recordName, zoneID: zoneID)
             fetchRecord(id: recordID) { result in
                 switch result {
                 case .success(let existing):
                     guard let existing else {
-                        saveRecord(newRecord(id: recordID, from: snapshot)) { push(snapshot) }
+                        saveRecord(newRecord(id: recordID, from: snapshot), done: done) { push(snapshot, done: done) }
                         return
                     }
                     guard snapshot.updatedAt > (existing["updatedAt"] as? Date ?? .distantPast) else {
+                        done()
                         return // Remote is newer (or our own echo): nothing to do.
                     }
                     fill(record: existing, from: snapshot)
-                    saveRecord(existing) { push(snapshot) }
+                    saveRecord(existing, done: done) { push(snapshot, done: done) }
                 case .failure(let error):
-                    handlePushError(error) { push(snapshot) }
+                    handlePushError(error, done: done) { push(snapshot, done: done) }
                 }
             }
         }
@@ -461,7 +537,7 @@ enum RemoteProgressSync {
         /// Same exactly-once routing for saves: `.serverRecordChanged` surfaces per
         /// record (not just overall), which is precisely the conflict signal the
         /// `.ifServerRecordUnchanged` policy below is chosen to produce.
-        private static func saveRecord(_ record: CKRecord, retryZoneNotFound retry: @escaping () -> Void) {
+        private static func saveRecord(_ record: CKRecord, done: @escaping () -> Void, retryZoneNotFound retry: @escaping () -> Void) {
             let operation = CKModifyRecordsOperation(recordsToSave: [record], recordIDsToDelete: nil)
             // Explicit conflict detection (not blind last-write): concurrent pushes from
             // two devices surface as `.serverRecordChanged`, resolved below by timestamp.
@@ -474,7 +550,9 @@ enum RemoteProgressSync {
                 guard !completed else { return }
                 completed = true
                 if case .failure(let error) = result {
-                    handleSaveError(error, record: record, retryZoneNotFound: retry)
+                    handleSaveError(error, record: record, done: done, retryZoneNotFound: retry)
+                } else {
+                    done()
                 }
             }
             operation.perRecordSaveBlock = { recordID, result in
@@ -492,9 +570,10 @@ enum RemoteProgressSync {
             database.add(operation)
         }
 
-        private static func handleSaveError(_ error: Error, record: CKRecord, retryZoneNotFound retry: @escaping () -> Void) {
+        private static func handleSaveError(_ error: Error, record: CKRecord, done: @escaping () -> Void, retryZoneNotFound retry: @escaping () -> Void) {
             guard let ckError = error as? CKError else {
                 DiagnosticLog.log("RemoteProgress push fallito: \(error.localizedDescription)")
+                done()
                 return
             }
             switch ckError.code {
@@ -505,7 +584,7 @@ enum RemoteProgressSync {
                 guard let serverRecord = ckError.userInfo[CKRecordChangedErrorServerRecordKey] as? CKRecord,
                       let ours = record["updatedAt"] as? Date,
                       ours > (serverRecord["updatedAt"] as? Date ?? .distantPast)
-                else { return }
+                else { done(); return }
                 // Rebuild our values onto the server record (same field set `fill` writes).
                 serverRecord["accountSyncKey"] = record["accountSyncKey"]
                 serverRecord["serverPath"] = record["serverPath"]
@@ -514,44 +593,50 @@ enum RemoteProgressSync {
                 serverRecord["updatedAt"] = record["updatedAt"]
                 serverRecord["deviceName"] = record["deviceName"]
                 serverRecord["title"] = record["title"]
-                saveRecordOnce(serverRecord)
+                saveRecordOnce(serverRecord, done: done)
             case .zoneNotFound:
-                createZone(completion: retry)
+                createZone(onFailure: done, completion: retry)
             case .notAuthenticated, .networkFailure, .networkUnavailable, .quotaExceeded:
                 DiagnosticLog.log("RemoteProgress push rinviato (\(ckError.code.rawValue))")
+                done()
             default:
                 DiagnosticLog.log("RemoteProgress push fallito: \(ckError.localizedDescription)")
+                done()
             }
         }
 
         /// Single save without further conflict retry (the retry of a retry).
-        private static func saveRecordOnce(_ record: CKRecord) {
+        private static func saveRecordOnce(_ record: CKRecord, done: @escaping () -> Void) {
             let operation = CKModifyRecordsOperation(recordsToSave: [record], recordIDsToDelete: nil)
             operation.savePolicy = .ifServerRecordUnchanged
             operation.modifyRecordsResultBlock = { result in
                 if case .failure(let error) = result {
                     DiagnosticLog.log("RemoteProgress push (retry) fallito: \(error.localizedDescription)")
                 }
+                done()
             }
             database.add(operation)
         }
 
-        private static func handlePushError(_ error: Error, retryZoneNotFound retry: @escaping () -> Void) {
+        private static func handlePushError(_ error: Error, done: @escaping () -> Void, retryZoneNotFound retry: @escaping () -> Void) {
             guard let ckError = error as? CKError else {
                 DiagnosticLog.log("RemoteProgress push fallito: \(error.localizedDescription)")
+                done()
                 return
             }
             switch ckError.code {
             case .zoneNotFound:
-                createZone(completion: retry)
+                createZone(onFailure: done, completion: retry)
             case .notAuthenticated, .networkFailure, .networkUnavailable, .quotaExceeded:
                 DiagnosticLog.log("RemoteProgress push rinviato (\(ckError.code.rawValue))")
+                done()
             default:
                 DiagnosticLog.log("RemoteProgress push fallito: \(ckError.localizedDescription)")
+                done()
             }
         }
 
-        private static func createZone(completion: @escaping () -> Void) {
+        private static func createZone(onFailure: @escaping () -> Void = {}, completion: @escaping () -> Void) {
             let operation = CKModifyRecordZonesOperation(
                 recordZonesToSave: [CKRecordZone(zoneName: RemoteProgressSync.zoneName)],
                 recordZoneIDsToDelete: nil
@@ -559,6 +644,7 @@ enum RemoteProgressSync {
             operation.modifyRecordZonesResultBlock = { result in
                 if case .failure(let error) = result {
                     DiagnosticLog.log("RemoteProgress zona non creata: \(error.localizedDescription)")
+                    onFailure()
                     return
                 }
                 // Ricreare la zona invalida anche la subscription ai suoi cambi (es. zona
@@ -668,6 +754,35 @@ enum RemoteProgressSync {
             UserDefaults.standard.removeObject(forKey: RemoteProgressSync.defaultsTokenKey)
         }
 
+        nonisolated(unsafe) private static var accountChangeObserver: (any NSObjectProtocol)?
+
+        static func startObservingAccountChanges() {
+            guard cloudKitUsable else { return }
+            lock.lock()
+            defer { lock.unlock() }
+            guard accountChangeObserver == nil else { return }
+            accountChangeObserver = NotificationCenter.default.addObserver(
+                forName: .CKAccountChanged, object: nil, queue: nil
+            ) { _ in
+                DiagnosticLog.log("CloudKit account cambiato: azzero token progressi e subscription")
+                resetToken()
+                UserDefaults.standard.set(false, forKey: RemoteProgressSync.subscriptionSavedKey)
+                #if !os(tvOS)
+                ensureSubscription()
+                #endif
+            }
+        }
+
+        static func fetchAccountStatus(completion: @escaping (CKAccountStatus?) -> Void) {
+            guard cloudKitUsable else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            CKContainer(identifier: RemoteProgressSync.containerIdentifier).accountStatus { status, error in
+                DispatchQueue.main.async { completion(error == nil ? status : nil) }
+            }
+        }
+
         /// Reports `CKContainer.accountStatus` to Diagnostica (see `logAccountStatus`).
         /// The completion handler runs off-main; `DiagnosticLog` is thread-safe.
         static func logAccountStatus() {
@@ -729,19 +844,29 @@ enum RemoteProgressSync {
         /// Fetches one page of zone changes, following `moreComing` recursively, then
         /// applies everything once on the context's queue. Record callbacks for a zone
         /// precede its fetch-result callback, so `changed` is complete when examined.
+        ///
+        /// The change token is persisted only *after* `apply` succeeded: storing it as soon
+        /// as CloudKit handed it over meant a failed save (or a crash/suspension before the
+        /// apply ran) skipped those records forever — the next fetch started past them.
+        /// Between pages the newest token travels in `pendingToken` instead of UserDefaults,
+        /// so `moreComing` still advances instead of re-fetching the same page.
+        /// Records that match nothing locally still advance the token (as before): they are
+        /// dropped, and a comic added later picks its progress up from the next push.
         private static func fetchPage(
             accumulated: [CKRecord],
+            pendingToken: CKServerChangeToken? = nil,
             thenApplyIn context: NSManagedObjectContext,
             completion: ((Int) -> Void)? = nil
         ) {
             let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
-            configuration.previousServerChangeToken = storedToken()
+            configuration.previousServerChangeToken = pendingToken ?? storedToken()
             let operation = CKFetchRecordZoneChangesOperation(
                 recordZoneIDs: [zoneID],
                 configurationsByRecordZoneID: [zoneID: configuration]
             )
             let appendLock = NSLock()
             var changed = accumulated
+            var latestToken = pendingToken
             // Refined name (the `recordChangedBlock` spelling is the deprecated one):
             // per-record errors arrive here as `.failure` and are logged, never fatal.
             operation.recordWasChangedBlock = { _, result in
@@ -755,19 +880,30 @@ enum RemoteProgressSync {
                 }
             }
             operation.recordWithIDWasDeletedBlock = { _, _ in /* tombstones ignored: we never delete */ }
-            operation.recordZoneChangeTokensUpdatedBlock = { _, token, _ in storeToken(token) }
+            operation.recordZoneChangeTokensUpdatedBlock = { _, token, _ in
+                appendLock.lock()
+                if let token { latestToken = token }
+                appendLock.unlock()
+            }
             operation.recordZoneFetchResultBlock = { _, result in
                 switch result {
                 case .success(let outcome):
-                    storeToken(outcome.serverChangeToken)
                     appendLock.lock()
                     let page = changed
+                    let token = outcome.serverChangeToken
+                    latestToken = token
                     appendLock.unlock()
                     if outcome.moreComing {
-                        fetchPage(accumulated: page, thenApplyIn: context, completion: completion)
+                        fetchPage(accumulated: page, pendingToken: token, thenApplyIn: context, completion: completion)
                     } else {
                         context.perform {
-                            let applied = apply(records: page, in: context)
+                            guard let applied = apply(records: page, in: context) else {
+                                // Save failed: keep the old token so the next fetch retries
+                                // these records instead of skipping past them.
+                                completion?(0)
+                                return
+                            }
+                            storeToken(token)
                             if applied > 0 {
                                 AppLog.log("RemoteProgress: applicati \(applied) progressi da altri dispositivi")
                             }
@@ -836,8 +972,8 @@ enum RemoteProgressSync {
 
         /// Matches fetched records to local comics and applies last-writer-wins.
         /// Runs on the context's queue. Returns the number of comics updated.
-        @discardableResult
-        private static func apply(records: [CKRecord], in context: NSManagedObjectContext) -> Int {
+        /// `nil` when the save failed (the caller must not advance the change token then).
+        private static func apply(records: [CKRecord], in context: NSManagedObjectContext) -> Int? {
             guard !records.isEmpty else { return 0 }
             // Accounts indexed by sync key (computed once): the stored per-device UUIDs
             // can never match across devices, so this is the only join that works.
@@ -900,7 +1036,10 @@ enum RemoteProgressSync {
                     try context.save()
                 } catch {
                     DiagnosticLog.log("RemoteProgress apply: salvataggio fallito: \(error.localizedDescription)")
-                    return 0
+                    // No rollback: this is usually the shared view context, and a rollback
+                    // would also discard the user's own unsaved edits (e.g. the reader's
+                    // throttled page save). The token stays put, so the records come back.
+                    return nil
                 }
             }
             return applied

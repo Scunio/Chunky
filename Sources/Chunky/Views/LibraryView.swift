@@ -70,6 +70,8 @@ struct LibraryView: View {
     /// Per window, not global: opening a second library window (in the future) shouldn't
     /// force it into the same display mode as the other one.
     @SceneStorage("libraryUsesTableLayout") private var usesTableLayout = false
+    /// The grid takes keyboard focus on click so Return (open) and Delete (remove) reach it.
+    @FocusState private var isGridFocused: Bool
     #endif
     @State private var isToolsPresented = false
     @State private var isAccountsPresented = false
@@ -241,7 +243,10 @@ struct LibraryView: View {
                 titleVisibility: .visible
             ) {
                 Button("Elimina", role: .destructive) {
-                    if let comicToDelete { viewModel.delete(comicToDelete, from: context) }
+                    if let comicToDelete {
+                        selectedIDs.remove(comicToDelete.objectID)
+                        viewModel.delete(comicToDelete, from: context)
+                    }
                     comicToDelete = nil
                 }
                 Button("Annulla", role: .cancel) { comicToDelete = nil }
@@ -285,6 +290,12 @@ struct LibraryView: View {
             #endif
             .sheet(isPresented: $isToolsPresented) {
                 ToolsPanelView()
+            }
+            // The lock screen is a SwiftUI overlay at the root (`ChunkyApp`), but sheets and
+            // covers are presented by UIKit/AppKit *above* that root: without this, the reader,
+            // Tools (Settings) and Accounts stayed usable on top of the lock screen.
+            .onReceive(ParentalLock.shared.$isLocked.removeDuplicates().filter { $0 }) { _ in
+                dismissPresentationsForLock()
             }
             #if !os(tvOS)
             // On tvOS "Novità" is a section inline in the grid (see `newComicsSection`) and
@@ -330,6 +341,12 @@ struct LibraryView: View {
             #endif
             .modifier(NewGroupPromptModifier(isPresented: $isNewGroupPromptPresented, name: $newGroupName, onCreate: applyGroup))
             #if os(macOS)
+            // A selection only means something for what's on screen: switching series in the
+            // sidebar or typing a search starts from nothing selected, so the toolbar trash /
+            // Delete key can never act on comics filtered out of sight.
+            .onChange(of: selection) { selectedIDs.removeAll() }
+            .onChange(of: searchText) { selectedIDs.removeAll() }
+            .onChange(of: usesTableLayout) { selectedIDs.removeAll() }
             // `nil` while the parental lock is active: otherwise a keyboard command
             // (⌘O, ⇧⌘N) would still act on the library from underneath the lock screen.
             .focusedSceneValue(\.libraryActions, lock.isLocked ? nil : LibraryCommandActions(
@@ -370,47 +387,83 @@ struct LibraryView: View {
     // a single opaque view doesn't break down correctly into the "»" menu when the window is
     // narrow — macOS can only turn recognizable native controls into a submenu
     // (e.g. the Picker below, which becomes "View").
+    //
+    // Mac conventions (Finder/Photos/Books): no "Modifica" mode — a click selects, ⌘/⇧-click
+    // extends, double click or Return opens, Delete removes — so the edit-mode pill is gone and
+    // the bulk actions (status, group, trash) appear as plain toolbar items only while
+    // something is selected. "Raggruppato/A-Z" lives in the Libreria menu ("Raggruppa per
+    // serie"), Tools in ⌘, / the app menu: neither needs a toolbar pill of its own.
     @ToolbarContentBuilder
     private var macOSToolbarContent: some ToolbarContent {
-        if isEditing {
-            ToolbarItem {
-                Button("Annulla") {
-                    isEditing = false
-                    selectedIDs.removeAll()
-                }
+        ToolbarItem {
+            Picker("Vista", selection: $usesTableLayout) {
+                // Label here too: if the window is narrow, the whole Picker collapses into a
+                // "View" submenu — without text, the two entries would be two icons identical
+                // in shape but with no indication of what they select.
+                Label("Griglia", systemImage: "square.grid.2x2").tag(false)
+                Label("Lista", systemImage: "list.bullet").tag(true)
             }
-            ToolbarItem { statusMenu.disabled(selectedIDs.isEmpty) }
-            ToolbarItem { groupMenu.disabled(selectedIDs.isEmpty) }
-            ToolbarItem {
-                Button(action: deleteSelected) {
-                    Image(systemName: "trash")
-                }
-                .disabled(selectedIDs.isEmpty)
-            }
-        } else {
-            ToolbarItem { Button("Modifica") { isEditing = true } }
-            ToolbarItem { displayModeButton }
-            ToolbarItem {
-                Picker("Vista", selection: $usesTableLayout) {
-                    // Label here too: if the window is narrow, the whole Picker collapses into a
-                    // "View" submenu — without text, the two entries would be two icons identical
-                    // in shape but with no indication of what they select.
-                    Label("Griglia", systemImage: "square.grid.2x2").tag(false)
-                    Label("Lista", systemImage: "list.bullet").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 90)
-                .accessibilityIdentifier("library.layoutPicker")
-            }
-            ToolbarItem { addButton }
-            ToolbarItem { newComicsButton }
-            ToolbarItem { nowReadingButton }
+            .pickerStyle(.segmented)
+            .labelStyle(.iconOnly)
+            .help("Griglia / Lista")
+            .accessibilityIdentifier("library.layoutPicker")
+        }
+        if !selectedIDs.isEmpty {
+            ToolbarItem { statusMenu.help("Stato") }
+            ToolbarItem { groupMenu.help("Gruppo") }
             if !isKioskModeEnabled {
-                ToolbarItem { accountsLink }
-                ToolbarItem { toolsMenu }
-            } else {
-                ToolbarItem { settingsLink }
+                ToolbarItem {
+                    Button(action: deleteSelected) {
+                        Label("Rimuovi", systemImage: "trash")
+                    }
+                    .help("Rimuovi")
+                }
             }
+        }
+        ToolbarItem { addButton.help("Importa fumetti…") }
+        ToolbarItem { newComicsButton.help("Novità") }
+        ToolbarItem { nowReadingButton.help("Ora in lettura") }
+        if !isKioskModeEnabled {
+            ToolbarItem { accountsLink.help("Account") }
+        }
+    }
+
+    /// Click on a cover: plain click selects only it, ⌘-click toggles it in the selection,
+    /// ⇧-click adds it (no range extension — the grid has no single linear order across
+    /// collapsed sections that a range could follow reliably). Focus moves to the grid so
+    /// Return/Delete reach it even if the toolbar's search field had it.
+    private func macSelect(_ comic: ComicEntity) {
+        let modifiers = NSEvent.modifierFlags
+        let id = comic.objectID
+        if modifiers.contains(.command) {
+            if selectedIDs.contains(id) { selectedIDs.remove(id) } else { selectedIDs.insert(id) }
+        } else if modifiers.contains(.shift) {
+            selectedIDs.insert(id)
+        } else {
+            selectedIDs = [id]
+        }
+        isGridFocused = true
+    }
+
+    /// Return: opens every selected comic (each in its own reader window, like Finder opens
+    /// every selected file), in display order.
+    private func macOpenSelection(in filtered: [ComicEntity]) -> Bool {
+        let targets = filtered.filter { selectedIDs.contains($0.objectID) }
+        guard !targets.isEmpty else { return false }
+        // One reader window per comic: cap it so Return after ⌘A can't open dozens at once.
+        targets.prefix(5).forEach(openComic)
+        return true
+    }
+
+    /// Delete key / Edit ▸ Delete: same confirmations as the context menu (one comic) and the
+    /// toolbar trash (several).
+    private func macDeleteSelection(in filtered: [ComicEntity]) {
+        guard !isKioskModeEnabled else { return }
+        let targets = filtered.filter { selectedIDs.contains($0.objectID) }
+        if targets.count == 1 {
+            comicToDelete = targets[0]
+        } else if targets.count > 1 {
+            isConfirmingBulkDelete = true
         }
     }
     #endif
@@ -430,7 +483,14 @@ struct LibraryView: View {
 
     /// Opens the "Tools" panel (Colors/Settings/Parental Lock/Feedback/Info).
     private var toolsMenu: some View {
-        Button(action: { isToolsPresented = true }) {
+        Button(action: {
+            #if os(macOS)
+            // Settings is a window of its own on the Mac (see `ReaderContentView.openTools`).
+            openWindow(id: "settings")
+            #else
+            isToolsPresented = true
+            #endif
+        }) {
             Label("Strumenti", systemImage: "wrench.and.screwdriver")
         }
     }
@@ -598,10 +658,40 @@ struct LibraryView: View {
                         allowsDeletion: !isKioskModeEnabled,
                         pendingRelativePaths: downloadTracker.pendingRelativePaths,
                         onSelect: openComic,
-                        onDelete: { comicToDelete = $0 }
+                        onDelete: { comicToDelete = $0 },
+                        onDeleteMany: { comics in
+                            selectedIDs = Set(comics.map(\.objectID))
+                            isConfirmingBulkDelete = true
+                        },
+                        onSelectionChange: { comics in
+                            selectedIDs = Set(comics.map(\.objectID))
+                        }
                     )
                 } else {
                     libraryGrid(filtered: filtered)
+                        .focusable()
+                        .focusEffectDisabled()
+                        .focused($isGridFocused)
+                        .onKeyPress(.return) { macOpenSelection(in: filtered) ? .handled : .ignored }
+                        // Delete / ⌘⌫ / ⌦, ⌘A and Esc through a window-scoped key monitor:
+                        // verified live, neither `onKeyPress(.delete)` nor `onDeleteCommand` /
+                        // `onCommand(selectAll:)` ever fired on the focused grid (Edit ▸ Delete
+                        // and Select All stayed disabled) — same finding as `ReaderKeyMonitor`.
+                        // Text fields (the toolbar search) keep their keys: the monitor
+                        // steps aside whenever a field editor is first responder.
+                        .background(LibraryGridKeyMonitor { key in
+                            switch key {
+                            case .delete:
+                                guard !selectedIDs.isEmpty else { return false }
+                                macDeleteSelection(in: filtered)
+                            case .selectAll:
+                                selectedIDs = Set(filtered.map(\.objectID))
+                            case .escape:
+                                guard !selectedIDs.isEmpty else { return false }
+                                selectedIDs.removeAll()
+                            }
+                            return true
+                        })
                 }
                 #else
                 libraryGrid(filtered: filtered)
@@ -787,6 +877,16 @@ struct LibraryView: View {
             .padding(.horizontal, gridHorizontalPadding)
             .padding(.vertical)
         }
+        // Click on empty space (between or below the covers): deselect, like the Finder.
+        // A background, so the covers' own gestures win wherever there is one.
+        .background(
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedIDs.removeAll()
+                    isGridFocused = true
+                }
+        )
     }
     #endif
 
@@ -992,6 +1092,7 @@ struct LibraryView: View {
             existingGroupNames: names,
             isPendingDownload: downloadTracker.pendingRelativePaths.contains(comic.relativePath ?? ""),
             onSelect: { handleTap(on: comic) },
+            onOpen: { openComic(comic) },
             onDelete: { comicToDelete = comic },
             onAssignGroup: { assignGroup($0, to: comic) }
         )
@@ -1005,6 +1106,10 @@ struct LibraryView: View {
     }
 
     private func handleTap(on comic: ComicEntity) {
+        #if os(macOS)
+        // Mac: a click selects (see `macSelect`); opening is a double click or Return.
+        macSelect(comic)
+        #else
         if isEditing {
             if selectedIDs.contains(comic.objectID) {
                 selectedIDs.remove(comic.objectID)
@@ -1014,6 +1119,7 @@ struct LibraryView: View {
         } else {
             openComic(comic)
         }
+        #endif
     }
 
     /// The single place from which a comic is "opened": on iOS it sets the state that presents the
@@ -1036,6 +1142,27 @@ struct LibraryView: View {
         #else
         selectedComic = comic
         #endif
+    }
+
+    /// Closes everything this view presents above the lock screen (see the `onChange` on
+    /// `lock.isLocked`). Without animation: the lock usually fires while the scene is going to
+    /// the background, where an animated dismissal may never get to run.
+    private func dismissPresentationsForLock() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            #if os(iOS)
+            selectedComic = nil
+            #endif
+            isToolsPresented = false
+            isAccountsPresented = false
+            isShowingFileImporter = false
+            isNowReadingPresented = false
+            isNewComicsPresented = false
+            isNewGroupPromptPresented = false
+            isConfirmingBulkDelete = false
+            comicToDelete = nil
+        }
     }
 
     private func deleteSelected() {
@@ -1151,6 +1278,9 @@ private struct ComicCell: View {
     /// update di `NSMetadataQuery`, anche durante lo scroll.
     let isPendingDownload: Bool
     let onSelect: () -> Void
+    /// Mac only: double click opens (a single click selects, via `onSelect`). Elsewhere a tap
+    /// already opens through `onSelect`, so this is the same action.
+    let onOpen: () -> Void
     let onDelete: () -> Void
     let onAssignGroup: (String?) -> Void
 
@@ -1192,6 +1322,30 @@ private struct ComicCell: View {
             .font(.caption.bold())
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        #elseif os(macOS)
+        // Not a `Button`: a Mac grid item selects on click and opens on double click (Finder,
+        // Photos, Books). The double-click recognizer is exclusive, the single click runs
+        // simultaneously, so selection is immediate instead of waiting out the double-click
+        // interval the way stacked `onTapGesture(count: 2)` + `onTapGesture` would.
+        ComicGridItemView(comic: comic, showsPendingDownloadBadge: false, isPendingDownload: isPendingDownload)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? Color.accentColor.opacity(0.22) : Color.clear)
+                    .padding(-5)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                    .padding(-5)
+            )
+            .contentShape(Rectangle())
+            .gesture(TapGesture(count: 2).onEnded { onOpen() })
+            .simultaneousGesture(TapGesture().onEnded { onSelect() })
+            .contextMenu { cellMenu }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityLabel(comic.title ?? AppLocalization.localizedString("Fumetto", comment: "Fallback comic accessibility label"))
+            .accessibilityAction { onOpen() }
         #else
         Button(action: onSelect) {
             ComicGridItemView(comic: comic, showsPendingDownloadBadge: false, isPendingDownload: isPendingDownload)
@@ -1232,7 +1386,7 @@ private struct ComicCell: View {
     @ViewBuilder
     private var cellMenu: some View {
             if !isEditing {
-                Button(action: onSelect) {
+                Button(action: onOpen) {
                     Label("Apri", systemImage: "book")
                 }
                 Button(action: toggleFavorite) {
@@ -1304,7 +1458,7 @@ private struct ComicCell: View {
 
     #if os(macOS)
     private func revealInFinder() {
-        let url = LibraryStorage.fileURL(forRelativePath: comic.relativePath ?? "")
+        let url = comic.fileURL
         RevealInFinder.reveal(url)
     }
     #endif
@@ -1379,8 +1533,8 @@ private struct RemoteDownloadControl: View {
     }
 
     private var cloudURL: URL? {
-        guard !comic.isRemotePlaceholder, let relativePath = comic.relativePath else { return nil }
-        return LibraryStorage.fileURL(forRelativePath: relativePath)
+        guard !comic.isRemotePlaceholder, comic.relativePath != nil else { return nil }
+        return comic.fileURL
     }
 
     private func downloadBadge(image: String) -> some View {
@@ -1421,6 +1575,66 @@ private struct LiveDownloadProgress: View {
         .clipShape(Circle())
         .padding(6)
         .accessibilityLabel("Download in corso")
+    }
+}
+#endif
+
+#if os(macOS)
+/// Window-scoped keyDown monitor for the library grid (see the call site for why it isn't
+/// `onKeyPress`/`onDeleteCommand`). Only the library window's own events, only while it's key,
+/// never while a text view (search field, alert text field) is first responder.
+private struct LibraryGridKeyMonitor: NSViewRepresentable {
+    enum Key { case delete, selectAll, escape }
+    /// Returns true when the key was consumed.
+    let onKey: (Key) -> Bool
+
+    func makeNSView(context: Context) -> MonitoringView {
+        let view = MonitoringView()
+        view.onKey = onKey
+        return view
+    }
+
+    func updateNSView(_ nsView: MonitoringView, context: Context) {
+        nsView.onKey = onKey
+    }
+
+    final class MonitoringView: NSView {
+        var onKey: ((Key) -> Bool)?
+        private var monitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window == nil {
+                if let monitor { NSEvent.removeMonitor(monitor) }
+                monitor = nil
+                return
+            }
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, self.handle(event) else { return event }
+                return nil
+            }
+        }
+
+        deinit {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+        }
+
+        private func handle(_ event: NSEvent) -> Bool {
+            guard let window, event.window === window, window.isKeyWindow,
+                  window.attachedSheet == nil else { return false }
+            if window.firstResponder is NSText { return false }
+            let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            let key: Key
+            switch event.keyCode {
+            case 51 where modifiers.isEmpty || modifiers == .command: key = .delete  // ⌫, ⌘⌫
+            case 117 where modifiers.isEmpty: key = .delete                          // ⌦
+            case 0 where modifiers == .command: key = .selectAll                     // ⌘A
+            case 53 where modifiers.isEmpty: key = .escape
+            default: return false
+            }
+            return onKey?(key) ?? false
+        }
     }
 }
 #endif

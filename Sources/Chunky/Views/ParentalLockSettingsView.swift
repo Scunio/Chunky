@@ -95,7 +95,7 @@ struct ParentalLockSections: View {
                         set: { lock.isEnabled = $0 }
                     ))
                     #if !os(tvOS)
-                    Toggle("Sblocca con Face ID / Touch ID", isOn: Binding(
+                    Toggle(biometricsToggleTitle, isOn: Binding(
                         get: { lock.isBiometricsEnabled },
                         set: { lock.isBiometricsEnabled = $0 }
                     ))
@@ -220,3 +220,16 @@ struct ParentalLockSections: View {
 #Preview {
     ParentalLockSettingsView()
 }
+
+#if !os(tvOS)
+private extension ParentalLockSections {
+    /// Macs only have Touch ID.
+    var biometricsToggleTitle: LocalizedStringKey {
+        #if os(macOS)
+        "Sblocca con Touch ID"
+        #else
+        "Sblocca con Face ID / Touch ID"
+        #endif
+    }
+}
+#endif

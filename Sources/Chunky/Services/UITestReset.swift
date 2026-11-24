@@ -18,7 +18,15 @@ enum UITestReset {
 
     private static let performOnce: Void = {
         let fileManager = FileManager.default
+        #if os(macOS)
+        // Safety net: never wipe anything on macOS unless it is the dedicated test sandbox
+        // (an unsigned build is not sandboxed, so the default paths are the user's real folders).
+        guard let sandbox = LibraryStorage.uiTestingSandboxURL,
+              LibraryStorage.rootFolderURL().path.hasPrefix(sandbox.path + "/") else { return }
+        let storeDirectory = sandbox.appendingPathComponent("Stores", isDirectory: true)
+        #else
         let storeDirectory = NSPersistentContainer.defaultDirectoryURL()
+        #endif
         for name in ["Chunky.sqlite", "ChunkyLocal.sqlite"] {
             for suffix in ["", "-wal", "-shm"] {
                 try? fileManager.removeItem(at: storeDirectory.appendingPathComponent(name + suffix))
@@ -34,7 +42,11 @@ enum UITestReset {
                 try? fileManager.removeItem(at: url)
             }
         }
+        #if !os(macOS)
+        // On macOS an unsigned build shares the real app's preferences domain: never wipe the
+        // user's own settings (language, parental lock...) from a test launch.
         for key in defaultsKeys { UserDefaults.standard.removeObject(forKey: key) }
+        #endif
     }()
 
     /// Idempotent; no-op unless `--uitesting --uitesting-reset` were passed.

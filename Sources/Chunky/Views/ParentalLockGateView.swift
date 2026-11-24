@@ -5,6 +5,12 @@ struct ParentalLockGateView: View {
     @State private var enteredPasscode = ""
     @State private var showError = false
     @FocusState private var isPasscodeFocused: Bool
+    #if os(macOS)
+    /// Every Mac window (library, readers, Settings) shows its own lock screen: only the key
+    /// one asks for Touch ID on its own, the others wait for their button.
+    @Environment(\.controlActiveState) private var controlActiveState
+    @State private var didAutoAttemptBiometrics = false
+    #endif
 
     var body: some View {
         VStack(spacing: 20) {
@@ -42,7 +48,12 @@ struct ParentalLockGateView: View {
 
             if lock.isBiometricsEnabled {
                 Button(action: attemptBiometrics) {
+                    #if os(macOS)
+                    // Macs have Touch ID only.
+                    Label("Usa Touch ID", systemImage: "touchid")
+                    #else
                     Label("Usa Face ID / Touch ID", systemImage: "faceid")
+                    #endif
                 }
             }
         }
@@ -50,9 +61,26 @@ struct ParentalLockGateView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             isPasscodeFocused = true
+            #if os(macOS)
+            autoAttemptBiometricsIfKey()
+            #else
             attemptBiometrics()
+            #endif
         }
+        #if os(macOS)
+        // Locked while the app was in the background: no window was key at appear time, so
+        // the prompt comes when the user brings this window forward (once per lock screen).
+        .onChange(of: controlActiveState) { _, _ in autoAttemptBiometricsIfKey() }
+        #endif
     }
+
+    #if os(macOS)
+    private func autoAttemptBiometricsIfKey() {
+        guard controlActiveState == .key, !didAutoAttemptBiometrics else { return }
+        didAutoAttemptBiometrics = true
+        attemptBiometrics()
+    }
+    #endif
 
     private func attemptUnlock() {
         if lock.unlock(withPasscode: enteredPasscode) {
