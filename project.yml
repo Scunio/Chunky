@@ -89,7 +89,9 @@ targetTemplates:
         PRODUCT_NAME: Chunky
         SWIFT_OBJC_BRIDGING_HEADER: Sources/Chunky/Chunky-Bridging-Header.h
         PRODUCT_BUNDLE_IDENTIFIER: com.scunio.Chunky
-        MARKETING_VERSION: "1.0.7"
+        # Versione unica per iOS, macOS e tvOS: tenere i tre MARKETING_VERSION identici (cercali con grep).
+        # Le 1.0.8 (iOS) e 1.0.9 (macOS) sono già approvate su App Store Connect: si riparte da 1.0.10.
+        MARKETING_VERSION: "1.0.10"
         CURRENT_PROJECT_VERSION: "6"
         SWIFT_VERSION: "5.0"
         ENABLE_PREVIEWS: true
@@ -186,8 +188,7 @@ targets:
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"
-        # La 1.0.7 è già pubblicata su App Store: la prossima versione iOS è la 1.0.8.
-        MARKETING_VERSION: "1.0.8"
+        MARKETING_VERSION: "1.0.10"
 
   Chunky_macOS:
     platform: macOS
@@ -258,8 +259,7 @@ targets:
         com.apple.developer.aps-environment: development
     settings:
       base:
-        # La 1.0.8 è già pubblicata su Mac App Store: la prossima versione macOS è la 1.0.9.
-        MARKETING_VERSION: "1.0.9"
+        MARKETING_VERSION: "1.0.10"
 
   Chunky_tvOS:
     platform: tvOS
