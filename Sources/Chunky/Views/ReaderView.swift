@@ -53,35 +53,35 @@ struct ReaderContentView: View {
     @Environment(\.dismissWindow) private var dismissWindow
     #endif
     /// Explicit single/double page choice, only valid when not in automatic mode.
-    @AppStorage("doublePageMode") private var isDoublePageEnabled = false
+    @AppStorage("doublePageMode") var isDoublePageEnabled = false
     /// In automatic mode, double page simply follows the available space (isDoublePageAllowed).
-    @AppStorage("doublePageAutoMode") private var isDoublePageAutoMode = true
+    @AppStorage("doublePageAutoMode") var isDoublePageAutoMode = true
     /// If true, the first page (usually the cover) is always shown alone even in double
     /// page, and pairing into two pages resumes from the second one.
     @AppStorage("doublePageCoverAlone") private var isCoverAlone = true
-    @AppStorage("tapPageTurnStyle") private var tapPageTurnStyle = TapPageTurnStyle.slide
-    @AppStorage("swipePageTurnStyle") private var swipePageTurnStyle = TapPageTurnStyle.slide
+    @AppStorage("tapPageTurnStyle") var tapPageTurnStyle = TapPageTurnStyle.slide
+    @AppStorage("swipePageTurnStyle") var swipePageTurnStyle = TapPageTurnStyle.slide
     /// Duration of the "Dissolvenza" (`.fade`) page-turn style's cross-dissolve — see
     /// `PageCollectionPager.fadeDuration`.
-    @AppStorage("fadeTransitionDuration") private var fadeTransitionDuration = 0.25
-    @AppStorage("oneHandedMode") private var isOneHandedModeEnabled = false
-    @AppStorage("oneHandedZonesReversed") private var isOneHandedZonesReversed = false
-    @AppStorage("hotCornersEnabled") private var isHotCornersEnabled = false
-    @AppStorage("tapToPanEnabled") private var isTapToPanEnabled = false
+    @AppStorage("fadeTransitionDuration") var fadeTransitionDuration = 0.25
+    @AppStorage("oneHandedMode") var isOneHandedModeEnabled = false
+    @AppStorage("oneHandedZonesReversed") var isOneHandedZonesReversed = false
+    @AppStorage("hotCornersEnabled") var isHotCornersEnabled = false
+    @AppStorage("tapToPanEnabled") var isTapToPanEnabled = false
     @AppStorage("twoFingerBrightnessEnabled") private var isTwoFingerBrightnessEnabled = true
     @AppStorage("readerIdleResetSeconds") private var readerIdleReset = ReaderIdleResetOption.never
     @State private var idleResetWorkItem: DispatchWorkItem?
     /// Raised by PageView (via binding) so the pager knows whether the current page is
     /// zoomed in: with zoom active, swipe-to-change-page must be suspended, otherwise it
     /// conflicts with the drag used to move around inside the zoomed page.
-    @State private var isZoomed = false
+    @State var isZoomed = false
     /// Style and direction of the last page change: the pager uses them to choose the
     /// transition. They're needed because the style is per-gesture (tap and swipe have
     /// independent settings), so it can't be read from AppStorage when building the view:
     /// it's necessary to know *which* gesture triggered the change.
-    @State private var turnStyle = TapPageTurnStyle.slide
+    @State var turnStyle = TapPageTurnStyle.slide
     /// +1 = the page index increases, -1 = it decreases (already adjusted for reading direction).
-    @State private var turnDirection = 1
+    @State var turnDirection = 1
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -91,34 +91,34 @@ struct ReaderContentView: View {
     /// Pending auto-hide and last pointer location — see `macPointerMoved`. A reference held in
     /// `@State`, not two `@State` values: it changes on every mouse move, and mutating a
     /// `@State` value there would re-evaluate the whole reader body at pointer rate.
-    @State private var macChromeIdle = MacChromeIdleState()
-    private static let macChromeIdleDelay: TimeInterval = 2.5
+    @State var macChromeIdle = MacChromeIdleState()
+    static let macChromeIdleDelay: TimeInterval = 2.5
     #endif
-    @ScaledMetric(relativeTo: .callout) private var pageCounterCharWidth: CGFloat = 7
-    @ScaledMetric(relativeTo: .callout) private var pageCounterMinWidth: CGFloat = 70
+    @ScaledMetric(relativeTo: .callout) var pageCounterCharWidth: CGFloat = 7
+    @ScaledMetric(relativeTo: .callout) var pageCounterMinWidth: CGFloat = 70
     #if os(iOS)
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     /// Keeps the pager in the focus chain so `.onKeyPress` sees an iPad hardware keyboard.
-    @FocusState private var isIOSPagerFocused: Bool
+    @FocusState var isIOSPagerFocused: Bool
     #endif
     #if os(macOS)
     /// Last ⌘+/⌘−/⌘0 request, handed to the visible `PageView`s via the environment.
-    @State private var macZoomCommand: ReaderZoomCommand?
+    @State var macZoomCommand: ReaderZoomCommand?
     /// Target of a page turn whose `currentPage` assignment is deferred by `macTurnPage`:
     /// further turns requested meanwhile step from here, not from the stale `currentPage`.
-    @State private var macPendingTarget: Int?
+    @State var macPendingTarget: Int?
     #endif
 
     /// Viewport dimensions, to figure out whether there's really horizontal space for
     /// double page: on iPad the size class stays "regular" even in portrait, so it isn't
     /// enough on its own to avoid wasting space (two narrow pages with black bands above/below).
-    @State private var viewportSize: CGSize = .zero
+    @State var viewportSize: CGSize = .zero
     @State var provider: ComicPageProvider?
     // Prefetch around the current page on both platforms: it used to be macOS-only (the iOS
     // pager has its own cache of already-built views that avoided the most visible problem,
     // rebuilding everything on every page, but never gets ahead of decoding before the user
     // pages through — every new page still starts from scratch).
-    @State private var pageCache: PageImageCache?
+    @State var pageCache: PageImageCache?
     // Duplicate the keys also read by `PageView`: needed here to invalidate the cache when
     // they change (see `.onChange` further below), not for the processing itself.
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
@@ -129,7 +129,7 @@ struct ReaderContentView: View {
     /// Page arrived via CloudKit from another device while the reader is open and the
     /// local page hasn't followed it. Shown as a "Vai alla pagina" banner instead of
     /// jumping automatically — see `handleRemotePageChange`.
-    @State private var pendingRemotePage: Int?
+    @State var pendingRemotePage: Int?
     /// Throttles `context.save()` while paging: every page turn updates `lastReadPage`
     /// in memory immediately, but persisting (and therefore enqueueing a CloudKit
     /// export transaction) happens at most every few seconds, plus a guaranteed flush
@@ -149,7 +149,7 @@ struct ReaderContentView: View {
     /// is in progress: the comic can always be opened, it's the opening itself that downloads it.
     @State private var downloadProgress: Double?
     /// The download in progress, so it can be cancelled directly from the reader.
-    @State private var downloadItem: DownloadItem?
+    @State var downloadItem: DownloadItem?
     /// A load is in progress (iCloud download and/or opening the archive): see
     /// `loadComic`.
     @State private var isLoadingComic = false
@@ -190,24 +190,24 @@ struct ReaderContentView: View {
     /// See `handleHeaderMoveCommand` — gates the header's Left/Right page-turn proxy so it
     /// only kicks in after an explicit Down, not on every Right press made while browsing
     /// between header icons.
-    @State private var isAwaitingPagerReturn = false
+    @State var isAwaitingPagerReturn = false
     /// Remote-driven zoom (Play/Pause toggles it, D-pad pans while zoomed, Menu exits it):
     /// tvOS has no pinch/drag, so it's applied as a plain scale+offset around the whole
     /// spread in `tvOSPager` rather than inside the shared `PageView`.
-    @State private var tvZoomScale: CGFloat = 1
-    @State private var tvZoomOffset: CGSize = .zero
+    @State var tvZoomScale: CGFloat = 1
+    @State var tvZoomOffset: CGSize = .zero
     /// Pending auto-hide of the reader chrome — see `scheduleChromeAutoHide`.
-    @State private var chromeAutoHideWorkItem: DispatchWorkItem?
+    @State var chromeAutoHideWorkItem: DispatchWorkItem?
     #endif
-    @State private var isControlsVisible = true
-    @State private var isSharePresented = false
+    @State var isControlsVisible = true
+    @State var isSharePresented = false
     @State private var shareImage: PlatformImage?
-    @State private var pendingNextComic: ComicEntity?
+    @State var pendingNextComic: ComicEntity?
     @State var isPanelSelectionPresented = false
     /// Text search within the comic. The index is only created the first time the card is
     /// opened: building it when the reader opens on a comic that's never been searched
     /// would mean paying for OCR nobody asked for.
-    @State private var isFindPresented = false
+    @State var isFindPresented = false
     @State private var findQuery = ""
     @State private var textIndex: ComicTextIndex?
     @State var isPageJumpPresented = false
@@ -225,7 +225,7 @@ struct ReaderContentView: View {
     /// to touches that fall on the bars (see `PageTapZones.topInset`). Measured rather than
     /// estimated because they depend on the safe area, text size and the bars' content.
     @State var headerHeight: CGFloat = 0
-    @State private var footerHeight: CGFloat = 0
+    @State var footerHeight: CGFloat = 0
     /// Brightness level shown by the indicator during the two-finger gesture, `nil` when
     /// the indicator is hidden. Without visible feedback there's no way, on device, to
     /// distinguish "the gesture isn't arriving" from "brightness isn't moving" — see
@@ -264,13 +264,13 @@ struct ReaderContentView: View {
     }
 
     /// Effective double page: in automatic mode it follows the available space, otherwise the manual choice.
-    private var effectiveDoublePage: Bool {
+    var effectiveDoublePage: Bool {
         isDoublePageAutoMode ? isDoublePageAllowed : (isDoublePageEnabled && isDoublePageAllowed)
     }
 
     private var pageStep: Int { effectiveDoublePage ? 2 : 1 }
 
-    private func pagination(pageCount: Int) -> ReaderPagination {
+    func pagination(pageCount: Int) -> ReaderPagination {
         ReaderPagination(
             pageCount: pageCount,
             pageStep: pageStep,
@@ -280,7 +280,7 @@ struct ReaderContentView: View {
     }
 
     /// Start indices of each spread (1 or 2 pages), used as navigation "tags"/steps.
-    private func spreadStarts(pageCount: Int) -> [Int] {
+    func spreadStarts(pageCount: Int) -> [Int] {
         pagination(pageCount: pageCount).spreadStarts
     }
 
@@ -732,117 +732,6 @@ struct ReaderContentView: View {
         try? context.save()
     }
 
-    /// Card to jump directly to a specific page, opened from the header's "..." menu.
-    /// `.card`'s tvOS focus halo is sized by the system, not by a button's own background/corner
-    /// radius — with a plain style it still draws a halo that can bleed into a tightly-spaced
-    /// sibling. Shared by `pageJumpCard` and `nextComicConfirmation`, whose "Annulla"/conferma
-    /// button pairs are the same shape.
-    private var readerCardButtonSpacing: CGFloat {
-        #if os(tvOS)
-        24
-        #else
-        12
-        #endif
-    }
-
-    private func pageJumpCard(provider: ComicPageProvider) -> some View {
-        VStack(spacing: 16) {
-            Text("Vai a pagina")
-                .font(.headline)
-                .foregroundColor(.white)
-
-            // `Stepper` doesn't exist on tvOS: two plain buttons do the same job there.
-            #if os(tvOS)
-            // ±10 next to ±1: one press per page made a 200-page comic practically
-            // unjumpable with the remote.
-            HStack(spacing: 20) {
-                Button(action: { jumpPageNumber = max(1, jumpPageNumber - 10) }) {
-                    Text("-10")
-                }
-                .accessibilityLabel(Text("Indietro di 10 pagine"))
-                .focused($readerFocus, equals: .dialogStep(-10))
-                Button(action: { jumpPageNumber = max(1, jumpPageNumber - 1) }) {
-                    Image(systemName: "minus.circle")
-                }
-                .accessibilityLabel(Text("Pagina precedente"))
-                .focused($readerFocus, equals: .dialogStep(-1))
-                Text("Pagina \(jumpPageNumber) di \(provider.pageCount)")
-                    .foregroundColor(.white)
-                    .monospacedDigit()
-                Button(action: { jumpPageNumber = min(max(provider.pageCount, 1), jumpPageNumber + 1) }) {
-                    Image(systemName: "plus.circle")
-                }
-                .accessibilityLabel(Text("Pagina successiva"))
-                .focused($readerFocus, equals: .dialogStep(1))
-                Button(action: { jumpPageNumber = min(max(provider.pageCount, 1), jumpPageNumber + 10) }) {
-                    Text("+10")
-                }
-                .accessibilityLabel(Text("Avanti di 10 pagine"))
-                .focused($readerFocus, equals: .dialogStep(10))
-            }
-            .padding(.horizontal, 8)
-            #else
-            Stepper(value: $jumpPageNumber, in: 1...max(provider.pageCount, 1)) {
-                Text("Pagina \(jumpPageNumber) di \(provider.pageCount)")
-                    .foregroundColor(.white)
-            }
-            .padding(.horizontal, 8)
-            #endif
-
-            HStack(spacing: readerCardButtonSpacing) {
-                Button(action: {
-                    isPageJumpPresented = false
-                    #if os(tvOS)
-                    readerFocus = .pager
-                    // See the identical fix on `nextComicConfirmation`'s Annulla for why.
-                    isAwaitingPagerReturn = true
-                    #endif
-                }) {
-                    Text("Annulla")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, readerCardButtonVerticalPadding)
-                        #if !os(tvOS)
-                        .background(Color.white.opacity(0.15))
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                        #endif
-                }
-                #if os(tvOS)
-                .focused($readerFocus, equals: .dialogCancel)
-                #endif
-                #if !os(tvOS)
-                .keyboardShortcut(.cancelAction)
-                #endif
-                Button(action: confirmPageJump) {
-                    Text("Vai")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, readerCardButtonVerticalPadding)
-                        #if !os(tvOS)
-                        .background(Color.accentColor)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                        #endif
-                }
-                #if os(tvOS)
-                .focused($readerFocus, equals: .dialogConfirm)
-                .tint(.accentColor)
-                #endif
-                #if !os(tvOS)
-                .keyboardShortcut(.defaultAction)
-                #endif
-            }
-            #if os(tvOS)
-            .buttonStyle(.card)
-            #else
-            .buttonStyle(PlainButtonStyle())
-            #endif
-        }
-        .padding(readerCardPadding)
-        .frame(maxWidth: readerCardMaxWidth)
-        .background(readerCardBackground)
-        .cornerRadius(16)
-    }
-
     /// Opens the search card, creating the index on first use and restarting the scan from
     /// the current page: if the index already existed from a previous session, it only
     /// resumes the pages it's missing.
@@ -882,7 +771,7 @@ struct ReaderContentView: View {
         #endif
     }
 
-    private func confirmPageJump() {
+    func confirmPageJump() {
         guard let provider = provider else { return }
         let target = pagination(pageCount: provider.pageCount).realigned(jumpPageNumber - 1)
         #if os(macOS)
@@ -908,7 +797,7 @@ struct ReaderContentView: View {
     }
 
     /// Prefetch around the current page, on both platforms.
-    private func prefetchAroundCurrentPage(provider: ComicPageProvider) async {
+    func prefetchAroundCurrentPage(provider: ComicPageProvider) async {
         guard let pageCache else { return }
         #if os(macOS) || os(iOS)
         // Nearest pages first, forward-biased (the next spread is by far the most likely
@@ -946,7 +835,7 @@ struct ReaderContentView: View {
     /// another gets the spread's height and a 2:3 width estimate (on iOS that's exactly what
     /// `SpreadPairView` lays out), a lone page the whole viewport. Shared by the prefetch and
     /// the page views so their cache keys match by construction.
-    private func pageUpscaleTargetSize(for index: Int, pageCount: Int) -> CGSize {
+    func pageUpscaleTargetSize(for index: Int, pageCount: Int) -> CGSize {
         let pag = pagination(pageCount: pageCount)
         guard pag.showsSecondPage(from: pag.realigned(index)) else { return viewportSize }
         return CGSize(width: viewportSize.height * 2 / 3, height: viewportSize.height)
@@ -959,7 +848,7 @@ struct ReaderContentView: View {
     /// The order of the two `.environment` calls is deliberate: the outer one applies to
     /// the transition layer, so `.move(edge:)`'s edges always resolve in LTR and we decide
     /// the direction ourselves in `pageTurnTransition`; the inner one mirrors the spread for manga.
-    private func pagerContent(provider: ComicPageProvider) -> some View {
+    func pagerContent(provider: ComicPageProvider) -> some View {
         spreadView(provider: provider)
             .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
             .id(currentPage)
@@ -973,7 +862,7 @@ struct ReaderContentView: View {
             }
     }
 
-    private func spreadView(provider: ComicPageProvider, start: Int? = nil) -> PageSpreadView {
+    func spreadView(provider: ComicPageProvider, start: Int? = nil) -> PageSpreadView {
         var view = PageSpreadView(provider: provider, leadingIndex: start ?? currentPage, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache)
         #if os(macOS)
         let pageCount = provider.pageCount
@@ -983,56 +872,10 @@ struct ReaderContentView: View {
         return view
     }
 
-    #if os(macOS)
-    /// Persistent pager: the current spread *and its two neighbours* stay mounted side by side
-    /// (each keyed by its start index, so a spread keeps its identity — and its already decoded
-    /// image — as it moves), and a page turn just animates their horizontal offsets. Before,
-    /// `.id(currentPage)` + `.transition` built the incoming spread from scratch on every turn,
-    /// mid-animation; now the page sliding in has been laid out and decoded while it waited
-    /// off-screen. Jumps further than one spread (Home/End, slider, Go to page) insert a spread
-    /// that wasn't mounted: it arrives with the same transition the old pager used.
-    ///
-    /// Only the visible spread takes hits (click zones, double-click zoom) and ⌘+/⌘−/⌘0, and a
-    /// neighbour drops its zoom when it leaves the screen (see `PageSpreadView.isActive`).
-    /// "Fade" stacks the spreads in place and cross-fades their opacity instead.
-    private func macPersistentPager(provider: ComicPageProvider) -> some View {
-        let starts = spreadStarts(pageCount: provider.pageCount)
-        let currentPosition = starts.firstIndex(of: currentPage) ?? starts.lastIndex(where: { $0 <= currentPage }) ?? 0
-        let window = starts.isEmpty ? [] : Array(starts[max(currentPosition - 1, 0)...min(currentPosition + 1, starts.count - 1)])
-        let rightToLeft = comic.readingDirection == .rightToLeft
-        let isFade = turnStyle == .fade
-        return GeometryReader { proxy in
-            ZStack {
-                ForEach(window, id: \.self) { start in
-                    let slot = (starts.firstIndex(of: start) ?? currentPosition) - currentPosition
-                    // The higher-index spread sits on the right in LTR, on the left in manga.
-                    let visualSlot = CGFloat(rightToLeft ? -slot : slot)
-                    spreadView(provider: provider, start: start)
-                        .environment(\.layoutDirection, rightToLeft ? .rightToLeft : .leftToRight)
-                        .frame(width: proxy.size.width, height: proxy.size.height)
-                        .offset(x: isFade ? 0 : visualSlot * proxy.size.width)
-                        .opacity(slot == 0 || !isFade ? 1 : 0)
-                        .allowsHitTesting(slot == 0)
-                        .accessibilityHidden(slot != 0)
-                        .transition(pageTurnTransition)
-                        .zIndex(slot == 0 ? 1 : 0)
-                }
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
-        }
-        // Outside the per-spread manga mirroring, so offsets and `.move(edge:)` resolve in LTR
-        // and the direction is decided above / in `pageTurnTransition`.
-        .environment(\.layoutDirection, .leftToRight)
-        .task(id: currentPage) {
-            await prefetchAroundCurrentPage(provider: provider)
-        }
-    }
-    #endif
-
     /// Translates the style of the gesture that triggered the change into the corresponding
     /// transition: side slide, fade or hard cut (for "Immediate" the animation is already
     /// disabled in `step`, here it's enough to add no effects).
-    private var pageTurnTransition: AnyTransition {
+    var pageTurnTransition: AnyTransition {
         switch turnStyle {
         case .fade:
             return .opacity
@@ -1054,314 +897,13 @@ struct ReaderContentView: View {
 
     #endif
 
-    #if os(iOS)
-    /// When the swipe must follow the finger, `TabView(.page)` is used: `UIPageViewController`'s
-    /// interactive paging doesn't complete the transition within this hierarchy (the pan
-    /// starts, the dataSource returns the neighbouring page, but `didFinishAnimating` never
-    /// arrives — also verified with the content reduced to a solid color, so it's not the
-    /// fault of the page's gestures or the overlays). TabView, on the other hand, works, at
-    /// the cost of not being able to replace its own slide animation.
-    ///
-    /// For the other styles that's exactly what's needed: "Immediate" and "Fade" can't be
-    /// represented by a continuous drag, so there gesture-driven paging is switched off, the
-    /// swipe is recognized as a discrete gesture and the page turns programmatically with
-    /// the right animation — something `PageTurnPager` can do and TabView can't.
-    @ViewBuilder
-    private func iOSPager(provider: ComicPageProvider) -> some View {
-        // A single pager for all styles. There used to be two: `TabView(.page)` when swipe
-        // and tap were both "Scroll", programmatic pager otherwise. TabView fell because it
-        // can't suspend its own scrolling when the page is zoomed in, so dragging to pan
-        // around the zoomed page changed the page.
-        //
-        // `PageCollectionPager` suspends scrolling with `isScrollEnabled`, which is a
-        // property and not a remount: `UIPageViewController`, for the same thing, forced you
-        // to detach the `dataSource`, and therefore to reconfigure its own gesture
-        // recognizers while the finger was still on the screen.
-        Group {
-            programmaticPager(provider: provider)
-        }
-        // At the whole pager's level, not inside `PageView.onAppear`: starts right away on
-        // a page change, in parallel with any animation, instead of waiting for the
-        // incoming page to request it — same reason it's on `pagerContent` on macOS.
-        .task(id: currentPage) {
-            await prefetchAroundCurrentPage(provider: provider)
-        }
-        // Same shortcuts as the "Go to" menu on Mac (`ChunkyCommands`), but via `onKeyPress`
-        // instead of `.commands`: on iPad there's no menu bar to populate, and `.commands`
-        // would still need the same `.focusedSceneValue` infrastructure already designed
-        // for the Mac's multiple windows, useless here with a single scene. Only useful
-        // with an external keyboard connected; nothing changes for touch.
-        .onKeyPress(.leftArrow) {
-            advancePage(-1, provider: provider, style: tapPageTurnStyle)
-            return .handled
-        }
-        .onKeyPress(.rightArrow) {
-            advancePage(1, provider: provider, style: tapPageTurnStyle)
-            return .handled
-        }
-        .onKeyPress(.space) {
-            // Space always moves forward in *reading* order (like Page Down), not toward
-            // the right: in a manga that's the left neighbour — same as the Mac's
-            // `forwardInReadingOrder`. The arrows above stay spatial.
-            advancePage(comic.readingDirection == .rightToLeft ? -1 : 1, provider: provider, style: tapPageTurnStyle)
-            return .handled
-        }
-        // `onKeyPress` only fires on a view in the focus chain: without being focusable the
-        // pager never received hardware-keyboard events on iPad. No focus ring — it's the
-        // whole page. Re-focused whenever an overlay that takes the keyboard goes away.
-        .focusable()
-        .focusEffectDisabled()
-        .focused($isIOSPagerFocused)
-        .onAppear { isIOSPagerFocused = true }
-        .onChange(of: isIOSKeyboardOverlayPresented) { _, presented in
-            if !presented { isIOSPagerFocused = true }
-        }
-    }
-
-    /// Something on screen with its own keyboard handling (text fields, cards, sheets):
-    /// the pager gives focus up while it's there and takes it back afterwards.
-    private var isIOSKeyboardOverlayPresented: Bool {
-        isFindPresented || isPageJumpPresented || isPanelSelectionPresented || isInfoPresented
-            || isToolsPresented || isAccountsPresented || isSharePresented || pendingNextComic != nil
-    }
-
-    /// Same options `tapZonesOrControlsToggle` builds for `PageTapZones`, handed down to the
-    /// zoom coordinators too — see `PageSpreadView.tapZoneOptions`.
-    private var tapZoneOptions: PageTapZoneGeometry.Options {
-        PageTapZoneGeometry.Options(
-            oneHanded: isOneHandedModeEnabled,
-            oneHandedReversed: isOneHandedZonesReversed,
-            rightToLeft: comic.readingDirection == .rightToLeft,
-            hotCorners: isHotCornersEnabled,
-            zonesEnabled: tapPageTurnStyle != .disabled,
-            // Both bars span from the true screen edge inwards, and so does the pager these
-            // zones cover, so the measured heights are the exclusion bands as they are: the
-            // header's own status-bar padding is already part of `headerHeight` (see `header`),
-            // the footer's home-indicator padding part of `footerHeight`.
-            topInset: isControlsVisible ? headerHeight : 0,
-            bottomInset: isControlsVisible ? footerHeight : 0
-        )
-    }
-
-    private func pageContent(provider: ComicPageProvider, start: Int) -> some View {
-        var view = PageSpreadView(provider: provider, leadingIndex: start, pagination: pagination(pageCount: provider.pageCount), isZoomed: $isZoomed, imageCache: pageCache, isActive: start == currentPage, tapZoneOptions: tapZoneOptions)
-        let pageCount = provider.pageCount
-        view.upscaleTargetSize = { pageUpscaleTargetSize(for: $0, pageCount: pageCount) }
-        return view
-            .environment(\.layoutDirection, comic.readingDirection == .rightToLeft ? .rightToLeft : .leftToRight)
-    }
-
-    /// The tap zones are mounted once here, as a sibling of the pager, not inside each page's
-    /// content: `pageContent` is rebuilt per spread start, and the pager keeps 2-3 of them
-    /// alive at once for smooth swiping, so one `PageTapZones` per page meant that many
-    /// `TapZoneRelay` coordinators alive simultaneously — each with its own window-attached
-    /// recognizer and its own tap-debounce state (see `TapZoneRelay.Coordinator`). That state
-    /// needs to outlive a single tap's disambiguation window; a per-page coordinator doesn't
-    /// reliably: `PageCollectionPager.refreshVisibleContent()` reconfigures visible cells'
-    /// content on every page change, which tears down and rebuilds that page's `PageTapZones`
-    /// — silently dropping a tap still waiting out its window. Measured live: tap the center
-    /// band right after a page change and the pending "toggle controls" never fires.
-    ///
-    /// Mounting it once instead is safe here even though `pageContent` no longer overlays it:
-    /// the historical reason for nesting it inside the content (an overlaid sibling stealing
-    /// every touch via `hitTest`, see the old comment this replaced) doesn't apply to this
-    /// window-relay implementation — `RelayView.hitTest` already always returns `nil`, so it
-    /// was never "on top" for hit-testing purposes regardless of where in the tree it lives.
-    /// macOS's own `PageTapZones` has always been mounted this way, as a pager sibling.
-    private func programmaticPager(provider: ComicPageProvider) -> some View {
-        let isInteractiveSwipe = swipePageTurnStyle == .slide && !isZoomed
-        return ZStack {
-            PageCollectionPager(
-                starts: spreadStarts(pageCount: provider.pageCount),
-                selection: $currentPage,
-                rightToLeft: comic.readingDirection == .rightToLeft,
-                turnStyle: turnStyle,
-                interactiveSwipe: isInteractiveSwipe,
-                resetToken: PagerResetToken(
-                    doublePage: effectiveDoublePage,
-                    rightToLeft: comic.readingDirection == .rightToLeft,
-                    pageCount: provider.pageCount,
-                    backgroundIsDark: isBackgroundDark
-                ),
-                fadeDuration: fadeTransitionDuration
-            ) { start in
-                pageContent(provider: provider, start: start)
-            }
-
-            if !isInteractiveSwipe && swipePageTurnStyle != .disabled && !isZoomed {
-                discreteSwipeOverlay(provider: provider)
-            }
-
-            pageTapZonesOverlay(provider: provider)
-        }
-    }
-
-    /// Recognizes the swipe as a discrete gesture (threshold exceeded = one page) for the
-    /// styles that interactive paging can't render. `simultaneousGesture` so as not to steal
-    /// the touch from the tap zones underneath.
-    private func discreteSwipeOverlay(provider: ComicPageProvider) -> some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 24)
-                    .onEnded { value in
-                        guard abs(value.translation.width) > abs(value.translation.height),
-                              abs(value.translation.width) > 60 else { return }
-                        advancePage(value.translation.width < 0 ? 1 : -1, provider: provider, style: swipePageTurnStyle)
-                    }
-            )
-    }
-
-    @available(*, deprecated, renamed: "discreteSwipeOverlay")
-    private func discreteSwipeCatcher(provider: ComicPageProvider) -> some View {
-        discreteSwipeOverlay(provider: provider)
-    }
-
-    private func pageTapZonesOverlay(provider: ComicPageProvider) -> some View {
-        PageTapZones(
-            oneHanded: isOneHandedModeEnabled,
-            oneHandedReversed: isOneHandedZonesReversed,
-            hotCorners: isHotCornersEnabled,
-            zonesEnabled: tapPageTurnStyle != .disabled,
-            rightToLeft: comic.readingDirection == .rightToLeft,
-            // See the identical comment on `tapZoneOptions`.
-            topInset: isControlsVisible ? headerHeight : 0,
-            bottomInset: isControlsVisible ? footerHeight : 0,
-            isZoomed: isZoomed
-        ) {
-            // With "Tap-to-pan" the "back" zone also advances: handy if you can't
-            // comfortably reach both sides of the screen. Ignored while one-handed mode is
-            // on: there both zones already share one action (`PageTapZoneGeometry.action`'s
-            // `oneHandedAction`, following `isOneHandedZonesReversed`) for the same "can't
-            // reach both sides" reason, so this would otherwise silently fight that choice
-            // — turning "one-handed, reversed" (meant to send both zones back) into "both
-            // zones forward" behind the user's back, with no indication why.
-            advancePage(isTapToPanEnabled && !isOneHandedModeEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
-        } onNext: {
-            advancePage(1, provider: provider, style: tapPageTurnStyle)
-        } onToggleControls: {
-            toggleControls()
-        } onExit: {
-            exitReader()
-        } onOpenSettings: {
-            openTools()
-        } onToggleDoublePage: {
-            if isDoublePageAllowed { isDoublePageEnabled.toggle() }
-        }
-    }
-
-    @available(*, deprecated, renamed: "pageTapZonesOverlay")
-    private func tapZonesOrControlsToggle(provider: ComicPageProvider) -> some View {
-        pageTapZonesOverlay(provider: provider)
-    }
-    #elseif os(macOS)
-    private func macOSPager(provider: ComicPageProvider) -> some View {
-        ZStack {
-            macPersistentPager(provider: provider)
-        }
-        // No padding for the chrome any more: the actions are in the window toolbar and the
-        // page counter is a floating HUD, so the page keeps one size whether or not the HUD is
-        // showing (it used to shrink/grow by the bars' height on every toggle).
-        // Scoped to the pager: the page-turn animation used to be a global `withAnimation`,
-        // which also animated every other view depending on `currentPage` (page counter,
-        // slider, header) on each turn. `nil` for "Immediate".
-        .animation(macPageTurnAnimation, value: currentPage)
-        .clipped()
-        // A gesture on the pager, not views layered over it: see `PageClickZones`.
-        .modifier(PageClickZones(
-            zonesEnabled: tapPageTurnStyle != .disabled,
-            hotCorners: isHotCornersEnabled,
-            rightToLeft: comic.readingDirection == .rightToLeft,
-            isZoomed: isZoomed,
-            onPrevious: {
-                // "Always advance on tap": the back zone advances too (as on iOS).
-                advancePage(isTapToPanEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
-            },
-            onNext: { advancePage(1, provider: provider, style: tapPageTurnStyle) },
-            onToggleControls: { toggleControls() },
-            onExit: { exitReader() },
-            onOpenSettings: { openTools() },
-            onToggleDoublePage: { if isDoublePageAllowed { isDoublePageEnabled.toggle() } },
-            hintColor: chromeForeground,
-            onPointerMoved: { macPointerMoved(to: $0) }
-        ))
-        .background(ScrollSwipeMonitor { direction in
-            guard swipePageTurnStyle != .disabled, !isZoomed else { return }
-            advancePage(direction, provider: provider, style: swipePageTurnStyle)
-        })
-        .background(ReaderKeyMonitor(isEnabled: isReaderKeyboardActive) { key in
-            let readingForward = comic.readingDirection == .rightToLeft ? -1 : 1
-            switch key {
-            case .left: advancePage(-1, provider: provider, style: tapPageTurnStyle)
-            case .right: advancePage(1, provider: provider, style: tapPageTurnStyle)
-            case .forward: advancePage(readingForward, provider: provider, style: tapPageTurnStyle)
-            case .backward: advancePage(-readingForward, provider: provider, style: tapPageTurnStyle)
-            case .first:
-                macTurnPage(to: spreadStarts(pageCount: provider.pageCount).first ?? 0, style: tapPageTurnStyle)
-            case .last:
-                macTurnPage(to: spreadStarts(pageCount: provider.pageCount).last ?? 0, style: tapPageTurnStyle)
-            case .escape:
-                // Esc dismisses the "page N on another device" banner; otherwise it's
-                // left to the system (e.g. leaving full screen).
-                guard pendingRemotePage != nil else { return false }
-                pendingRemotePage = nil
-            }
-            return true
-        })
-        // Published only while this view is alive, so only while a reader window is really
-        // on stage — no parental-lock filter here, because with `lock.isLocked`
-        // `ReaderWindowContainer` shows `ParentalLockGateView` instead of `ReaderView`, so
-        // this code simply isn't mounted at all.
-        .focusedSceneValue(\.readerActions, isReaderKeyboardActive ? macReaderCommandActions(provider: provider) : nil)
-        .environment(\.readerZoomCommand, macZoomCommand)
-    }
-
-    /// False while something with its own keyboard handling is on screen (a text field, a
-    /// card, a sheet): the menu items go disabled, and a disabled item doesn't steal its bare
-    /// Left/Right/Space key equivalent from the search or page-jump fields.
-    private var isReaderKeyboardActive: Bool {
-        !(isFindPresented || isPageJumpPresented || isPanelSelectionPresented || isInfoPresented
-          || isToolsPresented || isAccountsPresented || isNewComicsPresented || isNowReadingPresented
-          || pendingNextComic != nil)
-    }
-
-    private func macReaderCommandActions(provider: ComicPageProvider) -> ReaderCommandActions {
-        let readingForward = comic.readingDirection == .rightToLeft ? -1 : 1
-        return ReaderCommandActions(
-            previousPage: { advancePage(-1, provider: provider, style: tapPageTurnStyle) },
-            nextPage: { advancePage(1, provider: provider, style: tapPageTurnStyle) },
-            forwardInReadingOrder: { advancePage(readingForward, provider: provider, style: tapPageTurnStyle) },
-            firstPage: {
-                let starts = spreadStarts(pageCount: provider.pageCount)
-                macTurnPage(to: starts.first ?? 0, style: tapPageTurnStyle)
-            },
-            lastPage: {
-                let starts = spreadStarts(pageCount: provider.pageCount)
-                macTurnPage(to: starts.last ?? 0, style: tapPageTurnStyle)
-            },
-            find: { presentFind() },
-            goToPage: {
-                jumpPageNumber = currentPage + 1
-                isPageJumpPresented = true
-            },
-            zoomIn: { sendZoomCommand(.zoomIn) },
-            zoomOut: { sendZoomCommand(.zoomOut) },
-            actualSize: { sendZoomCommand(.reset) }
-        )
-    }
-
-    private func sendZoomCommand(_ kind: ReaderZoomCommand.Kind) {
-        macZoomCommand = ReaderZoomCommand(id: (macZoomCommand?.id ?? 0) + 1, kind: kind)
-    }
-    #endif
-
     /// Moves forward/back by one spread, respecting the current reading direction (manga =
     /// reversed). `style` is that of the gesture that triggered the change (tap or
     /// swipe/keyboard have independent settings) and decides the animation, rendered by
     /// `pageTurnTransition`. When the native pager is active (swipe and tap both on
     /// "Scroll") the swipe's slide doesn't go through here: the TabView handles it by
     /// following the finger.
-    private func advancePage(_ direction: Int, provider: ComicPageProvider, style: TapPageTurnStyle) {
+    func advancePage(_ direction: Int, provider: ComicPageProvider, style: TapPageTurnStyle) {
         #if os(macOS)
         let origin = macPendingTarget ?? currentPage
         #else
@@ -1404,50 +946,7 @@ struct ReaderContentView: View {
         }
     }
 
-    #if os(macOS)
-    /// The pager's own animation (see `.animation(_:value:)` on `macOSPager`): the "Fade" style
-    /// honors the user's duration setting, which before only the iOS pager read.
-    private var macPageTurnAnimation: Animation? {
-        switch turnStyle {
-        case .fade: return .easeInOut(duration: fadeTransitionDuration)
-        case .slide: return .easeInOut(duration: 0.2)
-        case .immediate, .disabled: return nil
-        }
-    }
-
-    /// Every macOS page turn goes through here. When the style or direction differs from the
-    /// previous turn, they are committed one runloop tick *before* the page changes: the
-    /// outgoing page keeps the removal transition from its last render, so updating both in the
-    /// same transaction made it leave toward the old direction (e.g. after going back, the next
-    /// "forward" turn slid the old page out the wrong side) or with the old style.
-    private func macTurnPage(to target: Int, style: TapPageTurnStyle) {
-        let origin = macPendingTarget ?? currentPage
-        guard target != origin else { return }
-        let direction = target > origin ? 1 : -1
-        guard style != turnStyle || direction != turnDirection else {
-            if macPendingTarget != nil {
-                // A deferred turn is still in flight: just retarget it.
-                macPendingTarget = target
-            } else {
-                currentPage = target
-            }
-            return
-        }
-        turnStyle = style
-        turnDirection = direction
-        macPendingTarget = target
-        // About one frame later, not a plain `async`: the main queue is drained before
-        // SwiftUI renders in the same run-loop pass, so both changes would land in a single
-        // update and the outgoing page would still leave with its stale transition.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 60) {
-            guard let pending = macPendingTarget else { return }
-            macPendingTarget = nil
-            currentPage = pending
-        }
-    }
-    #endif
-
-    private func toggleControls() {
+    func toggleControls() {
         resetIdleTimerIfNeeded()
         withAnimation(.easeInOut(duration: 0.22)) {
             isControlsVisible.toggle()
@@ -1456,35 +955,6 @@ struct ReaderContentView: View {
         if isControlsVisible { scheduleMacChromeAutoHide() } else { macChromeIdle.hideWorkItem?.cancel() }
         #endif
     }
-
-    #if os(macOS)
-    /// Pointer moved over the reader: reveal the HUD and restart the idle countdown.
-    private func macPointerMoved(to location: CGPoint) {
-        // Zero-distance hover updates (content changing under a still pointer) aren't the
-        // user moving the mouse.
-        if let last = macChromeIdle.lastPointerLocation, hypot(location.x - last.x, location.y - last.y) < 1 { return }
-        macChromeIdle.lastPointerLocation = location
-        if !isControlsVisible {
-            withAnimation(.easeInOut(duration: 0.22)) { isControlsVisible = true }
-        }
-        scheduleMacChromeAutoHide()
-    }
-
-    /// Hides the HUD after a few idle seconds, the way
-    /// QuickTime/Preview's slideshow do — never while the pointer is over the HUD itself.
-    private func scheduleMacChromeAutoHide() {
-        macChromeIdle.hideWorkItem?.cancel()
-        guard !isPointerOverMacFooter else { return }
-        let idle = macChromeIdle
-        let work = DispatchWorkItem {
-            idle.hideWorkItem = nil
-            guard isControlsVisible, !isPointerOverMacFooter, isReaderKeyboardActive else { return }
-            withAnimation(.easeInOut(duration: 0.3)) { isControlsVisible = false }
-        }
-        macChromeIdle.hideWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.macChromeIdleDelay, execute: work)
-    }
-    #endif
 
     /// "Showcase/kiosk" timer: if the reader stays inactive for the time chosen in
     /// Settings, it automatically returns to page 1. Every interaction (tap, page change)
@@ -1513,109 +983,7 @@ struct ReaderContentView: View {
         return libraryComics[nextIndex]
     }
 
-    /// Confirmation card shown at the end of reading: explicitly asks whether to open the
-    /// next comic in the library, showing its cover and title before proceeding.
-    private func nextComicConfirmation(_ next: ComicEntity) -> some View {
-        VStack(spacing: 16) {
-            Text("Fine del fumetto")
-                #if os(tvOS)
-                .font(.title2.bold())
-                #else
-                .font(.headline)
-                #endif
-                .foregroundColor(.white)
-
-            HStack(spacing: 12) {
-                ComicCoverView(comic: next)
-                    #if os(tvOS)
-                    .frame(width: 180, height: 270)
-                    #else
-                    .frame(width: 90, height: 135)
-                    #endif
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Continuare con:")
-                        #if os(tvOS)
-                        .font(.callout)
-                        #else
-                        .font(.caption)
-                        #endif
-                        .foregroundColor(.white.opacity(0.7))
-                    Text(next.title ?? "")
-                        #if os(tvOS)
-                        .font(.title3.bold())
-                        #else
-                        .font(.subheadline.bold())
-                        #endif
-                        .foregroundColor(.white)
-                        .lineLimit(2)
-                }
-                Spacer()
-            }
-
-            HStack(spacing: readerCardButtonSpacing) {
-                Button(action: {
-                    pendingNextComic = nil
-                    #if os(tvOS)
-                    readerFocus = .pager
-                    // Dismissing a Button bound via `.focused($readerFocus, equals:)` resets
-                    // `readerFocus` to nil as it leaves the tree — confirmed live via a
-                    // temporary print trace: the explicit `.pager` assignment right above gets
-                    // raced/overwritten, and real UIKit focus lands on some header button
-                    // instead (same "bug #2" class as tvOS-design-patterns.md, just triggered
-                    // by removal instead of an unbound-button hop). Rather than chase that
-                    // real focus transfer (already shown unreliable for a focused Button
-                    // elsewhere in this file), reuse the header's own proven fix: force the
-                    // Left/Right page-turn proxy on immediately, so paging still works right
-                    // away regardless of which header button silently ends up focused.
-                    isAwaitingPagerReturn = true
-                    #endif
-                }) {
-                    Text("Annulla")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, readerCardButtonVerticalPadding)
-                        #if !os(tvOS)
-                        .background(Color.white.opacity(0.15))
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                        #endif
-                }
-                #if os(tvOS)
-                .focused($readerFocus, equals: .dialogCancel)
-                #endif
-                #if !os(tvOS)
-                .keyboardShortcut(.cancelAction)
-                #endif
-                Button(action: { switchToComic(next) }) {
-                    Text("Apri")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, readerCardButtonVerticalPadding)
-                        #if !os(tvOS)
-                        .background(Color.accentColor)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                        #endif
-                }
-                #if os(tvOS)
-                .focused($readerFocus, equals: .dialogConfirm)
-                .tint(.accentColor)
-                #endif
-                #if !os(tvOS)
-                .keyboardShortcut(.defaultAction)
-                #endif
-            }
-            #if os(tvOS)
-            .buttonStyle(.card)
-            #else
-            .buttonStyle(PlainButtonStyle())
-            #endif
-        }
-        .padding(readerCardPadding)
-        .frame(maxWidth: readerCardMaxWidth)
-        .background(readerCardBackground)
-        .cornerRadius(16)
-    }
-
-    private func switchToComic(_ next: ComicEntity) {
+    func switchToComic(_ next: ComicEntity) {
         pendingNextComic = nil
         onSwitchComic(next)
     }
@@ -1626,7 +994,7 @@ struct ReaderContentView: View {
     /// persistence/export. Crash window: at most `progressSaveInterval` of progress.
     /// Logging is sparser than saving (every `progressLogStride` pages): each actual save was
     /// logged and reading half an hour buried Diagnostica under hundreds of lines.
-    private func scheduleProgressSave(page: Int) {
+    func scheduleProgressSave(page: Int) {
         if Date().timeIntervalSince(lastProgressSave) >= Self.progressSaveInterval {
             lastProgressSave = Date()
             try? context.save()
@@ -1688,7 +1056,7 @@ struct ReaderContentView: View {
         pendingRemotePage = target
     }
 
-    private func jumpToRemotePage() {
+    func jumpToRemotePage() {
         guard let target = pendingRemotePage, provider != nil else { return }
         pendingRemotePage = nil
         #if os(macOS)
@@ -1702,55 +1070,6 @@ struct ReaderContentView: View {
         readerFocus = .pager
         isAwaitingPagerReturn = true
         #endif
-    }
-
-    /// Floating banner for `pendingRemotePage`: deliberately not an auto-jump, which
-    /// would yank the page from under the user while they're actively reading on this
-    /// device too. Hidden while search/panel/next-comic cards are up so the cards
-    /// don't stack.
-    private func remotePageBanner(target: Int) -> some View {
-        VStack {
-            HStack(spacing: 12) {
-                Image(systemName: "icloud.and.arrow.down")
-                Text("Pagina \(target + 1) su un altro dispositivo")
-                    .font(.subheadline)
-                    .lineLimit(1)
-                Button("Vai") { jumpToRemotePage() }
-                    .font(.subheadline.bold())
-                Button(action: {
-                    pendingRemotePage = nil
-                    #if os(tvOS)
-                    readerFocus = .pager
-                    isAwaitingPagerReturn = true
-                    #endif
-                }) {
-                    Image(systemName: "xmark")
-                        .font(.footnote.bold())
-                }
-                .accessibilityLabel("Ignora")
-            }
-            .foregroundColor(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Color.black.opacity(0.85))
-            .cornerRadius(20)
-            // The reader fills the screen edge to edge on iOS, so a fixed 8pt inset
-            // puts this banner under the status bar and on top of the header pill.
-            // When the controls are visible, place it just below the measured header;
-            // otherwise keep it below the status bar. The measured height also adapts
-            // to iPad and landscape layouts where the header can be taller.
-            #if os(iOS)
-            .padding(.top, isControlsVisible
-                     ? headerHeight + 8
-                     : PlatformSafeArea.statusBarHeight + 8)
-            #else
-            .padding(.top, 8)
-            #endif
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .allowsHitTesting(true)
-        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     #if os(iOS)
@@ -1796,269 +1115,6 @@ struct ReaderContentView: View {
         }
     }
     #endif
-
-    var footer: some View {
-        Group {
-            if let provider = provider, provider.pageCount > 1 {
-                // Real end of the current spread, i.e. the start of the next one: `pageStep`
-                // is 2 for double page throughout, but with "cover alone" the first spread
-                // contains just one, and the label used to announce "1–2" while only the
-                // cover was on screen. Same thing for the last page of a comic with an odd
-                // page count.
-                let upperBound = spreadStarts(pageCount: provider.pageCount)
-                    .first(where: { $0 > currentPage }) ?? provider.pageCount
-                let label = upperBound - currentPage > 1
-                    ? "\(currentPage + 1)–\(upperBound) / \(provider.pageCount)"
-                    : "\(currentPage + 1) / \(provider.pageCount)"
-                #if os(tvOS)
-                // Just the page count, as its own floating pill: the slider next to it used
-                // to just be a progress decoration — there's no drag gesture on tvOS (no
-                // touch/trackpad to scrub with), so it was never actually usable, only ever
-                // reflecting the same number this label already says.
-                tvOSFloatingPill {
-                    Text(label)
-                        .font(.title3.monospacedDigit())
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                .foregroundColor(chromeForeground)
-                .environment(\.colorScheme, isBackgroundDark ? .dark : .light)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                #else
-                // Column width computed on the worst case ("100–101 / 164"), not on the
-                // current label: fixed avoids the slider jumping on every page, but it must
-                // grow with the digit count and with double page, otherwise the label wraps.
-                let digits = String(provider.pageCount).count
-                let labelChars = effectiveDoublePage ? digits * 3 + 4 : digits * 2 + 3
-                // Scaled with Dynamic Type: at accessibility sizes the fixed 7pt/char estimate
-                // clipped the label (it's `.fixedSize`, so it overflowed onto the slider).
-                let labelWidth = max(pageCounterMinWidth, CGFloat(labelChars) * pageCounterCharWidth + 8)
-                HStack(spacing: 4) {
-                    // Fixed-width column: the page number's width varies (e.g. "1 / 20" vs
-                    // "10–11 / 20") and without pre-allocating the space, the slider next to
-                    // it would shift every time the page changes.
-                    //
-                    // The whole column is one tap target, not just the chevron: swaps which
-                    // half (top/bottom) advances/goes back in one-handed mode. A `Button`
-                    // wrapping both, not a separate one on just the small icon — the label
-                    // alone was an easy-to-miss target compared to the rest of the bar.
-                    #if os(macOS)
-                    // On the Mac the counter opens "Go to page" instead: one-handed mode
-                    // (whose side the chevron used to flip) is a thumb affordance with no
-                    // meaning for a pointer, and the reader ignores it here.
-                    Button(action: {
-                        jumpPageNumber = currentPage + 1
-                        isPageJumpPresented = true
-                    }) {
-                        Text(label)
-                            .font(.callout.monospacedDigit())
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .frame(maxHeight: .infinity)
-                            .contentShape(Rectangle())
-                    }
-                    .frame(width: labelWidth, height: 32)
-                    .accessibilityHint(Text("Vai a pagina"))
-                    #else
-                    Button(action: { isOneHandedZonesReversed.toggle() }) {
-                        VStack(spacing: 2) {
-                            Text(label)
-                                .font(.callout.monospacedDigit())
-                                .lineLimit(1)
-                                .fixedSize(horizontal: true, vertical: false)
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.bold))
-                                .rotationEffect(.degrees(isOneHandedZonesReversed ? 180 : 0))
-                        }
-                        .frame(maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                    }
-                    .frame(width: labelWidth, height: 44)
-                    .accessibilityLabel(Text("Pagina \(currentPage + 1) di \(provider.pageCount)"))
-                    #endif
-                    pageSlider(provider: provider)
-                    if isDoublePageAllowed {
-                        // Cycles single → double → automatic page.
-                        Button(action: cyclePageLayoutMode) {
-                            Image(systemName: pageLayoutModeIconName)
-                                .font(.footnote.weight(.semibold))
-                                .frame(width: 44, height: 44)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 4)
-                                        .stroke(chromeForeground.opacity(0.7), lineWidth: 1)
-                                        .frame(width: 26, height: 20)
-                                )
-                        }
-                        .accessibilityLabel(Text("Layout pagine"))
-                        .accessibilityValue(Text(pageLayoutModeAccessibilityValue))
-                    }
-                }
-                .foregroundColor(chromeForeground)
-                .padding(.horizontal, 10)
-                #if os(iOS)
-                // Same landscape insets as the header (see `PlatformSafeArea.leftInset`).
-                .padding(.leading, PlatformSafeArea.leftInset)
-                .padding(.trailing, PlatformSafeArea.rightInset)
-                // Extra padding, equal to the home indicator's height, keeps the content clear
-                // of it while the background reaches the true bottom edge; split top/bottom on iPad,
-                // where piling it all on the bottom left the content visibly off-center
-                // (iPhone's smaller inset didn't show that, so it keeps the old padding).
-                .padding(.top, 4 + (UIDevice.current.userInterfaceIdiom == .pad ? PlatformSafeArea.bottomInset / 2 : 0))
-                .padding(.bottom, 4 + (UIDevice.current.userInterfaceIdiom == .pad ? PlatformSafeArea.bottomInset / 2 : PlatformSafeArea.bottomInset))
-                .frame(maxWidth: .infinity)
-                .background(chromeBackground)
-                #elseif os(macOS)
-                // Floating HUD over the page (see `controlsChrome`), not an edge-to-edge bar.
-                .padding(.vertical, 4)
-                .padding(.horizontal, 4)
-                .frame(maxWidth: 620)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(chromeBackground.opacity(0.94))
-                        .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(chromeForeground.opacity(0.12), lineWidth: 1)
-                )
-                .padding(.horizontal, 24)
-                .padding(.bottom, 16)
-                #else
-                .padding(.vertical, 4)
-                .frame(maxWidth: .infinity)
-                .background(chromeBackground)
-                #endif
-                #if os(iOS)
-                .background(GeometryReader { proxy in
-                    Color.clear.preference(key: ChromeFooterHeightKey.self, value: proxy.size.height)
-                })
-                .onPreferenceChange(ChromeFooterHeightKey.self) { footerHeight = $0 }
-                #endif
-                .environment(\.colorScheme, isBackgroundDark ? .dark : .light)
-                .buttonStyle(PlainButtonStyle())
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                #endif
-            }
-        }
-    }
-
-    /// VoiceOver value for the tvOS layout-cycle button (the icon alone says nothing).
-    var pageLayoutModeAccessibilityValue: LocalizedStringKey {
-        if isDoublePageAutoMode { return "Automatico" }
-        return isDoublePageEnabled ? "Doppia pagina" : "Pagina singola"
-    }
-
-    var pageLayoutModeIconName: String {
-        if isDoublePageAutoMode { return "a.square" }
-        return isDoublePageEnabled ? "square.split.2x1" : "square"
-    }
-
-    func cyclePageLayoutMode() {
-        if isDoublePageAutoMode {
-            isDoublePageAutoMode = false
-            isDoublePageEnabled = false
-        } else if !isDoublePageEnabled {
-            isDoublePageEnabled = true
-        } else {
-            isDoublePageAutoMode = true
-        }
-    }
-
-    private func pageSlider(provider: ComicPageProvider) -> some View {
-        let maxValue = Double(max(provider.pageCount - 1, 0))
-        let isRTL = comic.readingDirection == .rightToLeft
-        // We don't use the system Slider: overlaid on TabView(.page), its internal pan
-        // gesture loses the arbitration against the page's scroll gesture (the page turns
-        // instead of dragging the thumb — verified live, the thumb stays still while the
-        // pager shows the swipe indicators). A high-priority DragGesture always wins over
-        // the underlying swipe gesture.
-        return GeometryReader { proxy in
-            let width = max(proxy.size.width, 1)
-            let progress = maxValue > 0 ? CGFloat(currentPage) / CGFloat(maxValue) : 0
-            let thumbX = isRTL ? width * (1 - progress) : width * progress
-
-            ZStack(alignment: .leading) {
-                Capsule().fill(chromeForeground.opacity(0.25))
-                Capsule().fill(chromeForeground).frame(width: width * progress)
-            }
-            .frame(height: 4)
-            .frame(maxHeight: .infinity, alignment: .center)
-
-            Circle()
-                .fill(Color.white)
-                .frame(width: 14, height: 14)
-                .shadow(radius: 1)
-                .position(x: thumbX, y: proxy.size.height / 2)
-                .allowsHitTesting(false)
-
-            // `DragGesture` doesn't exist on tvOS (no direct-touch scrubbing with the Siri
-            // Remote): the slider there is a plain progress indicator, and page navigation
-            // happens via `.onMoveCommand` in `tvOSPager` instead.
-            #if !os(tvOS)
-            Color.clear
-                .contentShape(Rectangle())
-                .highPriorityGesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            guard maxValue > 0 else { return }
-                            let fraction = min(max(value.location.x / width, 0), 1)
-                            let target = Int((Double(isRTL ? 1 - fraction : fraction) * maxValue).rounded())
-                            let starts = spreadStarts(pageCount: provider.pageCount)
-                            // Dragging the thumb crosses many pages in a row: animating
-                            // them one by one would be slow and jerky.
-                            turnStyle = .immediate
-                            currentPage = starts.min(by: { abs($0 - target) < abs($1 - target) }) ?? 0
-                        }
-                )
-            #endif
-        }
-        .frame(height: 24)
-        .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
-        // A custom drawing, not a `Slider`: without this VoiceOver saw nothing to adjust.
-        // Swipe up/down moves one spread in reading order.
-        .accessibilityElement()
-        .accessibilityLabel(Text("Pagina"))
-        .accessibilityValue(Text("Pagina \(currentPage + 1) di \(provider.pageCount)"))
-        .accessibilityAdjustableAction { direction in
-            let starts = spreadStarts(pageCount: provider.pageCount)
-            let target: Int?
-            switch direction {
-            case .increment: target = starts.first(where: { $0 > currentPage })
-            case .decrement: target = starts.last(where: { $0 < currentPage })
-            @unknown default: target = nil
-            }
-            guard let target else { return }
-            turnStyle = .immediate
-            currentPage = target
-        }
-    }
-
-    /// Shown while the comic is being downloaded from iCloud: real percentage and the
-    /// ability to cancel without having to go through the Downloads screen.
-    @ViewBuilder
-    private func downloadOverlay(progress: Double) -> some View {
-        VStack(spacing: 12) {
-            Image(systemName: "icloud.and.arrow.down")
-                .font(.largeTitle)
-                .foregroundColor(chromeForeground)
-            Text(comic.title ?? AppLocalization.localizedString("Fumetto", comment: "Fallback comic title"))
-                .foregroundColor(chromeForeground)
-                .multilineTextAlignment(.center)
-            ProgressView(value: progress)
-                .frame(maxWidth: 240)
-            Text("\(Int(progress * 100))%")
-                .font(.caption)
-                .foregroundColor(chromeForeground.opacity(0.7))
-            Button(action: { downloadItem?.cancel() }) {
-                Text("Annulla")
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.secondary.opacity(0.25))
-                    .cornerRadius(8)
-            }
-        }
-        .padding(.horizontal, 32)
-    }
 
     func toggleReadingDirection() {
         comic.readingDirection = comic.readingDirection == .rightToLeft ? .leftToRight : .rightToLeft
@@ -2181,221 +1237,6 @@ extension ReaderContentView {
         #endif
     }
 }
-
-#if os(tvOS)
-/// tvOS-only reader input: remote zoom/pan and chrome auto-hide. An extension in the same
-/// file (so it still reaches the view's `private` state) to keep `ReaderContentView`'s own
-/// body under SwiftLint's `type_body_length`.
-extension ReaderContentView {
-    /// The pager is driven by `.onMoveCommand` (the remote has no pointer) and Menu by `.onExitCommand`;
-    /// `.onMoveCommand` keeps firing while the view is `.focusable`, whatever `readerFocus` says.
-    var isPagerFocusable: Bool {
-        // `nil` counts as pager-safe: it is the real value for the one frame before `onAppear`, and
-        // dropping it there lets the system commit its initial focus to some other button.
-        return (readerFocus == nil || readerFocus == .pager) && !(isPageJumpPresented || pendingNextComic != nil || isFindPresented || isInfoPresented)
-    }
-
-    func tvOSPager(provider: ComicPageProvider) -> some View {
-        pagerContent(provider: provider)
-            // Zoom is a plain transform around the whole spread (see `tvZoomScale`):
-            // `.clipped()` keeps the enlarged page inside the screen instead of spilling
-            // under the chrome.
-            .scaleEffect(tvZoomScale)
-            .offset(tvZoomOffset)
-            .clipped()
-            .contentShape(Rectangle())
-            .focusable(isPagerFocusable)
-            .focused($readerFocus, equals: .pager)
-            .onAppear {
-                readerFocus = .pager
-                scheduleChromeAutoHide()
-            }
-            // After the parental-lock screen goes away, hand focus back to the pager (twice: the first can lose to the system).
-            .onReceive(ParentalLock.shared.$isLocked.removeDuplicates().dropFirst().filter { !$0 }) { _ in
-                for delay in [0.45, 1.2] {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { readerFocus = .pager; isAwaitingPagerReturn = true }
-                }
-            }
-            .onTapGesture {
-                if isTVZoomed {
-                    resetTVZoom()
-                } else {
-                    toggleControls()
-                    scheduleChromeAutoHide()
-                }
-            }
-            .onPlayPauseCommand { toggleTVZoom() }
-            .onMoveCommand { direction in
-                handlePagerMoveCommand(direction, provider: provider)
-            }
-            .onExitCommand {
-                // Menu leaves the zoom first, the reader only once back at fit size.
-                if isTVZoomed {
-                    resetTVZoom()
-                } else {
-                    exitReader()
-                }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(comic.title ?? ""))
-            .accessibilityValue(Text("Pagina \(currentPage + 1) di \(provider.pageCount)"))
-            .accessibilityHint(Text("Sinistra e destra cambiano pagina, Play/Pausa o Select ingrandiscono e tornano alla pagina intera"))
-            .accessibilityAdjustableAction { direction in
-                switch direction {
-                case .increment: advancePage(1, provider: provider, style: tapPageTurnStyle)
-                case .decrement: advancePage(-1, provider: provider, style: tapPageTurnStyle)
-                @unknown default: break
-                }
-            }
-    }
-
-    /// Shared `.onMoveCommand` for every header button. Down is meant to return focus to
-    /// the pager, but a focused `Button` doesn't reliably give up real UIKit focus just
-    /// because `.focusable` toggles false (confirmed live: it keeps receiving move commands
-    /// afterwards) — so Left/Right are handled right here instead of relying on that
-    /// transfer, letting page-turning keep working even though the focus ring stays put.
-    ///
-    /// `isAwaitingPagerReturn` gates that Left/Right proxy so it only fires after an explicit
-    /// Down — without it, every Right press used to move between header icons (a normal,
-    /// working navigation `onMoveCommand` still receives regardless of whether the focus
-    /// engine also resolves it) *also* silently turned a page, which broke navigating between
-    /// icons entirely (confirmed live: Right from "Libreria" toward the search icon instead
-    /// paged to the end of the comic and popped the "Fine del fumetto" dialog).
-    func handleHeaderMoveCommand(_ direction: MoveCommandDirection) {
-        switch direction {
-        case .down:
-            readerFocus = .pager
-            isAwaitingPagerReturn = true
-            scheduleChromeAutoHide()
-        case .up:
-            isAwaitingPagerReturn = false
-            chromeAutoHideWorkItem?.cancel()
-            // After a Down, readerFocus is still .pager while real focus never left the button, so every header button was non-focusable.
-            if readerFocus == .pager || readerFocus == nil { readerFocus = .libreria }
-        case .left where isAwaitingPagerReturn:
-            guard let provider else { return }
-            advancePage(-1, provider: provider, style: tapPageTurnStyle)
-        case .right where isAwaitingPagerReturn:
-            guard let provider else { return }
-            advancePage(1, provider: provider, style: tapPageTurnStyle)
-        default:
-            // Ordinary header browsing (Left/Right with no Down pending): keep the chrome up.
-            chromeAutoHideWorkItem?.cancel()
-        }
-    }
-
-    private static let tvZoomLevel: CGFloat = 2
-    private static let chromeAutoHideDelay: TimeInterval = 5
-
-    var isTVZoomed: Bool { tvZoomScale > 1 }
-
-    func toggleTVZoom() {
-        if isTVZoomed {
-            resetTVZoom()
-        } else {
-            chromeAutoHideWorkItem?.cancel()
-            withAnimation(.easeInOut(duration: 0.25)) {
-                tvZoomScale = Self.tvZoomLevel
-                tvZoomOffset = .zero
-                // Chrome would sit on top of the enlarged page and catch Up presses meant
-                // for panning.
-                isControlsVisible = false
-            }
-        }
-    }
-
-    /// Right on the last spread = finished, even if no page turn recorded it (resumed already on the last spread).
-    func markFinishedIfNeeded(pageCount: Int) {
-        let last = Int32(max(pageCount - 1, 0))
-        guard comic.lastReadPage < last else { return }
-        comic.lastReadPage = last
-        comic.dateLastOpened = Date()
-        scheduleProgressSave(page: Int(last))
-        Task { @MainActor in RemoteProgressSync.requestPush(comic) }
-    }
-
-    func resetTVZoom() {
-        guard isTVZoomed || tvZoomOffset != .zero else { return }
-        withAnimation(.easeInOut(duration: 0.25)) {
-            tvZoomScale = 1
-            tvZoomOffset = .zero
-        }
-    }
-
-    /// One D-pad press pans a quarter of the screen; the offset is clamped so the page edge
-    /// never leaves the screen edge (the scale is centered, so the overflow is
-    /// `viewport * (scale - 1) / 2` on each side).
-    private func panTVZoom(dx: CGFloat, dy: CGFloat) {
-        let maxX = viewportSize.width * (tvZoomScale - 1) / 2
-        let maxY = viewportSize.height * (tvZoomScale - 1) / 2
-        withAnimation(.easeInOut(duration: 0.2)) {
-            tvZoomOffset = CGSize(
-                width: min(max(tvZoomOffset.width + dx * viewportSize.width / 4, -maxX), maxX),
-                height: min(max(tvZoomOffset.height + dy * viewportSize.height / 4, -maxY), maxY)
-            )
-        }
-    }
-
-    func handlePagerMoveCommand(_ direction: MoveCommandDirection, provider: ComicPageProvider) {
-        // Zoomed: every direction pans (pressing Left reveals what's to the left, so the
-        // content moves right), nothing turns the page or leaves for the header.
-        if isTVZoomed {
-            switch direction {
-            case .left: panTVZoom(dx: 1, dy: 0)
-            case .right: panTVZoom(dx: -1, dy: 0)
-            case .up: panTVZoom(dx: 0, dy: 1)
-            case .down: panTVZoom(dx: 0, dy: -1)
-            @unknown default: break
-            }
-            return
-        }
-        switch direction {
-        case .left:
-            advancePage(-1, provider: provider, style: tapPageTurnStyle)
-            scheduleChromeAutoHide()
-        case .right:
-            advancePage(1, provider: provider, style: tapPageTurnStyle)
-            scheduleChromeAutoHide()
-        case .up:
-            // A fresh Up from the page means the user is going to browse the header, not
-            // returning from it: the Left/Right page-turn proxy must be off again (it's
-            // otherwise only cleared by an Up pressed *on* a header button).
-            isAwaitingPagerReturn = false
-            chromeAutoHideWorkItem?.cancel()
-            if isControlsVisible {
-                readerFocus = .libreria
-            } else {
-                // The header isn't in the tree while the chrome is hidden: show it first,
-                // then target "Libreria" once it exists (same explicit-target reasoning as
-                // the original Up case — see `ReaderFocusTarget`).
-                withAnimation(.easeInOut(duration: 0.22)) { isControlsVisible = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    readerFocus = .libreria
-                }
-            }
-        default:
-            break
-        }
-    }
-
-    /// Hides the chrome after a few seconds of reading, like a video player's transport
-    /// bar — only while focus is on the page itself (never under a header button the user
-    /// is browsing) and with no dialog/zoom on screen.
-    func scheduleChromeAutoHide() {
-        chromeAutoHideWorkItem?.cancel()
-        let workItem = DispatchWorkItem {
-            guard isControlsVisible,
-                  readerFocus == nil || readerFocus == .pager,
-                  !isPageJumpPresented, pendingNextComic == nil, !isFindPresented,
-                  !isInfoPresented, !isTVZoomed else { return }
-            isAwaitingPagerReturn = false
-            withAnimation(.easeInOut(duration: 0.22)) { isControlsVisible = false }
-        }
-        chromeAutoHideWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.chromeAutoHideDelay, execute: workItem)
-    }
-}
-#endif
 
 // No real comic file backs this, so the pager shows its "couldn't load" state rather than
 // actual pages — still useful for iterating on the chrome (header/footer/controls) live.
