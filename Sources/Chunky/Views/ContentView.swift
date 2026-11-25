@@ -121,7 +121,7 @@ struct ContentView: View {
                         scheduleDebouncedPlaceholderBackfill()
                     }
                 } else {
-                    DiagnosticLog.log("CloudKit \(kind) fallito: \(event.error?.localizedDescription ?? "?")")
+                    DiagnosticLog.log("CloudKit \(kind) fallito: \(event.error.map(CloudKitErrorSummary.describe) ?? "?")")
                 }
             }
             // ContentView is the root that's always alive for the whole session: updates to
