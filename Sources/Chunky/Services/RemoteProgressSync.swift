@@ -887,11 +887,14 @@ enum RemoteProgressSync {
             }
         }
 
-        /// Reports `CKContainer.accountStatus` to Diagnostica (see `logAccountStatus`).
+        /// Reports `CKContainer.accountStatus` to Diagnostica (see `logAccountStatus`), only when it
+        /// differs from the last state logged on this device: at every launch the same two lines
+        /// ("disponibile", same user) said nothing new. A changed state — signed out, another Apple
+        /// ID, iCloud restricted — is exactly what Diagnostica needs to show. Errors always log.
         /// The completion handler runs off-main; `DiagnosticLog` is thread-safe.
         static func logAccountStatus() {
             guard cloudKitUsable else {
-                DiagnosticLog.log("CloudKit account: non verificabile (build senza entitlement)")
+                logAccountStateIfChanged("CloudKit account: non verificabile (build senza entitlement)")
                 return
             }
             let container = CKContainer(identifier: RemoteProgressSync.containerIdentifier)
@@ -902,33 +905,41 @@ enum RemoteProgressSync {
                 }
                 switch status {
                 case .available:
-                    DiagnosticLog.log("CloudKit account: disponibile")
+                    break
                 case .noAccount:
-                    DiagnosticLog.log("CloudKit account: nessun account iCloud su questo device")
+                    logAccountStateIfChanged("CloudKit account: nessun account iCloud su questo device")
                     return
                 case .restricted:
-                    DiagnosticLog.log("CloudKit account: con restrizioni")
+                    logAccountStateIfChanged("CloudKit account: con restrizioni")
                     return
                 case .couldNotDetermine:
-                    DiagnosticLog.log("CloudKit account: non determinabile")
+                    logAccountStateIfChanged("CloudKit account: non determinabile")
                     return
                 case .temporarilyUnavailable:
-                    DiagnosticLog.log("CloudKit account: temporaneamente non disponibile")
+                    logAccountStateIfChanged("CloudKit account: temporaneamente non disponibile")
                     return
                 @unknown default:
-                    DiagnosticLog.log("CloudKit account: stato sconosciuto")
+                    logAccountStateIfChanged("CloudKit account: stato sconosciuto")
                     return
                 }
                 // Opaque per-account identifier (local log only): equal on two devices
                 // means the same iCloud account, which is what mirrored sync requires.
                 container.fetchUserRecordID { recordID, error in
                     if let recordID {
-                        DiagnosticLog.log("CloudKit utente: \(recordID.recordName)")
+                        logAccountStateIfChanged("CloudKit account: disponibile, utente \(recordID.recordName)")
                     } else if let error {
                         DiagnosticLog.log("CloudKit utente: non leggibile (\(error.localizedDescription))")
                     }
                 }
             }
+        }
+
+        private static let lastLoggedAccountStateKey = "remoteProgressLastLoggedAccountState"
+
+        private static func logAccountStateIfChanged(_ line: String) {
+            guard UserDefaults.standard.string(forKey: lastLoggedAccountStateKey) != line else { return }
+            UserDefaults.standard.set(line, forKey: lastLoggedAccountStateKey)
+            DiagnosticLog.log(line)
         }
 
         private static func storedToken() -> CKServerChangeToken? {

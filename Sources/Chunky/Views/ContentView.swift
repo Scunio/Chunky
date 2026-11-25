@@ -116,7 +116,8 @@ struct ContentView: View {
                 @unknown default: kind = "sconosciuto"
                 }
                 if event.succeeded {
-                    DiagnosticLog.log("CloudKit \(kind) riuscito")
+                    // Successes aren't logged: they happen on every sync and said nothing new.
+                    // Failures below are, with CloudKit's per-record detail.
                     // The first startup backfill can run before CloudKit has downloaded the
                     // library rows. Re-run after a completed import so local covers are built
                     // as soon as their records and iCloud files are both available.
