@@ -26,6 +26,8 @@ final class LibraryViewModel: ObservableObject {
     /// another one at the end (and that's exactly what's needed: the on-disk state has changed).
     private let pendingLock = NSLock()
     private var pendingScans: Set<ScanKind> = []
+    /// A user-initiated rebuild is waiting (see `rebuildLibrary(userInitiated:)`); guarded by `pendingLock`.
+    private var pendingUserInitiatedRebuild = false
     /// Operations currently showing the loading indicator, from oldest to most recent,
     /// each with its own current text (see `beginStatus`).
     private var statusStack: [(token: Int, text: String)] = []
@@ -486,19 +488,42 @@ final class LibraryViewModel: ObservableObject {
     /// aggiornamento o un avvio a freddo): le cancellazioni si saltano, solo aggiunte.
     /// Usare `tracker.trustedPathsForRebuild`, mai `allRelativePaths` direttamente: un set
     /// vuoto significa "noto vuoto", `nil` "sconosciuto, non cancellare".
-    func rebuildLibrary(context: NSManagedObjectContext, cloudKnownPaths: Set<String>? = nil) {
+    /// `userInitiated` (Diagnostica's "Ricostruisci libreria"): missing comics are removed
+    /// without waiting out `MissingFileGrace.missingWindow` — recent imports stay protected.
+    func rebuildLibrary(context: NSManagedObjectContext, cloudKnownPaths: Set<String>? = nil, userInitiated: Bool = false) {
+        // Set before queueing and consumed by the pass that runs: an automatic trigger already
+        // waiting in the queue would otherwise swallow the user's request (same kind, coalesced).
+        if userInitiated {
+            pendingLock.lock()
+            pendingUserInitiatedRebuild = true
+            pendingLock.unlock()
+        }
         // Banner subito, lavoro in coda: se la coda è occupata (es. pre-cache),
         // l'utente vede che il tap è stato preso invece di un bottone muto.
         // Atomico con l'accodamento (vedi `enqueueShowingStatus`): un banner creato
         // per un trigger poi accorpato non verrebbe mai spento.
         let backgroundContext = sharedScanContext(for: context)
         enqueueShowingStatus(.rebuild, "Ricostruzione libreria…") { [weak self] in
-            self?.performRebuildLibrary(in: backgroundContext, cloudKnownPaths: cloudKnownPaths)
+            guard let self else { return }
+            self.pendingLock.lock()
+            let bypass = self.pendingUserInitiatedRebuild
+            self.pendingUserInitiatedRebuild = false
+            self.pendingLock.unlock()
+            self.performRebuildLibrary(in: backgroundContext, cloudKnownPaths: cloudKnownPaths, bypassMissingGrace: bypass)
         }
     }
 
-    func performRebuildLibrary(in context: NSManagedObjectContext, cloudKnownPaths: Set<String>? = nil) {
+    func performRebuildLibrary(
+        in context: NSManagedObjectContext,
+        cloudKnownPaths: Set<String>? = nil,
+        bypassMissingGrace: Bool = false,
+        now: Date = Date(),
+        graceDefaults: UserDefaults = .standard
+    ) {
         var removedCount = 0
+        var deferredMissingCount = 0
+        var grace = MissingFileGrace.load(from: graceDefaults)
+        var stillMissingKeys: Set<String> = []
         var keptCloudOnlyCount = 0
         var revertedRemoteCount = 0
         var knownPaths: Set<String> = []
@@ -561,16 +586,31 @@ final class LibraryViewModel: ObservableObject {
                 // ri-registra da zero appena il file ricompare, col progresso azzerato).
                 // Solo ciò che manca sia in locale che in cloud è davvero sparito.
                 if !existsLocally && (path.isEmpty || !(cloudKnownPaths?.contains(path) ?? false)) {
-                    let identifier = comic.objectID.uriRepresentation().absoluteString
-                    context.delete(comic)
-                    removedCount += 1
-                    ComicTextIndex.deleteIndex(forComicIdentifier: identifier)
+                    // Not straight away: see `MissingFileGrace` (CloudKit can deliver the record
+                    // of a comic imported elsewhere long before iCloud Drive delivers its file).
+                    let graceKey = comic.id?.uuidString ?? path
+                    if grace.shouldDelete(key: graceKey, dateAdded: comic.dateAdded, now: now, bypassMissingWindow: bypassMissingGrace) {
+                        let identifier = comic.objectID.uriRepresentation().absoluteString
+                        context.delete(comic)
+                        removedCount += 1
+                        ComicTextIndex.deleteIndex(forComicIdentifier: identifier)
+                    } else {
+                        deferredMissingCount += 1
+                        stillMissingKeys.insert(graceKey)
+                        knownPaths.insert(path)
+                    }
                 } else {
                     if !existsLocally { keptCloudOnlyCount += 1 }
                     knownPaths.insert(path)
                 }
             }
             try? context.save()
+        }
+        // Only a pass that actually judged deletions may touch the grace record: with an unknown
+        // cloud state nothing was evaluated, and pruning would reset every pending countdown.
+        if deletionsAllowed {
+            grace.prune(keeping: stillMissingKeys)
+            grace.save(to: graceDefaults)
         }
 
         let root = LibraryStorage.rootFolderURL()
@@ -612,6 +652,9 @@ final class LibraryViewModel: ObservableObject {
         if removedCount > 0 || !unknownComicFiles.isEmpty {
             let elapsed = Self.formatted(duration: Date().timeIntervalSince(startedAt))
             DiagnosticLog.log("Rebuild library: rimossi \(removedCount), ritrovati \(unknownComicFiles.count) in \(elapsed)")
+        }
+        if deferredMissingCount > 0 {
+            DiagnosticLog.log("Rebuild library: \(deferredMissingCount) fumetti senza file né su iCloud, rimozione rimandata (aggiunti da poco o mancanti da meno di 30 minuti)")
         }
         if keptCloudOnlyCount > 0 {
             DiagnosticLog.log("Rebuild library: tenuti \(keptCloudOnlyCount) presenti su iCloud ma non in locale (non cancellati)")

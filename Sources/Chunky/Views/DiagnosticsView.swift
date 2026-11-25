@@ -41,7 +41,7 @@ struct DiagnosticsSections: View {
                 // con gli altri lavori e parte da solo; disabilitarlo lo faceva
                 // sembrare morto proprio mentre serviva (es. pre-cache in corso).
                 // Il banner di stato conferma il tap anche se parte dopo.
-                Button(action: { viewModel.rebuildLibrary(context: context, cloudKnownPaths: tracker.trustedPathsForRebuild) }) {
+                Button(action: { viewModel.rebuildLibrary(context: context, cloudKnownPaths: tracker.trustedPathsForRebuild, userInitiated: true) }) {
                     Label("Ricostruisci libreria", systemImage: "arrow.triangle.2.circlepath")
                 }
             }

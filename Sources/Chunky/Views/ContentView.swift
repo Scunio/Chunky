@@ -13,7 +13,6 @@ struct ContentView: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var tracker = ICloudDownloadTracker.shared
-    @AppStorage("icloudSyncFolderEnabled") private var isSyncFolderEnabled = false
 
     /// Coalesces updates to `tracker.allRelativePaths`: during the initial gathering of a
     /// non-trivial iCloud library, `NSMetadataQuery` publishes many incremental updates
@@ -140,7 +139,6 @@ struct ContentView: View {
                 guard !previous.subtracting(current).isEmpty else { return }
                 scheduleDebouncedPlaceholderBackfill()
             }
-            .onChange(of: isSyncFolderEnabled) { _, newValue in if newValue { syncSyncFolderIfNeeded() } }
             #if os(macOS)
             // On macOS `scenePhase` doesn't flip when the user just switches back to the app from
             // another one (the window stays "active"), so the fetch above never ran on return:
@@ -205,7 +203,12 @@ struct ContentView: View {
         // No ubiquity container on tvOS, so synced-but-fileless comics would linger forever.
         viewModel.rebuildLibrary(context: context, cloudKnownPaths: [])
         #else
-        guard isSyncFolderEnabled, LibraryStorage.isICloudAvailable else { return }
+        // Whenever iCloud is available, not only with the old "sync folder" toggle on: the library
+        // always lives in the iCloud container, and gating the reconcile on a toggle that defaulted
+        // to off left comics deleted from iCloud Drive in the library forever (and synced them,
+        // fileless, to every other device). Deletions are still guarded: unknown cloud state →
+        // add-only, and `MissingFileGrace` delays removing anything that just went missing.
+        guard LibraryStorage.isICloudAvailable else { return }
         // `nil` finché la query sta ancora censendo (avvio a freddo, dopo un
         // aggiornamento di iOS): il rebuild aggiunge soltanto, senza cancellare ciò che
         // in cloud esiste ma in locale non si vede ancora.

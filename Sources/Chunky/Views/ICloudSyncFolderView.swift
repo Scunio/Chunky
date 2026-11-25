@@ -1,42 +1,29 @@
 import SwiftUI
 import CoreData
 
-/// "Sync Folder" screen reached from the "iCloud Drive" row of the Accounts panel.
+/// "iCloud Drive" screen reached from the Accounts panel: explains where the library lives and
+/// shows its sync state.
 ///
-/// Unlike the rest of the sync (which copies imported comics into the app's iCloud
-/// container, see `LibraryStorage`), here the user explicitly enables automatic
-/// matching of the "Chunky" folder visible in Files/Finder: files dragged into it
-/// from another device get registered in the library without needing to reimport them by hand.
+/// There used to be a "Cartella di sincronizzazione" toggle here, defaulting to off, that gated
+/// the whole reconcile with the iCloud folder — while the library lives in that folder anyway
+/// (`LibraryStorage.rootFolderURL`). With it off, files added from Finder never appeared and
+/// files deleted there stayed in the library forever. The reconcile now always runs when iCloud
+/// is available (`ContentView.syncSyncFolderIfNeeded`), so there's nothing left to switch.
 ///
-/// The actual rescan (observing `ICloudDownloadTracker`, started once by
-/// `ContentView`, and calling `rebuildLibrary`) is centralized in `ContentView`, the root that's
-/// always alive for the whole session: doing it here too would duplicate the scan every time this
-/// screen is visible. This view just reads the tracker's state to display it.
+/// The actual rescan (observing `ICloudDownloadTracker` and calling `rebuildLibrary`) is
+/// centralized in `ContentView`, the root that's alive for the whole session: this view only
+/// reads the state to display it.
 struct ICloudSyncFolderView: View {
     @EnvironmentObject private var viewModel: LibraryViewModel
     @Environment(\.managedObjectContext) private var context
     @StateObject private var comicResults = SafeComicResults()
-    @ObservedObject private var tracker = ICloudDownloadTracker.shared
-
-    @AppStorage("icloudSyncFolderEnabled") private var isEnabled = false
 
     private var isAvailable: Bool { LibraryStorage.isICloudAvailable }
 
     var body: some View {
         Form {
-            Section {
-                HStack {
-                    Text("Cartella di sincronizzazione")
-                    InfoButton(text: "Crea una cartella Chunky nella tua iCloud Drive.\nI fumetti che ci metti dentro restano sincronizzati con la tua libreria.\n\nSe li cancelli da Chunky, vengono cancellati anche da iCloud Drive.")
-                    Spacer()
-                    Toggle("", isOn: $isEnabled)
-                        .labelsHidden()
-                        .disabled(!isAvailable)
-                }
-            }
-
-            if isEnabled && isAvailable {
-                Section {
+            if isAvailable {
+                Section(footer: Text("La libreria di Chunky si trova nella cartella Chunky di iCloud Drive, visibile in File e nel Finder: i fumetti che ci aggiungi compaiono in Chunky su tutti i tuoi dispositivi. Se elimini un fumetto da Chunky, viene eliminato anche da iCloud Drive; se lo elimini da iCloud Drive, sparisce da Chunky poco dopo.")) {
                     HStack {
                         Text("Scaricati")
                         Spacer()
@@ -51,9 +38,7 @@ struct ICloudSyncFolderView: View {
                     Text(viewModel.isImporting ? "Sincronizzazione…" : "Tutti i fumetti sincronizzati")
                         .foregroundColor(.secondary)
                 }
-            }
-
-            if !isAvailable {
+            } else {
                 Section(footer: Text("Attiva iCloud Drive nelle Impostazioni di sistema per usare questa funzione.")) {
                     EmptyView()
                 }
@@ -67,14 +52,12 @@ struct ICloudSyncFolderView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .onChange(of: isEnabled) { _, newValue in
-            // If iCloud wasn't ready yet when the app launched, `start()` in
-            // `ContentView.onAppear` returned immediately without doing anything (it's idempotent:
-            // no harm in calling it again here). Enabling the toggle thus gives a second chance to
-            // hook in, instead of staying inert for the rest of the session.
-            if newValue { ICloudDownloadTracker.shared.start() }
+        .onAppear {
+            // If iCloud wasn't ready when the app launched, `start()` in `ContentView.onAppear`
+            // returned without doing anything; it's idempotent, so this is a second chance.
+            ICloudDownloadTracker.shared.start()
+            comicResults.start(in: context)
         }
-        .onAppear { comicResults.start(in: context) }
         .onDisappear { comicResults.stop() }
     }
 }
