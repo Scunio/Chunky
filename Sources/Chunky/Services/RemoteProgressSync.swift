@@ -784,14 +784,7 @@ enum RemoteProgressSync {
                 completion(0)
                 return
             }
-            fetchAndApply(in: PersistenceController.shared.container.viewContext, force: true) { applied in
-                if applied == 0 {
-                    // The reasons (older than local, no matching comic) are logged by `apply`;
-                    // nothing else here means the fetch itself returned no changed record.
-                    DiagnosticLog.log("Push progressi: nessun progresso applicato")
-                }
-                completion(applied)
-            }
+            fetchAndApply(in: PersistenceController.shared.container.viewContext, force: true, completion: completion)
         }
 
         // MARK: Fetch
@@ -1016,9 +1009,6 @@ enum RemoteProgressSync {
                                 return
                             }
                             storeToken(token)
-                            if applied > 0 {
-                                AppLog.log("RemoteProgress: applicati \(applied) progressi da altri dispositivi")
-                            }
                             completion?(applied)
                         }
                     }
@@ -1125,14 +1115,6 @@ enum RemoteProgressSync {
             }
             var comicsByAccount: [UUID: [ComicEntity]] = [:]
             var applied = 0
-            // Diagnostics only (iCloud-library records): why a fetched change didn't land.
-            var olderThanLocal = 0
-            var unmatched = 0
-            defer {
-                if applied == 0 && (olderThanLocal > 0 || unmatched > 0) {
-                    DiagnosticLog.log("RemoteProgress: \(records.count) record ricevuti, nessuno applicato (\(olderThanLocal) non più recenti del progresso locale, \(unmatched) senza fumetto corrispondente)")
-                }
-            }
             for record in records {
                 guard let recordKey = record["accountSyncKey"] as? String,
                       let recordPath = record["serverPath"] as? String
@@ -1140,13 +1122,13 @@ enum RemoteProgressSync {
                 let remotePage = (record["lastReadPage"] as? NSNumber)?.intValue ?? 0
                 let remoteUpdatedAt = record["updatedAt"] as? Date ?? .distantPast
                 if recordKey == RemoteProgressSync.localLibrarySyncKey {
-                    switch applyLocalRecord(
+                    // Records not newer than local are the normal case (our own pushes come back
+                    // too); an unmatched one logs its path inside `applyLocalRecord`.
+                    if applyLocalRecord(
                         recordPath: recordPath, remotePage: remotePage,
                         remoteUpdatedAt: remoteUpdatedAt, in: context
-                    ) {
-                    case .applied: applied += 1
-                    case .olderThanLocal: olderThanLocal += 1
-                    case .noMatchingComic: unmatched += 1
+                    ) == .applied {
+                        applied += 1
                     }
                     continue
                 }
