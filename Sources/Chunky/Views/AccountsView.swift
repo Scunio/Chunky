@@ -567,6 +567,9 @@ struct AccountsView: View {
             KeychainStore.deletePassword(forAccount: account.stableID)
             context.delete(account)
         }
+        // Their downloads that an earlier version left in the iCloud root are the same files the
+        // other devices list as iCloud comics: adopt them now instead of leaving orphans behind.
+        ComicEntity.adoptOrphanedRootDownloads(in: context)
         accountsToDelete = []
         try? context.save()
     }

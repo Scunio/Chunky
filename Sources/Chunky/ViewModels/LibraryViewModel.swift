@@ -538,6 +538,13 @@ final class LibraryViewModel: ObservableObject {
             // salterebbe come tutti i placeholder): senza questo Ricostruisci
             // sembrerebbe non fare niente dopo un'eliminazione account.
             removedCount += ComicEntity.deletePlaceholdersWithMissingAccount(in: context)
+            // Downloads of deleted accounts whose file sits in the iCloud root become iCloud
+            // comics (see `adoptOrphanedRootDownloads`) — before the loop, so the adopted rows'
+            // paths count as known and phase two doesn't register the same file again. Only with
+            // a consistent root: otherwise "file in the root" would be judged on the wrong folder.
+            if rootIsConsistent {
+                ComicEntity.adoptOrphanedRootDownloads(in: context)
+            }
             let request = ComicEntity.fetchRequest()
             guard let comics = try? context.fetch(request) else { return }
             for comic in comics {
