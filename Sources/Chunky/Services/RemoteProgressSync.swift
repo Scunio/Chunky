@@ -390,6 +390,12 @@ enum RemoteProgressSync {
             label: "com.scunio.Chunky.remoteProgress", qos: .utility
         )
         private static let lock = NSLock()
+        /// Progress fetches and pushes are something the user is waiting on (a page read on the
+        /// other device). Left unset, a CloudKit operation inherits the `.utility` QoS of `queue`,
+        /// and Apple lets the system mark utility/background operations *discretionary* and hold
+        /// them — seen as a push applied 90 s after it arrived.
+        /// Zone and subscription setup keep the inherited QoS: nothing waits on them.
+        private static let progressQoS: QualityOfService = .userInitiated
         /// Cached result of `checkCloudKitUsable` (entitlements don't change at runtime).
         nonisolated(unsafe) private static var cachedUsable: Bool?
         /// Latest requested snapshot per record: `pushLatest` pops it, so `flush()`
@@ -572,6 +578,7 @@ enum RemoteProgressSync {
         /// `completion` — both fire on success.
         private static func fetchRecord(id: CKRecord.ID, completion: @escaping (Result<CKRecord?, Error>) -> Void) {
             let operation = CKFetchRecordsOperation(recordIDs: [id])
+            operation.qualityOfService = progressQoS
             let completedLock = NSLock()
             var completed = false
             let completeOnce: (Result<CKRecord?, Error>) -> Void = { result in
@@ -605,6 +612,7 @@ enum RemoteProgressSync {
         /// `.ifServerRecordUnchanged` policy below is chosen to produce.
         private static func saveRecord(_ record: CKRecord, done: @escaping () -> Void, retryZoneNotFound retry: @escaping () -> Void) {
             let operation = CKModifyRecordsOperation(recordsToSave: [record], recordIDsToDelete: nil)
+            operation.qualityOfService = progressQoS
             // Explicit conflict detection (not blind last-write): concurrent pushes from
             // two devices surface as `.serverRecordChanged`, resolved below by timestamp.
             operation.savePolicy = .ifServerRecordUnchanged
@@ -674,6 +682,7 @@ enum RemoteProgressSync {
         /// Single save without further conflict retry (the retry of a retry).
         private static func saveRecordOnce(_ record: CKRecord, done: @escaping () -> Void) {
             let operation = CKModifyRecordsOperation(recordsToSave: [record], recordIDsToDelete: nil)
+            operation.qualityOfService = progressQoS
             operation.savePolicy = .ifServerRecordUnchanged
             operation.modifyRecordsResultBlock = { result in
                 if case .failure(let error) = result {
@@ -929,6 +938,7 @@ enum RemoteProgressSync {
                 recordZoneIDs: [zoneID],
                 configurationsByRecordZoneID: [zoneID: configuration]
             )
+            operation.qualityOfService = progressQoS
             let appendLock = NSLock()
             var changed = accumulated
             var latestToken = pendingToken
