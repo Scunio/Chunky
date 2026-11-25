@@ -145,10 +145,17 @@ enum RemoteProgressSync {
     @MainActor
     static func snapshot(of comic: ComicEntity) -> Snapshot? {
         if comic.sourceAccountID != nil {
-            return remoteSnapshot(of: comic)
+            let remote = remoteSnapshot(of: comic)
+            if remote == nil {
+                logUnsyncableOnce(comic, reason: "legato a un account (\(comic.sourceAccountID?.uuidString ?? "?")) non risolvibile o senza chiave di abbinamento, percorso \"\(comic.relativePath ?? "")\"")
+            }
+            return remote
         }
         // iCloud-library comic: no account to resolve, `relativePath` is the key.
-        guard let relativePath = comic.relativePath, !relativePath.isEmpty else { return nil }
+        guard let relativePath = comic.relativePath, !relativePath.isEmpty else {
+            logUnsyncableOnce(comic, reason: "percorso del file vuoto")
+            return nil
+        }
         let progressKey = RemoteProgressSyncKey.progressKey(accountSyncKey: localLibrarySyncKey, serverPath: relativePath)
         return Snapshot(
             recordName: RemoteProgressSyncKey.recordName(forProgressKey: progressKey),
@@ -163,6 +170,16 @@ enum RemoteProgressSync {
             title: comic.title ?? "",
             deviceName: currentDeviceName
         )
+    }
+
+    /// Comics already reported as unsyncable this session: a reader calls `snapshot` on every
+    /// page turn, and one line per comic is enough to explain why its progress never leaves.
+    @MainActor private static var reportedUnsyncable: Set<NSManagedObjectID> = []
+
+    @MainActor
+    private static func logUnsyncableOnce(_ comic: ComicEntity, reason: String) {
+        guard reportedUnsyncable.insert(comic.objectID).inserted else { return }
+        DiagnosticLog.log("RemoteProgress: progresso di \"\(comic.title ?? "?")\" non sincronizzabile: \(reason)")
     }
 
     /// Snapshot for a remote-account comic (see the enum docs for why these need
@@ -970,11 +987,15 @@ enum RemoteProgressSync {
         ) -> LocalApplyOutcome {
             let request = ComicEntity.fetchRequest()
             request.predicate = NSPredicate(format: "relativePath == %@", recordPath)
-            guard let comics = try? context.fetch(request), !comics.isEmpty else { return .noMatchingComic }
+            guard let comics = try? context.fetch(request), !comics.isEmpty else {
+                DiagnosticLog.log("RemoteProgress: nessun fumetto con percorso \"\(recordPath)\"")
+                return .noMatchingComic
+            }
             // I duplicati condividono lo stesso file: ne resta uno solo dopo la dedup, e il
             // superstite è deterministico (`ComicEntity.precedesAsSurvivor`, lo stesso della dedup).
             // `dateAdded` e `id` sono attributi sincronizzati, quindi ogni device sceglie lo stesso.
             guard let comic = ComicEntity.survivor(of: comics.filter { $0.sourceAccountID == nil }) else {
+                DiagnosticLog.log("RemoteProgress: \"\(recordPath)\" c'è ma solo come fumetto di un account (\(comics.count) schede), progresso iCloud ignorato")
                 return .noMatchingComic
             }
             guard RemoteProgressSyncKey.shouldApply(remoteUpdatedAt: remoteUpdatedAt, localDateLastOpened: comic.dateLastOpened) else {
