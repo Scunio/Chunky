@@ -20,13 +20,6 @@ final class ChunkyAppDelegate: NSObject, UIApplicationDelegate {
 
     func application(
         _ application: UIApplication,
-        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
-    ) {
-        DiagnosticLog.log("Push registrate (token APNs ricevuto)")
-    }
-
-    func application(
-        _ application: UIApplication,
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
@@ -47,10 +40,6 @@ final class ChunkyAppDelegate: NSObject, UIApplicationDelegate {
 final class ChunkyAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.registerForRemoteNotifications()
-    }
-
-    func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        DiagnosticLog.log("Push registrate (token APNs ricevuto)")
     }
 
     /// ⌘Q non garantisce onDisappear/scenePhase: si salva il contesto e si spingono i

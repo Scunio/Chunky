@@ -784,7 +784,6 @@ enum RemoteProgressSync {
                 completion(0)
                 return
             }
-            DiagnosticLog.log("Push progressi ricevuta: scarico le modifiche")
             fetchAndApply(in: PersistenceController.shared.container.viewContext, force: true) { applied in
                 if applied == 0 {
                     // The reasons (older than local, no matching comic) are logged by `apply`;
