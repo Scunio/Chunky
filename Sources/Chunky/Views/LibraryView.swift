@@ -74,6 +74,10 @@ struct LibraryView: View {
     @FocusState private var isGridFocused: Bool
     #endif
     @State private var isToolsPresented = false
+    #if os(macOS)
+    /// Info sheet opened from a comic's context menu (grid and list); it was reachable only from the reader.
+    @State private var infoComic: ComicEntity?
+    #endif
     @State private var isAccountsPresented = false
     @State private var isNewGroupPromptPresented = false
     @State private var newGroupName = ""
@@ -291,6 +295,15 @@ struct LibraryView: View {
             .sheet(isPresented: $isToolsPresented) {
                 ToolsPanelView()
             }
+            #if os(macOS)
+            .sheet(item: $infoComic) { comic in
+                ComicInfoSheet(
+                    comic: comic,
+                    loadedPageCount: nil,
+                    onToggleFavorite: { comic.isFavorite.toggle(); try? context.save() }
+                )
+            }
+            #endif
             // The lock screen is a SwiftUI overlay at the root (`ChunkyApp`), but sheets and
             // covers are presented by UIKit/AppKit *above* that root: without this, the reader,
             // Tools (Settings) and Accounts stayed usable on top of the lock screen.
@@ -659,6 +672,7 @@ struct LibraryView: View {
                         pendingRelativePaths: downloadTracker.pendingRelativePaths,
                         onSelect: openComic,
                         onDelete: { comicToDelete = $0 },
+                        onShowInfo: { infoComic = $0 },
                         onDeleteMany: { comics in
                             selectedIDs = Set(comics.map(\.objectID))
                             isConfirmingBulkDelete = true
@@ -1094,7 +1108,12 @@ struct LibraryView: View {
             onSelect: { handleTap(on: comic) },
             onOpen: { openComic(comic) },
             onDelete: { comicToDelete = comic },
-            onAssignGroup: { assignGroup($0, to: comic) }
+            onAssignGroup: { assignGroup($0, to: comic) },
+            onShowInfo: {
+                #if os(macOS)
+                infoComic = comic
+                #endif
+            }
         )
     }
 
@@ -1283,6 +1302,8 @@ private struct ComicCell: View {
     let onOpen: () -> Void
     let onDelete: () -> Void
     let onAssignGroup: (String?) -> Void
+    /// Mac only: opens the comic's info sheet from the context menu.
+    var onShowInfo: (() -> Void)?
 
     @ViewBuilder
     private var cellButton: some View {
@@ -1423,6 +1444,11 @@ private struct ComicCell: View {
                     }
                 }
                 #if os(macOS)
+                if let onShowInfo {
+                    Button(action: onShowInfo) {
+                        Label("Informazioni", systemImage: "info.circle")
+                    }
+                }
                 Button(action: revealInFinder) {
                     Label("Mostra nel Finder", systemImage: "folder")
                 }

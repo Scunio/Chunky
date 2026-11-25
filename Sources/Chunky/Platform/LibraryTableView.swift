@@ -12,6 +12,7 @@ struct LibraryTableView: View {
     let pendingRelativePaths: Set<String>
     let onSelect: (ComicEntity) -> Void
     let onDelete: (ComicEntity) -> Void
+    let onShowInfo: (ComicEntity) -> Void
     /// Delete key with more than one row selected: the library's bulk confirmation.
     let onDeleteMany: ([ComicEntity]) -> Void
     /// Mirrors the row selection up to `LibraryView`, so the toolbar's bulk actions (status,
@@ -24,6 +25,7 @@ struct LibraryTableView: View {
         pendingRelativePaths: Set<String> = [],
         onSelect: @escaping (ComicEntity) -> Void,
         onDelete: @escaping (ComicEntity) -> Void,
+        onShowInfo: @escaping (ComicEntity) -> Void = { _ in },
         onDeleteMany: @escaping ([ComicEntity]) -> Void = { _ in },
         onSelectionChange: @escaping ([ComicEntity]) -> Void = { _ in }
     ) {
@@ -32,6 +34,7 @@ struct LibraryTableView: View {
         self.pendingRelativePaths = pendingRelativePaths
         self.onSelect = onSelect
         self.onDelete = onDelete
+        self.onShowInfo = onShowInfo
         self.onDeleteMany = onDeleteMany
         self.onSelectionChange = onSelectionChange
     }
@@ -126,7 +129,10 @@ struct LibraryTableView: View {
                 Label("Scarica da iCloud", systemImage: "icloud.and.arrow.down")
             }
         }
-        Button(action: { revealInFinder(comic) }) {
+        Button(action: { onShowInfo(comic) }) {
+            Label("Informazioni", systemImage: "info.circle")
+        }
+                Button(action: { revealInFinder(comic) }) {
             Label("Mostra nel Finder", systemImage: "folder")
         }
         if allowsDeletion {
