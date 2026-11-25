@@ -30,6 +30,9 @@ struct CloudKitErrorSummaryTests {
         // Il messaggio del server nomina il campo rifiutato: è quello che serve per capire la causa.
         #expect(line.contains("Cannot create or modify field 'CD_x'"))
         #expect(!line.contains("Batch"))
+        // Il nome del record rifiutato (non quelli scartati col lotto) per cercarlo in console.
+        #expect(line.contains("record: a in com.apple.coredata.cloudkit.zone"))
+        #expect(!line.contains("b in "))
     }
 
     @Test("L'errore CloudKit annidato dentro quello di Core Data viene trovato")
@@ -38,6 +41,19 @@ struct CloudKitErrorSummaryTests {
             NSUnderlyingErrorKey: NSError(domain: CKError.errorDomain, code: CKError.Code.quotaExceeded.rawValue)
         ])
         #expect(CloudKitErrorSummary.describe(wrapped).hasPrefix("quotaExceeded"))
+    }
+
+    @Test("Il motivo annidato sotto un codice interno viene riportato")
+    func nestedReasonIsReported() {
+        let inner = NSError(domain: "CKInternalErrorDomain", code: 2006, userInfo: [
+            "ServerErrorDescription": "Cannot create or modify field 'CD_y' in record 'CD_ComicEntity' in production schema"
+        ])
+        let error = CKError(_nsError: NSError(domain: CKError.errorDomain, code: CKError.Code.invalidArguments.rawValue, userInfo: [
+            NSLocalizedDescriptionKey: "CKInternalErrorDomain: 2006",
+            NSUnderlyingErrorKey: inner
+        ]))
+        let message = CloudKitErrorSummary.serverMessage(of: error)
+        #expect(message.contains("Cannot create or modify field 'CD_y'"))
     }
 
     @Test("Un errore non CloudKit resta la sua descrizione")

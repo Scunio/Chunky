@@ -35,16 +35,36 @@ enum CloudKitErrorSummary {
         if !distinct.isEmpty {
             line += " — " + distinct.joined(separator: " | ")
         }
+        // The refused records' names (not the batch casualties): looked up in CloudKit Console
+        // they show the record type and fields, i.e. exactly which data is being rejected.
+        let refused = partials.filter { ($0.value as? CKError)?.code != .batchRequestFailed }
+            .map { "\($0.key.recordName) in \($0.key.zoneID.zoneName)" }
+            .sorted().prefix(3)
+        if !refused.isEmpty {
+            line += " — record: " + refused.joined(separator: ", ")
+        }
         return line
     }
 
-    /// The server explanation of a CloudKit error, trimmed for one log line.
+    /// The server explanation of a CloudKit error, trimmed for one log line. CloudKit often puts
+    /// only an internal code on top ("CKInternalErrorDomain: 2006") and the readable reason —
+    /// e.g. which field it refused — in an error nested under `NSUnderlyingErrorKey`, so the whole
+    /// chain is walked and every descriptive text found is kept, deduplicated, in order.
     static func serverMessage(of error: CKError) -> String {
-        let nsError = error as NSError
-        let text = (nsError.userInfo["NSDebugDescription"] as? String)
-            ?? (nsError.userInfo["ServerErrorDescription"] as? String)
-            ?? nsError.localizedDescription
-        return String(text.prefix(240))
+        var texts: [String] = []
+        var current: NSError? = error as NSError
+        var depth = 0
+        while let nsError = current, depth < 5 {
+            for key in ["ServerErrorDescription", "NSDebugDescription", "CKErrorDescription", NSLocalizedFailureReasonErrorKey] {
+                if let text = nsError.userInfo[key] as? String, !text.isEmpty { texts.append(text) }
+            }
+            texts.append("\(nsError.domain) \(nsError.code): \(nsError.localizedDescription)")
+            current = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
+            depth += 1
+        }
+        var seen = Set<String>()
+        let unique = texts.filter { seen.insert($0).inserted }
+        return String(unique.joined(separator: " / ").prefix(400))
     }
 
     /// Code name, plus the record type when CloudKit hands back the server's copy (conflicts).
