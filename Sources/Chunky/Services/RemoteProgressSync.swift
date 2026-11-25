@@ -727,7 +727,14 @@ enum RemoteProgressSync {
                 return
             }
             DiagnosticLog.log("Push progressi ricevuta: scarico le modifiche")
-            fetchAndApply(in: PersistenceController.shared.container.viewContext, force: true, completion: completion)
+            fetchAndApply(in: PersistenceController.shared.container.viewContext, force: true) { applied in
+                if applied == 0 {
+                    // The reasons (older than local, no matching comic) are logged by `apply`;
+                    // nothing else here means the fetch itself returned no changed record.
+                    DiagnosticLog.log("Push progressi: nessun progresso applicato")
+                }
+                completion(applied)
+            }
         }
 
         // MARK: Fetch
@@ -955,28 +962,31 @@ enum RemoteProgressSync {
         /// fresh `dateLastOpened` on records about to be collapsed, and touching a loser the other
         /// device just deleted re-exports it via the mirror, resurrecting the duplicate.
         /// Returns the number of comics updated. Runs on the context's queue.
-        @discardableResult
+        private enum LocalApplyOutcome { case applied, olderThanLocal, noMatchingComic }
+
         private static func applyLocalRecord(
             recordPath: String, remotePage: Int, remoteUpdatedAt: Date,
             in context: NSManagedObjectContext
-        ) -> Int {
+        ) -> LocalApplyOutcome {
             let request = ComicEntity.fetchRequest()
             request.predicate = NSPredicate(format: "relativePath == %@", recordPath)
-            guard let comics = try? context.fetch(request), !comics.isEmpty else { return 0 }
+            guard let comics = try? context.fetch(request), !comics.isEmpty else { return .noMatchingComic }
             // I duplicati condividono lo stesso file: ne resta uno solo dopo la dedup, e il
             // superstite è deterministico (`ComicEntity.precedesAsSurvivor`, lo stesso della dedup).
             // `dateAdded` e `id` sono attributi sincronizzati, quindi ogni device sceglie lo stesso.
-            let survivor = ComicEntity.survivor(of: comics.filter { $0.sourceAccountID == nil })
-            guard let comic = survivor,
-                  RemoteProgressSyncKey.shouldApply(remoteUpdatedAt: remoteUpdatedAt, localDateLastOpened: comic.dateLastOpened)
-            else { return 0 }
+            guard let comic = ComicEntity.survivor(of: comics.filter { $0.sourceAccountID == nil }) else {
+                return .noMatchingComic
+            }
+            guard RemoteProgressSyncKey.shouldApply(remoteUpdatedAt: remoteUpdatedAt, localDateLastOpened: comic.dateLastOpened) else {
+                return .olderThanLocal
+            }
             if comic.pageCount > 0 {
                 comic.lastReadPage = Int32(min(max(remotePage, 0), Int(comic.pageCount) - 1))
             } else {
                 comic.lastReadPage = Int32(max(remotePage, 0))
             }
             comic.dateLastOpened = remoteUpdatedAt
-            return 1
+            return .applied
         }
 
         /// Matches fetched records to local comics and applies last-writer-wins.
@@ -1002,6 +1012,14 @@ enum RemoteProgressSync {
             }
             var comicsByAccount: [UUID: [ComicEntity]] = [:]
             var applied = 0
+            // Diagnostics only (iCloud-library records): why a fetched change didn't land.
+            var olderThanLocal = 0
+            var unmatched = 0
+            defer {
+                if applied == 0 && (olderThanLocal > 0 || unmatched > 0) {
+                    DiagnosticLog.log("RemoteProgress: \(records.count) record ricevuti, nessuno applicato (\(olderThanLocal) più vecchi del progresso locale, \(unmatched) senza fumetto corrispondente)")
+                }
+            }
             for record in records {
                 guard let recordKey = record["accountSyncKey"] as? String,
                       let recordPath = record["serverPath"] as? String
@@ -1009,10 +1027,14 @@ enum RemoteProgressSync {
                 let remotePage = (record["lastReadPage"] as? NSNumber)?.intValue ?? 0
                 let remoteUpdatedAt = record["updatedAt"] as? Date ?? .distantPast
                 if recordKey == RemoteProgressSync.localLibrarySyncKey {
-                    applied += applyLocalRecord(
+                    switch applyLocalRecord(
                         recordPath: recordPath, remotePage: remotePage,
                         remoteUpdatedAt: remoteUpdatedAt, in: context
-                    )
+                    ) {
+                    case .applied: applied += 1
+                    case .olderThanLocal: olderThanLocal += 1
+                    case .noMatchingComic: unmatched += 1
+                    }
                     continue
                 }
                 guard let account = accountsByKey[recordKey],
