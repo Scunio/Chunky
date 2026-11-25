@@ -796,6 +796,19 @@ enum RemoteProgressSync {
 
         // MARK: Fetch
 
+        /// One fetch at a time. Push, foreground, the periodic rescan and deduplication all ask
+        /// for one, often within the same second (a page turned on the Mac: the progress push and
+        /// the Core Data import that triggers dedup land together). Run in parallel they started
+        /// from the same change token, so each downloaded the same record: the first applied it,
+        /// the second found it already applied and the push logged "nessun progresso applicato".
+        /// Now a request arriving mid-fetch is folded into a single follow-up pass, run right after
+        /// with the updated token (so a change saved meanwhile isn't lost); its callers get the
+        /// total applied by both passes.
+        nonisolated(unsafe) private static var fetchStartedAt: Date?
+        nonisolated(unsafe) private static var followUp: (context: NSManagedObjectContext, completions: [(Int) -> Void])?
+        /// A fetch that never reports back (stuck operation) must not block the next ones forever.
+        private static let fetchStaleAfter: TimeInterval = 90
+
         static func fetchAndApply(in context: NSManagedObjectContext, force: Bool, completion: ((Int) -> Void)? = nil) {
             guard cloudKitUsable else { completion?(0); return }
             lock.lock()
@@ -804,8 +817,33 @@ enum RemoteProgressSync {
                 completion?(0)
                 return
             }
+            if let startedAt = fetchStartedAt, Date().timeIntervalSince(startedAt) < fetchStaleAfter {
+                var pending = followUp ?? (context: context, completions: [])
+                pending.context = context
+                if let completion { pending.completions.append(completion) }
+                followUp = pending
+                lock.unlock()
+                return
+            }
+            fetchStartedAt = Date()
             lastFetch = Date()
             lock.unlock()
+            runFetch(in: context, completion: completion)
+        }
+
+        private static func runFetch(in context: NSManagedObjectContext, completion: ((Int) -> Void)?) {
+            let finish: (Int) -> Void = { applied in
+                lock.lock()
+                let pending = followUp
+                followUp = nil
+                fetchStartedAt = pending == nil ? nil : Date()
+                lock.unlock()
+                completion?(applied)
+                guard let pending else { return }
+                runFetch(in: pending.context) { more in
+                    pending.completions.forEach { $0(applied + more) }
+                }
+            }
             // No remote accounts and no local comics → no record can ever match: skip
             // before touching CloudKit at all. Besides saving pointless traffic for empty
             // libraries, this keeps entitlement-less builds (UI tests) off CloudKit APIs
@@ -816,9 +854,9 @@ enum RemoteProgressSync {
             context.perform {
                 let accountCount = (try? context.count(for: RemoteAccountEntity.fetchRequest())) ?? 0
                 let comicCount = (try? context.count(for: ComicEntity.fetchRequest())) ?? 0
-                guard accountCount > 0 || comicCount > 0 else { completion?(0); return }
+                guard accountCount > 0 || comicCount > 0 else { finish(0); return }
                 queue.async {
-                    fetchPage(accumulated: [], thenApplyIn: context, completion: completion)
+                    fetchPage(accumulated: [], thenApplyIn: context, completion: finish)
                 }
             }
         }
@@ -1092,7 +1130,7 @@ enum RemoteProgressSync {
             var unmatched = 0
             defer {
                 if applied == 0 && (olderThanLocal > 0 || unmatched > 0) {
-                    DiagnosticLog.log("RemoteProgress: \(records.count) record ricevuti, nessuno applicato (\(olderThanLocal) più vecchi del progresso locale, \(unmatched) senza fumetto corrispondente)")
+                    DiagnosticLog.log("RemoteProgress: \(records.count) record ricevuti, nessuno applicato (\(olderThanLocal) non più recenti del progresso locale, \(unmatched) senza fumetto corrispondente)")
                 }
             }
             for record in records {
