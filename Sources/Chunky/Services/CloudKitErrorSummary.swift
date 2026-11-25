@@ -38,7 +38,10 @@ enum CloudKitErrorSummary {
         // The refused records' names (not the batch casualties): looked up in CloudKit Console
         // they show the record type and fields, i.e. exactly which data is being rejected.
         let refused = partials.filter { ($0.value as? CKError)?.code != .batchRequestFailed }
-            .map { "\($0.key.recordName) in \($0.key.zoneID.zoneName)" }
+            .compactMap { entry -> String? in
+                guard let recordID = entry.key.base as? CKRecord.ID else { return nil }
+                return "\(recordID.recordName) in \(recordID.zoneID.zoneName)"
+            }
             .sorted().prefix(3)
         if !refused.isEmpty {
             line += " — record: " + refused.joined(separator: ", ")
