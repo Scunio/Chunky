@@ -56,6 +56,20 @@ struct LibraryView: View {
     // Nasconde i segnaposto mai scaricati (restano sul NAS e nello scan, ma non in vista).
     // Fuori dall'#if: il toggle sta solo nella toolbar iOS, ma il filtro è condiviso.
     @AppStorage("libraryDownloadedOnly") private var isDownloadedOnly = false
+    @AppStorage(LibrarySources.includeRemoteInAllKey) private var includeRemoteInAll = false
+    @AppStorage(LibrarySources.groupRemoteByFolderKey) private var groupsRemoteByFolder = true
+    /// Remote accounts, for the source titles/menu and the folder grouping of an account page.
+    @StateObject private var accountResults = SafeManagedObjectResults<RemoteAccountEntity>(request: {
+        let request = NSFetchRequest<NSFetchRequestResult>(entityName: "RemoteAccountEntity")
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \RemoteAccountEntity.dateAdded, ascending: true)]
+        return request
+    }())
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// iPhone (no sidebar): the source picked from the toolbar's source menu, layered on top of
+    /// `selection` like `isFavoritesOnly`.
+    @State private var iOSSourceSelection: LibrarySelection?
+    #endif
     @State private var displayMode: LibraryDisplayMode = .grouped
     @State private var searchText = ""
     @State private var isEditing = false
@@ -87,14 +101,52 @@ struct LibraryView: View {
 
     private var effectiveSelection: LibrarySelection {
         #if os(iOS)
-        isFavoritesOnly ? .favorites : selection
+        isFavoritesOnly ? .favorites : (iOSSourceSelection ?? selection)
         #else
         selection
         #endif
     }
 
+    private var accounts: [RemoteAccountEntity] { accountResults.items }
+
+    private func account(withID id: UUID) -> RemoteAccountEntity? {
+        accounts.first { $0.id == id }
+    }
+
+    /// Title of a non-default selection, localized where it's ours; nil for "Tutti".
+    private var selectionTitle: String? {
+        switch effectiveSelection {
+        case .all: return nil
+        case .favorites: return AppLocalization.localizedString("Preferiti", comment: "Favorites tab title")
+        case .reading: return AppLocalization.localizedString("In lettura", comment: "Now reading library view")
+        case .group(let title): return title
+        case .source(nil): return "iCloud Drive"
+        case .source(let id?): return account(withID: id)?.name ?? AppLocalization.localizedString("Account", comment: "Remote account fallback title")
+        }
+    }
+
     private var libraryTitle: String {
-        effectiveSelection == .favorites ? "Preferiti" : (effectiveSelection.groupTitle ?? "Chunky")
+        selectionTitle ?? "Chunky"
+    }
+
+    /// The account whose page is showing, when it's one with real folders (not OPDS feeds).
+    private var folderGroupableAccount: RemoteAccountEntity? {
+        guard case .source(let id?) = effectiveSelection,
+              let account = account(withID: id),
+              account.kind != .opds
+        else { return nil }
+        return account
+    }
+
+    private var isFolderGrouped: Bool {
+        groupsRemoteByFolder && folderGroupableAccount != nil
+    }
+
+    private func gridSections(for filtered: [ComicEntity]) -> [LibraryGrouping.Section] {
+        if groupsRemoteByFolder, let account = folderGroupableAccount, let root = account.serverURL?.absoluteString {
+            return LibrarySources.folderSections(for: filtered, rootAbsoluteString: root)
+        }
+        return LibraryGrouping.sections(for: filtered)
     }
 
     /// "Chunky" on the unfiltered library repeats what the "Libreria" tab already says —
@@ -108,9 +160,7 @@ struct LibraryView: View {
         #endif
         // "Preferiti" is ours and must be localized; a group title is the user's own series
         // name and stays verbatim.
-        return effectiveSelection == .favorites
-            ? AppLocalization.localizedString("Preferiti", comment: "Favorites tab title")
-            : effectiveSelection.groupTitle
+        return selectionTitle
     }
 
     /// `.navigationTitle` on tvOS overlays a fixed screen position instead of a sticky header —
@@ -168,8 +218,14 @@ struct LibraryView: View {
         // `existingGroupNames`) li ricalcolava da sé a ogni accesso.
         let filtered = filteredComics
         return titledContent(filtered: filtered)
-            .onAppear { safeComicResults.start(in: context) }
-            .onDisappear { safeComicResults.stop() }
+            .onAppear {
+                safeComicResults.start(in: context)
+                accountResults.start(in: context)
+            }
+            .onDisappear {
+                safeComicResults.stop()
+                accountResults.stop()
+            }
             #if os(tvOS)
             .navigationTitle("")
             .toolbar(.hidden, for: .navigationBar)
@@ -202,6 +258,7 @@ struct LibraryView: View {
                         nowReadingButton
                         favoritesFilterButton
                         downloadedFilterButton
+                        sourcesMenu
                         if !isKioskModeEnabled {
                             accountsLink
                             toolsMenu
@@ -433,6 +490,7 @@ struct LibraryView: View {
                 }
             }
         }
+        ToolbarItem { sourcesMenu.help("Sorgenti e filtri") }
         ToolbarItem { addButton.help("Importa fumetti…") }
         ToolbarItem { newComicsButton.help("Novità") }
         ToolbarItem { nowReadingButton.help("Ora in lettura") }
@@ -723,6 +781,67 @@ struct LibraryView: View {
         #endif
     }
 
+    /// Sources and view options. On iPhone it also picks the source (no sidebar there); on Mac and
+    /// iPad the sidebar does that, so only the options remain. Hidden when there are no remote
+    /// accounts and nothing to choose.
+    @ViewBuilder
+    private var sourcesMenu: some View {
+        if !accounts.isEmpty || includeRemoteInAll || isDownloadedOnly {
+            Menu {
+                #if os(iOS)
+                if usesSourceMenuPicker {
+                    Picker("Sorgente", selection: iOSSourceBinding) {
+                        Label("Libreria", systemImage: "books.vertical").tag(LibrarySelection?.none)
+                        Label("iCloud Drive", systemImage: "icloud").tag(LibrarySelection?.some(.source(nil)))
+                        ForEach(accounts) { account in
+                            Label(account.name ?? "Account", systemImage: account.kind.systemImage)
+                                .tag(LibrarySelection?.some(.source(account.id)))
+                        }
+                    }
+                    .pickerStyle(.inline)
+                }
+                #endif
+                if !accounts.isEmpty || includeRemoteInAll {
+                    Toggle(isOn: $includeRemoteInAll) {
+                        Label("Mostra gli account in «Tutti i fumetti»", systemImage: "externaldrive.connected.to.line.below")
+                    }
+                }
+                #if os(macOS)
+                Toggle(isOn: $isDownloadedOnly) {
+                    Label("Solo scaricati", systemImage: "arrow.down.circle")
+                }
+                #endif
+                if folderGroupableAccount != nil {
+                    Picker("Raggruppa per", selection: $groupsRemoteByFolder) {
+                        Text("Cartella").tag(true)
+                        Text("Serie").tag(false)
+                    }
+                }
+            } label: {
+                Label("Sorgenti e filtri", systemImage: "line.3.horizontal.decrease.circle")
+            }
+            .accessibilityIdentifier("library.sourcesMenu")
+        }
+    }
+
+    #if os(iOS)
+    /// Only without the sidebar (iPhone, iPad in a narrow window): otherwise the sidebar picks the
+    /// source (see `ContentView`) and a second picker here would fight it.
+    private var usesSourceMenuPicker: Bool {
+        horizontalSizeClass != .regular
+    }
+
+    private var iOSSourceBinding: Binding<LibrarySelection?> {
+        Binding(
+            get: { iOSSourceSelection },
+            set: { newValue in
+                iOSSourceSelection = newValue
+                if newValue != nil { isFavoritesOnly = false }
+            }
+        )
+    }
+    #endif
+
     /// Mostra solo i fumetti presenti sul device (niente segnaposto remoti).
     @ViewBuilder
     private var downloadedFilterButton: some View {
@@ -735,14 +854,9 @@ struct LibraryView: View {
     }
 
     private var filteredComics: [ComicEntity] {
-        var result = Array(comics)
+        var result = LibrarySources.filter(Array(comics), selection: effectiveSelection, includeRemoteInAll: includeRemoteInAll)
         if isDownloadedOnly {
             result = result.filter { !$0.isRemotePlaceholder }
-        }
-        if let group = effectiveSelection.groupTitle {
-            result = result.filter { ($0.seriesName ?? LibraryGrouping.ungroupedTitle) == group }
-        } else if effectiveSelection == .favorites {
-            result = result.filter(\.isFavorite)
         }
         guard !searchText.isEmpty else { return result }
         return result.filter { comic in
@@ -769,7 +883,7 @@ struct LibraryView: View {
         // computed ricalcolati a ogni accesso, e ogni cella pagava l'ordinamento
         // dell'intera libreria alla propria creazione (anche quelle materializzate
         // pigramente durante lo scroll).
-        let sections = LibraryGrouping.sections(for: filtered)
+        let sections = gridSections(for: filtered)
         let names = existingGroupNames
         #if os(macOS)
         // Su macOS un solo container lazy: `LazyVStack` di N `LazyVGrid` costringe ogni
@@ -1004,7 +1118,9 @@ struct LibraryView: View {
             Image(systemName: collapsedGroups.contains(title) ? "chevron.right" : "chevron.down")
                 .font(.caption.bold())
             #endif
-            Text(LibraryGrouping.headerText(title: title, comics: comics))
+            // A server folder is a place, not a series: no issue range ("MARVEL 1" for a lone
+            // "Spider-Man 001" would read as an issue number).
+            Text(isFolderGrouped ? title.uppercased() : LibraryGrouping.headerText(title: title, comics: comics))
                 .font(.subheadline.bold())
             // On tvOS's wide grid, pushing this metadata to the far edge with a full-width
             // Spacer leaves it looking like an unrelated stray number — keep it next to the

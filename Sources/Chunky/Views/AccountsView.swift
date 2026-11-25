@@ -60,6 +60,9 @@ struct AccountsView: View {
     /// — a `NavigationLink` inside a `.contextMenu` doesn't reliably push on tvOS, the menu is
     /// dismissed before the link's own navigation runs.
     @State private var accountBeingEdited: RemoteAccountEntity?
+    /// "Sfoglia sul server" from a row's context menu: the row itself opens the account's comics
+    /// in the library grid, the live browser stays one step away.
+    @State private var accountBeingBrowsed: RemoteAccountEntity?
     #endif
     /// Closes the sheet from `toolbarDoneButton` (no-op on tvOS — see `View+ToolbarDoneButton.swift`
     /// — where dismissal is instead the system Menu-button behavior on a plain `.sheet`).
@@ -409,6 +412,9 @@ struct AccountsView: View {
             .navigationDestination(item: $accountBeingEdited) { account in
                 AddAccountView(editing: account)
             }
+            .navigationDestination(item: $accountBeingBrowsed) { account in
+                RemoteBrowserView(account: account)
+            }
         }
     }
 
@@ -432,11 +438,17 @@ struct AccountsView: View {
                     if !accounts.isEmpty {
                         Section {
                             ForEach(accounts) { account in
-                                NavigationLink(destination: RemoteBrowserView(account: account)) {
+                                // The account's comics in the library grid (downloaded and not),
+                                // instead of the live server browser: a big NAS import gets its
+                                // own page, like the sidebar's "Sorgenti" on iPad and Mac.
+                                NavigationLink(destination: LibraryView(selection: .source(account.id))) {
                                     accountRow(for: account)
                                 }
                                 .tvOSRowBackground()
                                 .contextMenu {
+                                    Button(action: { accountBeingBrowsed = account }) {
+                                        Label("Sfoglia sul server", systemImage: "folder")
+                                    }
                                     Button(action: { accountBeingEdited = account }) {
                                         Label("Modifica", systemImage: "pencil")
                                     }

@@ -1,3 +1,4 @@
+import CoreData
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -16,6 +17,11 @@ enum UITestSeed {
     /// taps on.
     static let comicTitle = "uitest-landmark"
     static let comicCount = 14
+    /// A fake remote account with placeholder comics in a few server folders, for the library's
+    /// "Sorgenti" UI. Auto-scan is off: the account never touches the network, so no local-network
+    /// permission prompt and nothing to wait for.
+    static let remoteLaunchArgument = "--uitesting-seed-remote"
+    static let remoteAccountName = "NAS di prova"
 
     /// PDFKit doesn't exist on tvOS devices (see `ComicPageProviderFactory`): a `.pdf` fixture
     /// there would sit on disk forever unread, never registered into the library. `.cbz` (a
@@ -37,6 +43,41 @@ enum UITestSeed {
         let url = LibraryStorage.localDocumentsURL.appendingPathComponent("\(comicTitle).\(fixtureExtension)")
         guard !FileManager.default.fileExists(atPath: url.path) else { return }
         writeLandmarkFixture(to: url)
+    }
+
+    /// Inserts the fake account and its comics once (keyed on the account name). Needs the store,
+    /// so it runs from `ContentView` rather than at launch with the file fixtures.
+    static func seedRemoteAccountIfRequested(in context: NSManagedObjectContext) {
+        guard CommandLine.arguments.contains(remoteLaunchArgument) else { return }
+        let request = RemoteAccountEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "name == %@", remoteAccountName)
+        guard ((try? context.count(for: request)) ?? 0) == 0 else { return }
+        let account = RemoteAccountEntity.create(
+            kind: .webdav, name: remoteAccountName, serverURLString: "https://nas.invalid/Fumetti",
+            username: nil, password: nil, autoScanEnabled: false, in: context
+        )
+        let root = account.serverURL?.absoluteString ?? "https://nas.invalid/Fumetti"
+        let files = [
+            "Bonelli/Dylan%20Dog/Dylan%20Dog%20001.cbz",
+            "Bonelli/Dylan%20Dog/Dylan%20Dog%20002.cbz",
+            "Bonelli/Tex/Tex%20700.cbz",
+            "Marvel/Spider-Man%20001.cbz",
+            "Leggimi%20prima.cbz"
+        ]
+        for file in files {
+            let name = (file as NSString).lastPathComponent.removingPercentEncoding ?? file
+            let title = (name as NSString).deletingPathExtension
+            ComicEntity.create(
+                title: title,
+                relativePath: "remote-\(name)",
+                format: .cbz,
+                isRemotePlaceholder: true,
+                sourceAccountID: account.id,
+                sourceRelativePath: "\(root)/\(file)",
+                in: context
+            )
+        }
+        try? context.save()
     }
 
     /// Title of the Nth seeded comic (1-based) when `multiLaunchArgument` is used — grid tests

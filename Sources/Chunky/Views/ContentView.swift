@@ -4,9 +4,12 @@ import SwiftUI
 /// Root of the app. It's the only place where navigation diverges between platforms:
 /// the rest of the views don't know which system they're running on.
 struct ContentView: View {
-    #if os(macOS)
+    #if !os(tvOS)
     @State private var selection: LibrarySelection = .all
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    #endif
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
 
     @EnvironmentObject private var viewModel: LibraryViewModel
@@ -46,6 +49,7 @@ struct ContentView: View {
                     viewModel.adoptFilesDroppedInDocuments(context: context)
                     viewModel.rebuildLibrary(context: context)
                 }
+                UITestSeed.seedRemoteAccountIfRequested(in: context)
                 ICloudDownloadTracker.shared.start()
                 RemoteProgressSync.logAccountStatus()
                 // Once per process (guarded inside), however many library windows exist.
@@ -256,8 +260,20 @@ struct ContentView: View {
         #elseif os(tvOS)
         TVRootTabView()
         #else
-        NavigationStack {
-            LibraryView()
+        if horizontalSizeClass == .regular {
+            // iPad with room for it: the same sidebar as the Mac (sources, series), so a large
+            // NAS import has its own place instead of a toolbar menu.
+            NavigationSplitView(columnVisibility: $columnVisibility) {
+                LibrarySidebarView(selection: $selection)
+            } detail: {
+                NavigationStack {
+                    LibraryView(selection: selection)
+                }
+            }
+        } else {
+            NavigationStack {
+                LibraryView()
+            }
         }
         #endif
     }
