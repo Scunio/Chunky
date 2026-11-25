@@ -30,7 +30,7 @@ import UIKit
 /// outward), every CloudKit error is logged via `DiagnosticLog` and never surfaced —
 /// sync degrades to "this device only" instead of breaking reading.
 ///
-/// Threading: only `snapshot(of:)` / `requestPush(_:)` are `@MainActor` (they read
+/// Threading: only `snapshots(of:)` / `requestPush(_:)` are `@MainActor` (they read
 /// managed objects) — call them via `Task { @MainActor in }` from synchronous UI code,
 /// the same idiom used for `RemoteAccountScanner` (see `RemoteBrowserView`). Everything
 /// else (`flushPush`, `fetchAndApply`, …) is thread-safe by construction and callable
@@ -140,22 +140,34 @@ enum RemoteProgressSync {
         let deviceName: String
     }
 
-    /// Builds a pushable snapshot, or nil when this comic must not sync (remote comic
-    /// with gone account or unresolvable server path — all fail-closed).
+    /// The snapshots to push for a comic: none when it must not sync (fail-closed).
+    /// A remote-account comic pushes under its account key; if its file is a download an
+    /// earlier version left in the iCloud root, it *also* pushes under the iCloud-library key,
+    /// because other devices know that same file as an iCloud comic (`LibraryStorage.isLegacyRootDownload`).
     @MainActor
-    static func snapshot(of comic: ComicEntity) -> Snapshot? {
+    static func snapshots(of comic: ComicEntity) -> [Snapshot] {
         if comic.sourceAccountID != nil {
-            let remote = remoteSnapshot(of: comic)
-            if remote == nil {
-                logUnsyncableOnce(comic, reason: "legato a un account (\(comic.sourceAccountID?.uuidString ?? "?")) non risolvibile o senza chiave di abbinamento, percorso \"\(comic.relativePath ?? "")\"")
+            var result: [Snapshot] = []
+            if let remote = remoteSnapshot(of: comic) { result.append(remote) }
+            if let relativePath = comic.relativePath,
+               LibraryStorage.isLegacyRootDownload(relativePath: relativePath, sourceAccountID: comic.sourceAccountID) {
+                result.append(libraryKeySnapshot(of: comic, relativePath: relativePath))
             }
-            return remote
+            if result.isEmpty {
+                logUnsyncableOnce(comic, reason: remoteUnsyncableReason(of: comic))
+            }
+            return result
         }
         // iCloud-library comic: no account to resolve, `relativePath` is the key.
         guard let relativePath = comic.relativePath, !relativePath.isEmpty else {
             logUnsyncableOnce(comic, reason: "percorso del file vuoto")
-            return nil
+            return []
         }
+        return [libraryKeySnapshot(of: comic, relativePath: relativePath)]
+    }
+
+    @MainActor
+    private static func libraryKeySnapshot(of comic: ComicEntity, relativePath: String) -> Snapshot {
         let progressKey = RemoteProgressSyncKey.progressKey(accountSyncKey: localLibrarySyncKey, serverPath: relativePath)
         return Snapshot(
             recordName: RemoteProgressSyncKey.recordName(forProgressKey: progressKey),
@@ -170,6 +182,25 @@ enum RemoteProgressSync {
             title: comic.title ?? "",
             deviceName: currentDeviceName
         )
+    }
+
+    /// Why `remoteSnapshot` gave up, in the user's terms (Diagnostica only).
+    @MainActor
+    private static func remoteUnsyncableReason(of comic: ComicEntity) -> String {
+        let path = "percorso \"\(comic.relativePath ?? "")\""
+        guard let context = comic.managedObjectContext, let accountID = comic.sourceAccountID else {
+            return "fumetto senza contesto, \(path)"
+        }
+        let request = RemoteAccountEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", accountID as CVarArg)
+        request.fetchLimit = 1
+        guard let account = try? context.fetch(request).first else {
+            return "legato all'account \(accountID.uuidString), che non esiste più su questo dispositivo, \(path)"
+        }
+        if effectiveSyncKey(for: account) == nil {
+            return "l'account \"\(account.name ?? "?")\" non ha una chiave di abbinamento, \(path)"
+        }
+        return "percorso sul server non ricavabile dall'account \"\(account.name ?? "?")\", \(path)"
     }
 
     /// Comics already reported as unsyncable this session: a reader calls `snapshot` on every
@@ -225,8 +256,9 @@ enum RemoteProgressSync {
     static func requestPush(_ comics: [ComicEntity]) {
         guard isEnabled else { return }
         for comic in comics {
-            guard let snapshot = snapshot(of: comic) else { continue }
-            Engine.requestPush(snapshot)
+            for snapshot in snapshots(of: comic) {
+                Engine.requestPush(snapshot)
+            }
         }
     }
 
@@ -972,9 +1004,10 @@ enum RemoteProgressSync {
 
         /// Matches one iCloud-library record to local comics by `relativePath` (identical
         /// on every device sharing the ubiquity container) and applies last-writer-wins.
-        /// Remote-account comics are skipped even on a path hit: their progress flows
-        /// through their own account key, never the shared filename.
-        /// Applies to the deterministic survivor only (oldest `dateAdded`, then `id` — the same
+        /// Remote-account comics are skipped on a path hit — their progress flows through their
+        /// own account key — unless their file *is* the shared one: an old download left in the
+        /// iCloud root (`LibraryStorage.isLegacyRootDownload`), which other devices know only as
+        /// an iCloud comic. Among local rows it applies to the deterministic survivor only (oldest `dateAdded`, then `id` — the same
         /// order deduplication uses to pick who stays): updating every duplicate would stamp a
         /// fresh `dateLastOpened` on records about to be collapsed, and touching a loser the other
         /// device just deleted re-exports it via the mirror, resurrecting the duplicate.
@@ -994,20 +1027,32 @@ enum RemoteProgressSync {
             // I duplicati condividono lo stesso file: ne resta uno solo dopo la dedup, e il
             // superstite è deterministico (`ComicEntity.precedesAsSurvivor`, lo stesso della dedup).
             // `dateAdded` e `id` sono attributi sincronizzati, quindi ogni device sceglie lo stesso.
-            guard let comic = ComicEntity.survivor(of: comics.filter { $0.sourceAccountID == nil }) else {
-                DiagnosticLog.log("RemoteProgress: \"\(recordPath)\" c'è ma solo come fumetto di un account (\(comics.count) schede), progresso iCloud ignorato")
+            // Plus remote-account rows whose file is an old download sitting in the iCloud root:
+            // the same file the other devices know as an iCloud comic. Deduplication never
+            // collapses account rows with local ones, so updating them too can't race it.
+            var targets = comics.filter {
+                $0.sourceAccountID != nil
+                    && LibraryStorage.isLegacyRootDownload(relativePath: recordPath, sourceAccountID: $0.sourceAccountID)
+            }
+            if let survivor = ComicEntity.survivor(of: comics.filter { $0.sourceAccountID == nil }) {
+                targets.insert(survivor, at: 0)
+            }
+            guard !targets.isEmpty else {
+                DiagnosticLog.log("RemoteProgress: \"\(recordPath)\" c'è ma solo come fumetto di un account con file fuori da iCloud (\(comics.count) schede), progresso iCloud ignorato")
                 return .noMatchingComic
             }
-            guard RemoteProgressSyncKey.shouldApply(remoteUpdatedAt: remoteUpdatedAt, localDateLastOpened: comic.dateLastOpened) else {
-                return .olderThanLocal
+            var appliedAny = false
+            for comic in targets
+            where RemoteProgressSyncKey.shouldApply(remoteUpdatedAt: remoteUpdatedAt, localDateLastOpened: comic.dateLastOpened) {
+                if comic.pageCount > 0 {
+                    comic.lastReadPage = Int32(min(max(remotePage, 0), Int(comic.pageCount) - 1))
+                } else {
+                    comic.lastReadPage = Int32(max(remotePage, 0))
+                }
+                comic.dateLastOpened = remoteUpdatedAt
+                appliedAny = true
             }
-            if comic.pageCount > 0 {
-                comic.lastReadPage = Int32(min(max(remotePage, 0), Int(comic.pageCount) - 1))
-            } else {
-                comic.lastReadPage = Int32(max(remotePage, 0))
-            }
-            comic.dateLastOpened = remoteUpdatedAt
-            return .applied
+            return appliedAny ? .applied : .olderThanLocal
         }
 
         /// Matches fetched records to local comics and applies last-writer-wins.

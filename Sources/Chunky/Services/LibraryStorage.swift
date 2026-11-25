@@ -351,6 +351,24 @@ enum LibraryStorage {
         return cached
     }
 
+    /// A remote-account comic whose file is the one an earlier version downloaded into the
+    /// library root (the iCloud container), not a copy in the remote cache: that file is shared
+    /// with every device, which registers it as an iCloud-library comic, so its progress must
+    /// also travel under the iCloud-library key (see `RemoteProgressSync`).
+    static func isLegacyRootDownload(relativePath: String, sourceAccountID: UUID?) -> Bool {
+        guard let sourceAccountID, !relativePath.isEmpty else { return false }
+        let cached = remoteCacheFileURL(relativePath: relativePath, accountID: sourceAccountID)
+        return resolvesToLegacyRoot(
+            cachedExists: FileManager.default.fileExists(atPath: cached.path),
+            rootPresent: isPresent(fileURL(forRelativePath: relativePath))
+        )
+    }
+
+    /// Same precedence as `fileURL(forRelativePath:sourceAccountID:)`: the remote cache wins.
+    static func resolvesToLegacyRoot(cachedExists: Bool, rootPresent: Bool) -> Bool {
+        !cachedExists && rootPresent
+    }
+
     /// True if the file exists locally *or* is an iCloud item whose bytes were evicted:
     /// `fileExists` is false for an offloaded file at its logical path, which would make an
     /// older remote download in the iCloud root look gone (see `isPendingDownload` for the
