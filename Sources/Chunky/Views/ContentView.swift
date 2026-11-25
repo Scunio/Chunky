@@ -50,6 +50,9 @@ struct ContentView: View {
                     viewModel.rebuildLibrary(context: context)
                 }
                 UITestSeed.seedRemoteAccountIfRequested(in: context)
+                #if DEBUG
+                CloudKitSchemaSeed.seedIfRequested(in: context)
+                #endif
                 ICloudDownloadTracker.shared.start()
                 RemoteProgressSync.logAccountStatus()
                 // Once per process (guarded inside), however many library windows exist.
