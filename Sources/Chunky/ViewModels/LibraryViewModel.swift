@@ -691,6 +691,7 @@ final class LibraryViewModel: ObservableObject {
         var missingFileCount = 0
         var pendingDownloadCount = 0
         var invalidCoverCount = 0
+        var recompressedCoverCount = 0
         context.performAndWait {
             let request = ComicEntity.fetchRequest()
             // Only the cover, not also "pageCount == 0": opening a just-downloaded comic
@@ -708,6 +709,13 @@ final class LibraryViewModel: ObservableObject {
                 // used to be skipped forever by the nil-only predicate, leaving a blank cell.
                 let inlineData = ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageDataInline")
                 if let inlineData, CoverThumbnailCache.canDecode(inlineData as Data) {
+                    // Covers of earlier versions were ~400 KB PNGs, and they sync through
+                    // CloudKit: re-encoded once as small JPEGs (no-op from then on).
+                    if let compact = ThumbnailGenerator.compactedCoverData(inlineData as Data) {
+                        comic.coverImageDataInline = compact
+                        CoverThumbnailCache.invalidate(for: comic)
+                        recompressedCoverCount += 1
+                    }
                     continue
                 }
                 if inlineData != nil {
@@ -721,7 +729,7 @@ final class LibraryViewModel: ObservableObject {
                 // trying to rebuild from the archive.
                 if let legacyData = ObjCExceptionCatcher.safeBinaryValue(for: comic, key: "coverImageData"),
                    CoverThumbnailCache.canDecode(legacyData as Data) {
-                    comic.coverImageDataInline = legacyData as Data
+                    comic.coverImageDataInline = ThumbnailGenerator.compactedCoverData(legacyData as Data) ?? legacyData as Data
                     CoverThumbnailCache.invalidate(for: comic)
                     legacyCoverCount += 1
                     continue
@@ -740,6 +748,9 @@ final class LibraryViewModel: ObservableObject {
                 candidates.append((comic.objectID, relativePath, url, comic.format))
             }
             if context.hasChanges { try? context.save() }
+        }
+        if recompressedCoverCount > 0 {
+            DiagnosticLog.log("Copertine: \(recompressedCoverCount) ricompresse da PNG a JPEG (più leggere da sincronizzare)")
         }
         if missingCoverCount > 0 {
             let summary = "Cover backfill: \(missingCoverCount) mancanti/non valide (\(invalidCoverCount) cache non valide), \(legacyCoverCount) recuperate dal campo CloudKit, \(candidates.count) archivi locali, \(pendingDownloadCount) da scaricare, \(missingFileCount) file non trovati"
