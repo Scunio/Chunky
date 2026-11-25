@@ -46,7 +46,6 @@ struct DownloadsView: View {
 
     private var downloadList: some View {
         VStack(spacing: 0) {
-            #if os(tvOS)
             if downloadManager.activeDownloads.isEmpty {
                 ContentUnavailableView(
                     "Nessun download in corso",
@@ -57,9 +56,6 @@ struct DownloadsView: View {
             } else {
                 activeList
             }
-            #else
-            activeList
-            #endif
         }
     }
 
@@ -71,6 +67,12 @@ struct DownloadsView: View {
                 // always-visible cancel button there instead.
                 #if !os(tvOS)
                 .swipeActions {
+                    Button(role: .destructive, action: item.cancel) {
+                        Label("Annulla", systemImage: "xmark")
+                    }
+                }
+                // Swipe isn't a mouse gesture: the Mac gets the same action from the right-click menu.
+                .contextMenu {
                     Button(role: .destructive, action: item.cancel) {
                         Label("Annulla", systemImage: "xmark")
                     }

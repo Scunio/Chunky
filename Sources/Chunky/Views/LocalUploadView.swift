@@ -100,6 +100,9 @@ struct LocalUploadView: View {
                 }
             }
         }
+        #if os(macOS)
+        .formStyle(.grouped)
+        #endif
     }
 
     #if os(tvOS)

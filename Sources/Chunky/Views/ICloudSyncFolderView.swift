@@ -23,7 +23,7 @@ struct ICloudSyncFolderView: View {
     private var isAvailable: Bool { LibraryStorage.isICloudAvailable }
 
     var body: some View {
-        List {
+        Form {
             Section {
                 HStack {
                     Text("Cartella di sincronizzazione")
@@ -59,6 +59,9 @@ struct ICloudSyncFolderView: View {
                 }
             }
         }
+        #if os(macOS)
+        .formStyle(.grouped)
+        #endif
         .tvOSListFocusFix()
         .navigationTitle("iCloud Drive")
         #if os(iOS)

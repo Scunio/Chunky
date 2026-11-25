@@ -139,6 +139,10 @@ struct AccountsView: View {
     private var panel: some View {
         #if os(tvOS)
         tvOSAccountList
+        #elseif os(macOS)
+        macAccountForm
+            .navigationTitle("Account")
+            .frame(minWidth: 520, idealWidth: 560, minHeight: 560)
         #else
         accountList
             .navigationTitle("Account")
@@ -153,14 +157,123 @@ struct AccountsView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     addAccountToggleButton
                 }
-                #else
-                ToolbarItem(placement: .primaryAction) {
-                    addAccountToggleButton
-                }
                 #endif
             }
         #endif
     }
+
+    #if os(macOS)
+    /// System-Settings-style grouped form: the iOS list in a Mac sheet came out as cramped,
+    /// tiny rows with no visible "+" (the sheet's toolbar isn't drawn there), so adding an
+    /// account — the screen's main action — had no entry point at all.
+    private var macAccountForm: some View {
+        Form {
+            Section {
+                NavigationLink(destination: DownloadsView()) {
+                    macRow(Text("Download"), systemImage: "arrow.down.circle", tint: .blue)
+                }
+                NavigationLink(destination: LocalUploadView()) {
+                    macRow(Text("Web"), systemImage: "globe", tint: .teal, subtitle: AppLocalization.localizedString("Server web spento", comment: "Web upload server status"))
+                }
+                NavigationLink(destination: ICloudSyncFolderView()) {
+                    macRow(Text("iCloud Drive"), systemImage: "icloud", tint: .cyan)
+                }
+            }
+
+            Section(header: Text("I tuoi account")) {
+                ForEach(accounts) { account in
+                    let status = accountStatus(for: account)
+                    NavigationLink(destination: RemoteBrowserView(account: account)) {
+                        macRow(
+                            Text(account.name ?? "Account"),
+                            systemImage: account.kind.systemImage,
+                            tint: .indigo,
+                            subtitle: status.text,
+                            subtitleIsError: status.isError
+                        )
+                    }
+                    .contextMenu {
+                        Button("Modifica") { activeSheet = .edit(account) }
+                        Button("Elimina", role: .destructive) { accountsToDelete = [account] }
+                    }
+                }
+                macAddAccountMenu
+            }
+
+            Section(
+                header: Text("Strumenti"),
+                footer: Text("Utile per una serie di pagine scansionate come immagini separate: verranno unite in un unico fumetto CBZ.")
+            ) {
+                Button(action: { activeImporter = .folder }) {
+                    macRow(Text("Crea fumetto da cartella di immagini"), systemImage: "photo.stack", tint: .orange)
+                }
+                .buttonStyle(.plain)
+                if let folderConversionError {
+                    Text(folderConversionError).foregroundColor(.red).font(.footnote)
+                }
+                if let importError = viewModel.importError {
+                    Text(importError).foregroundColor(.red).font(.footnote)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var macAddAccountMenu: some View {
+        Menu {
+            Button { activeSheet = .add(.opds) } label: {
+                Label("Calibre / Ubooquity / OPDS", systemImage: RemoteAccountKind.opds.systemImage)
+            }
+            Button { activeSheet = .add(.webdav) } label: {
+                Label("Nuovo account WebDAV", systemImage: "plus.circle")
+            }
+            Button { activeSheet = .add(.smb) } label: {
+                Label("Nuovo account SMB", systemImage: RemoteAccountKind.smb.systemImage)
+            }
+            Divider()
+            Section("Importa da file") {
+                ForEach(Self.openServices, id: \.name) { service in
+                    Button { activeImporter = .comics } label: {
+                        Label(service.name, systemImage: service.systemImage)
+                    }
+                }
+            }
+        } label: {
+            macRow(Text("Aggiungi account"), systemImage: "plus", tint: .green)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .accessibilityIdentifier("accounts.add")
+    }
+
+    private func macRow(
+        _ title: Text,
+        systemImage: String,
+        tint: Color,
+        subtitle: String? = nil,
+        subtitleIsError: Bool = false
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(tint.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                title
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(subtitleIsError ? Color.red : Color.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+    }
+    #endif
 
     private var accountList: some View {
         List {

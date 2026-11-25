@@ -141,6 +141,14 @@ struct ContentView: View {
                 scheduleDebouncedPlaceholderBackfill()
             }
             .onChange(of: isSyncFolderEnabled) { _, newValue in if newValue { syncSyncFolderIfNeeded() } }
+            #if os(macOS)
+            // On macOS `scenePhase` doesn't flip when the user just switches back to the app from
+            // another one (the window stays "active"), so the fetch above never ran on return:
+            // progress made on the iPhone only arrived with the 3-minute rescan.
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                RemoteProgressSync.fetchAndApply(in: context)
+            }
+            #endif
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
                 syncSyncFolderIfNeeded()

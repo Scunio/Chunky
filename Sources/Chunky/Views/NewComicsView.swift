@@ -53,6 +53,11 @@ struct NewComicsView: View {
         // The empty state also needs less height than the scrollable cover list: at the
         // list's height it was mostly dead black space around one small icon and a line of text.
         .frame(width: 520, height: comics.isEmpty ? 320 : 620)
+        #elseif os(macOS)
+        // A 2:3 cover at 280pt is ~370pt tall: with the 420pt popover only a sliver of it was
+        // visible under the header, which read as a clipped image. Taller on the Mac, where
+        // there's room, and the list scrolls when there are more.
+        .frame(width: 300, height: 560)
         #else
         .frame(width: 280, height: 420)
         #endif

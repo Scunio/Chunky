@@ -715,9 +715,11 @@ enum RemoteProgressSync {
             guard let zoneNote = note as? CKRecordZoneNotification,
                   zoneNote.recordZoneID?.zoneName == RemoteProgressSync.zoneName
             else {
+                // Core Data's own mirroring pushes land here too: not ours, just noise.
                 completion(0)
                 return
             }
+            DiagnosticLog.log("Push progressi ricevuta: scarico le modifiche")
             fetchAndApply(in: PersistenceController.shared.container.viewContext, force: true, completion: completion)
         }
 

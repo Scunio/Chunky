@@ -406,6 +406,11 @@ struct AddAccountView: View {
                 }
             }
         }
+        #if os(macOS)
+        // Without it the Mac form renders section headers/footers as plain lines glued to the
+        // next group, with borderless fields and labels overflowing their column.
+        .formStyle(.grouped)
+        #endif
         .alert("Eliminare questo account?", isPresented: $isConfirmingDelete) {
             Button("Elimina", role: .destructive, action: deleteEditingAccount)
             Button("Annulla", role: .cancel) {}
