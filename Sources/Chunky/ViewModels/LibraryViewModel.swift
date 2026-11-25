@@ -24,6 +24,8 @@ final class LibraryViewModel: ObservableObject {
     /// add an identical pass, it waits for the one that's about to run. The key is removed
     /// at the start of execution, so a trigger arriving *during* the pass still queues
     /// another one at the end (and that's exactly what's needed: the on-disk state has changed).
+    /// Last cover-backfill summary written to Diagnostica (touched only on the serial scan queue).
+    private var lastCoverBackfillSummary: String?
     private let pendingLock = NSLock()
     private var pendingScans: Set<ScanKind> = []
     /// A user-initiated rebuild is waiting (see `rebuildLibrary(userInitiated:)`); guarded by `pendingLock`.
@@ -648,10 +650,10 @@ final class LibraryViewModel: ObservableObject {
             context.performAndWait { try? context.save() }
         }
 
+        // "Stato iCloud sconosciuto" (query still gathering) is the normal state at every launch:
+        // not logged. A root inconsistent with iCloud availability is not normal.
         if !rootIsConsistent {
             DiagnosticLog.log("Rebuild library: cartella libreria e disponibilità iCloud non concordano, nessuna cancellazione (solo aggiunte)")
-        } else if !deletionsAllowed {
-            DiagnosticLog.log("Rebuild library: stato iCloud sconosciuto, nessuna cancellazione (solo aggiunte)")
         }
         if revertedRemoteCount > 0 {
             DiagnosticLog.log("Rebuild library: \(revertedRemoteCount) fumetti remoti senza file tornati segnaposto (si riscaricano all'apertura)")
@@ -740,9 +742,14 @@ final class LibraryViewModel: ObservableObject {
             if context.hasChanges { try? context.save() }
         }
         if missingCoverCount > 0 {
-            DiagnosticLog.log(
-                "Cover backfill: \(missingCoverCount) mancanti/non valide (\(invalidCoverCount) cache non valide), \(legacyCoverCount) recuperate dal campo CloudKit, \(candidates.count) archivi locali, \(pendingDownloadCount) da scaricare, \(missingFileCount) file non trovati"
-            )
+            let summary = "Cover backfill: \(missingCoverCount) mancanti/non valide (\(invalidCoverCount) cache non valide), \(legacyCoverCount) recuperate dal campo CloudKit, \(candidates.count) archivi locali, \(pendingDownloadCount) da scaricare, \(missingFileCount) file non trovati"
+            // Only when something happens or the picture changes: the same "8 da scaricare"
+            // repeated on every rescan and every CloudKit import said nothing new.
+            let didWork = legacyCoverCount > 0 || !candidates.isEmpty
+            if didWork || summary != lastCoverBackfillSummary {
+                DiagnosticLog.log(summary)
+            }
+            lastCoverBackfillSummary = summary
         }
         guard !candidates.isEmpty else { return }
 

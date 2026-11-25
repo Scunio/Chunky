@@ -77,7 +77,9 @@ enum MirrorHistoryLogger {
             if let n = deletes[entity], n > 0 { bits.append("\(n) eliminati") }
             parts.append("\(entity) (\(bits.joined(separator: ", ")))")
         }
-        guard !parts.isEmpty else { return }
+        // Page-only updates arrive on every progress save, on every device: noise. Inserts and
+        // deletions (new comics, duplicates collapsed, removals) are what explains a library.
+        guard !parts.isEmpty, !(inserts.isEmpty && deletes.isEmpty) else { return }
         var line = "Mirror: " + parts.joined(separator: ", ")
         if !updatedComics.isEmpty {
             line += " — " + updatedComics.map { "\($0.title) → pag \($0.page + 1)" }.joined(separator: "; ")
