@@ -691,7 +691,6 @@ final class LibraryViewModel: ObservableObject {
         var missingFileCount = 0
         var pendingDownloadCount = 0
         var invalidCoverCount = 0
-        var recompressedCoverCount = 0
         context.performAndWait {
             let request = ComicEntity.fetchRequest()
             // Only the cover, not also "pageCount == 0": opening a just-downloaded comic
@@ -714,7 +713,6 @@ final class LibraryViewModel: ObservableObject {
                     if let compact = ThumbnailGenerator.compactedCoverData(inlineData as Data) {
                         comic.coverImageDataInline = compact
                         CoverThumbnailCache.invalidate(for: comic)
-                        recompressedCoverCount += 1
                     }
                     continue
                 }
@@ -748,9 +746,6 @@ final class LibraryViewModel: ObservableObject {
                 candidates.append((comic.objectID, relativePath, url, comic.format))
             }
             if context.hasChanges { try? context.save() }
-        }
-        if recompressedCoverCount > 0 {
-            DiagnosticLog.log("Copertine: \(recompressedCoverCount) ricompresse da PNG a JPEG (più leggere da sincronizzare)")
         }
         if missingCoverCount > 0 {
             let summary = "Cover backfill: \(missingCoverCount) mancanti/non valide (\(invalidCoverCount) cache non valide), \(legacyCoverCount) recuperate dal campo CloudKit, \(candidates.count) archivi locali, \(pendingDownloadCount) da scaricare, \(missingFileCount) file non trovati"
