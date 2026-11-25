@@ -39,11 +39,18 @@ extension RemoteAccountEntity {
     /// restituirebbe un UUID diverso a OGNI accesso e scrittura e lettura nel
     /// Keychain non si incontrerebbero mai — password "sbiancata" a ogni Modifica
     /// anche con l'entitlement a posto. Qui l'id viene assegnato una volta sola.
-    /// Il salvataggio è sincrono sul main thread, accodato (`perform`) da qualsiasi
-    /// altro thread: un `save` diretto del viewContext da background crasherebbe,
-    /// e un `performAndWait` rischierebbe il deadlock sotto test. La persistenza è
-    /// comunque garantita dal backfill all'avvio più il save dei flussi di
-    /// creazione/modifica (sempre su main subito dopo).
+    /// L'assegnazione avviene sempre sulla coda del suo contesto, mai da un thread estraneo:
+    /// - main thread: sincrona, come prima;
+    /// - contesto privato (background, e i test): sincrona con `performAndWait`, che gira in linea
+    ///   se siamo già sulla sua coda — si restituisce l'id davvero salvato, così due letture
+    ///   ravvicinate non producono due UUID diversi;
+    /// - contesto del main letto da un altro thread: accodata con `perform` (un `performAndWait`
+    ///   verso il main rischierebbe il deadlock), senza scrivere sull'oggetto da qui.
+    /// Prima il ramo "non main" accodava il save *e* scriveva `id` dal thread chiamante: le due
+    /// scritture concorrenti sullo stesso contesto mandavano in crash Core Data
+    /// ("-[__NSCFSet addObject:]: attempt to insert nil", visto nei test).
+    /// La persistenza è comunque garantita dal backfill all'avvio più il save dei flussi di
+    /// creazione/modifica.
     var stableID: UUID {
         if let id { return id }
         let new = UUID()
@@ -61,21 +68,34 @@ extension RemoteAccountEntity {
             } catch {
                 AppLog.log("stableID: salvataggio id fallito: \(error.localizedDescription)")
             }
-        } else {
-            // Assegnazione immediata (stabilizza questo object graph per l'operazione
-            // in corso), persistenza accodata senza bloccare il thread chiamante.
-            context.perform {
+            return new
+        }
+        if context.concurrencyType == .privateQueueConcurrencyType {
+            var result = new
+            context.performAndWait {
                 // Un altro thread potrebbe averlo già assegnato nel frattempo.
-                if self.id == nil {
-                    self.id = new
-                    do {
-                        try context.save()
-                    } catch {
-                        AppLog.log("stableID(bg): salvataggio id fallito: \(error.localizedDescription)")
-                    }
+                if let existing = self.id {
+                    result = existing
+                    return
+                }
+                self.id = new
+                do {
+                    try context.save()
+                } catch {
+                    AppLog.log("stableID(bg): salvataggio id fallito: \(error.localizedDescription)")
                 }
             }
-            id = new
+            return result
+        }
+        context.perform {
+            if self.id == nil {
+                self.id = new
+                do {
+                    try context.save()
+                } catch {
+                    AppLog.log("stableID(main da bg): salvataggio id fallito: \(error.localizedDescription)")
+                }
+            }
         }
         return new
     }

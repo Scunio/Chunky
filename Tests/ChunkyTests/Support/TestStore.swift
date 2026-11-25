@@ -54,7 +54,22 @@ enum TestStore {
         var loadError: Error?
         container.loadPersistentStores { _, error in loadError = error }
         if let loadError { throw loadError }
-        return container.viewContext
+        return testContext(for: container)
+    }
+
+    /// A private-queue context on the container's coordinator, never `viewContext`.
+    ///
+    /// `viewContext` is a main-queue context: Core Data processes its pending changes from a
+    /// main run-loop observer. Swift Testing runs tests on background threads, so the test thread
+    /// mutated the context while the main thread processed its changes — a data race that crashed
+    /// intermittently inside Core Data ("-[__NSCFSet addObject:]: attempt to insert nil", seen in
+    /// `StableAccountIDTests`) and could also drop a write (the flaky row counts once seen in
+    /// `OrphanAdoptionTests`). A private-queue context is only ever touched by the test's own
+    /// thread (and by `performAndWait`, which runs inline), so there's no second thread at all.
+    private static func testContext(for container: NSPersistentContainer) -> NSManagedObjectContext {
+        let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+        context.persistentStoreCoordinator = container.persistentStoreCoordinator
+        return context
     }
 
     /// File-backed SQLite stack sharing the cached model (same instance, so no duplicate
@@ -81,6 +96,6 @@ enum TestStore {
                 try? FileManager.default.removeItem(at: url)
             }
         }
-        return (container.viewContext, cleanup)
+        return (testContext(for: container), cleanup)
     }
 }
