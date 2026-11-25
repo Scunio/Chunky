@@ -58,6 +58,23 @@ enum RemoteProgressSync {
     static let subscriptionSavedKey = "ckRemoteProgressSubscriptionSaved"
     /// ID fisso della subscription: ri-salvarla è un upsert idempotente.
     static let pushSubscriptionID = "remote-progress-changes"
+
+    /// Whether a remote notification payload comes from our progress subscription. Matched by
+    /// subscription ID first: it's what we registered and `CKNotification` reads it reliably,
+    /// while `recordZoneID` comes back nil for payloads whose zone keys it doesn't recognise —
+    /// a zone-name-only check would then drop our pushes silently. Pure, so it's unit-tested.
+    static func isProgressPush(_ userInfo: [AnyHashable: Any]) -> Bool {
+        var dict: [String: NSObject] = [:]
+        for (key, value) in userInfo {
+            guard let key = key as? String, let value = value as? NSObject else { continue }
+            dict[key] = value
+        }
+        // `note as?` senza optional binding: l'inizializer è failable solo su alcuni
+        // SDK, il cast condizionale funziona in entrambi i casi.
+        let note = CKNotification(fromRemoteNotificationDictionary: dict)
+        if note?.subscriptionID == pushSubscriptionID { return true }
+        return (note as? CKRecordZoneNotification)?.recordZoneID?.zoneName == zoneName
+    }
     /// Sync key for iCloud-library comics (see the enum docs). Disjoint by construction
     /// from every remote key: derived ones start with `smb/`, `webdav/` or `opds/`,
     /// manual overrides with `custom/`.
@@ -704,17 +721,7 @@ enum RemoteProgressSync {
         /// mounted, e.g. on background wake. `completion` reports applied comics.
         static func handlePushNotification(_ userInfo: [AnyHashable: Any], completion: @escaping (Int) -> Void) {
             guard cloudKitUsable else { completion(0); return }
-            var dict: [String: NSObject] = [:]
-            for (key, value) in userInfo {
-                guard let key = key as? String, let value = value as? NSObject else { continue }
-                dict[key] = value
-            }
-            // `note as?` senza optional binding: l'inizializer è failable solo su alcuni
-            // SDK, il cast condizionale funziona in entrambi i casi.
-            let note = CKNotification(fromRemoteNotificationDictionary: dict)
-            guard let zoneNote = note as? CKRecordZoneNotification,
-                  zoneNote.recordZoneID?.zoneName == RemoteProgressSync.zoneName
-            else {
+            guard RemoteProgressSync.isProgressPush(userInfo) else {
                 // Core Data's own mirroring pushes land here too: not ours, just noise.
                 completion(0)
                 return
