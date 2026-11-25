@@ -13,7 +13,7 @@ import SwiftUI
 /// no effect at all. The sidebar is a regular window, so it stays resizable.
 struct MacSettingsView: View {
     private enum Category: String, CaseIterable, Identifiable {
-        case reading, navigation, appearance, imageQuality, parentalLock, advanced, diagnostics, language, info
+        case reading, navigation, imageQuality, appearance, language, library, parentalLock, diagnostics, info
 
         var id: String { rawValue }
 
@@ -24,7 +24,7 @@ struct MacSettingsView: View {
             case .appearance: AppLocalization.localizedString("Colori", comment: "Settings category")
             case .imageQuality: AppLocalization.localizedString("Qualità immagine", comment: "Settings category")
             case .parentalLock: AppLocalization.localizedString("Blocco genitori", comment: "Settings category")
-            case .advanced: AppLocalization.localizedString("Avanzate", comment: "Settings category")
+            case .library: AppLocalization.localizedString("Libreria e sincronizzazione", comment: "Settings category")
             case .diagnostics: AppLocalization.localizedString("Diagnostica", comment: "Settings category")
             case .language: AppLocalization.localizedString("Lingua", comment: "Settings category")
             case .info: AppLocalization.localizedString("Informazioni", comment: "Settings category")
@@ -38,7 +38,7 @@ struct MacSettingsView: View {
             case .appearance: "paintpalette"
             case .imageQuality: "wand.and.stars"
             case .parentalLock: "lock"
-            case .advanced: "gearshape.2"
+            case .library: "books.vertical"
             case .diagnostics: "stethoscope"
             case .language: "globe"
             case .info: "info.circle"
@@ -46,13 +46,29 @@ struct MacSettingsView: View {
         }
     }
 
+    /// Sidebar groups, in display order: everyday reading first, support last — Diagnostica is a
+    /// tool for when something goes wrong, not a preference among the others.
+    private static let groups: [(title: String, categories: [Category])] = [
+        (AppLocalization.localizedString("Lettura", comment: "Settings group"), [.reading, .navigation, .imageQuality]),
+        (AppLocalization.localizedString("Aspetto", comment: "Settings group"), [.appearance, .language]),
+        (AppLocalization.localizedString("Libreria", comment: "Settings group"), [.library]),
+        (AppLocalization.localizedString("Privacy", comment: "Settings group"), [.parentalLock]),
+        (AppLocalization.localizedString("Supporto", comment: "Settings group"), [.diagnostics, .info])
+    ]
+
     @State private var selection: Category? = .reading
 
     var body: some View {
         NavigationSplitView {
-            List(Category.allCases, selection: $selection) { category in
-                Label(category.title, systemImage: category.systemImage)
-                    .tag(category)
+            List(selection: $selection) {
+                ForEach(Self.groups, id: \.title) { group in
+                    Section(group.title) {
+                        ForEach(group.categories) { category in
+                            Label(category.title, systemImage: category.systemImage)
+                                .tag(category)
+                        }
+                    }
+                }
             }
             .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 220)
         } detail: {
@@ -81,7 +97,7 @@ struct MacSettingsView: View {
         case .appearance: ColorThemeView()
         case .imageQuality: ImageQualitySettingsTab()
         case .parentalLock: ParentalLockSettingsTab()
-        case .advanced: AdvancedSettingsTab()
+        case .library: LibrarySettingsTab()
         case .diagnostics: DiagnosticsSettingsTab()
         case .language: AppLanguageSettings()
         case .info: InfoSettingsTab()
@@ -118,6 +134,7 @@ private struct ReadingSettingsTab: View {
                 Toggle(isOn: $isCoverAlone) {
                     infoLabel("Copertina da sola", info: "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi.")
                 }
+                PageOrderRow()
             }
 
             Section(
@@ -233,7 +250,7 @@ private struct ParentalLockSettingsTab: View {
     }
 }
 
-private struct AdvancedSettingsTab: View {
+private struct LibrarySettingsTab: View {
     // Default on, matching `ChunkyApp.init` on macOS (Time Machine included by default).
     @AppStorage("includeInBackup") private var isIncludedInBackup = true
 
@@ -249,13 +266,6 @@ private struct AdvancedSettingsTab: View {
                         LibraryStorage.setExcludedFromBackup(!newValue)
                     }
                 ))
-                HStack {
-                    Text("Ordinamento pagine")
-                    InfoButton(text: "Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura.")
-                    Spacer()
-                    Text("Automatico")
-                        .foregroundColor(.secondary)
-                }
                 // Without iCloud the library folder lives in the sandbox container
                 // (~/Library/Containers/com.scunio.Chunky/...), which nobody finds on their own in
                 // Finder: a direct way to get there, instead of leaving it hidden.
@@ -264,6 +274,7 @@ private struct AdvancedSettingsTab: View {
                 }
             }
             ICloudStatusSections()
+            RebuildLibrarySection()
         }
         .formStyle(.grouped)
     }
@@ -271,7 +282,7 @@ private struct AdvancedSettingsTab: View {
 
 private struct DiagnosticsSettingsTab: View {
     var body: some View {
-        // Its own panel, not placed alongside other sections in "Advanced": the log's
+        // Its own panel, not placed alongside other sections in "Libreria": the log's
         // fixed-height ScrollView stopped respecting its own limit when it shared the
         // Form with other sections imported from elsewhere (verified live — the log text
         // expanded without containment). Here it exactly replicates the structure of
@@ -297,6 +308,11 @@ private struct InfoSettingsTab: View {
                 }
                 Button("Licenze open source…") {
                     isShowingAcknowledgements = true
+                }
+            }
+            Section {
+                Button(action: ToolsPanelView.sendFeedbackEmail) {
+                    Label("Feedback / Segnala un problema", systemImage: "envelope")
                 }
             }
         }

@@ -38,12 +38,13 @@ struct ToolsPanelView: View {
                     NavigationLink(destination: ParentalLockSettingsView()) {
                         Label("Blocco genitori", systemImage: "lock")
                     }
+                }
+
+                // Support: for when something goes wrong, next to the way to report it.
+                Section("Supporto") {
                     NavigationLink(destination: DiagnosticsView()) {
                         Label("Diagnostica", systemImage: "stethoscope")
                     }
-                }
-
-                Section {
                     Button(action: sendFeedbackEmail) {
                         Label("Feedback / Segnala un problema", systemImage: "envelope")
                             .foregroundColor(.primary)

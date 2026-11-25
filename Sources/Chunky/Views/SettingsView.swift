@@ -114,6 +114,20 @@ func labelWithInfo(_ title: LocalizedStringKey, info: LocalizedStringKey, compac
     infoLabel(title, info: info, compact: compact)
 }
 
+/// "Ordinamento pagine": shown with the reading settings (it's about how a comic's pages are
+/// read), not in a catch-all "Avanzate" group.
+struct PageOrderRow: View {
+    var body: some View {
+        HStack {
+            Text("Ordinamento pagine")
+            InfoButton(text: "Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura.")
+            Spacer()
+            Text("Automatico")
+                .foregroundColor(.secondary)
+        }
+    }
+}
+
 struct SettingsView: View {
     @AppStorage("defaultReadingDirection") private var defaultReadingDirectionRawValue = ReadingDirection.leftToRight.rawValue
     @AppStorage("doublePageMode") private var isDoublePageEnabled = false
@@ -160,6 +174,23 @@ struct SettingsView: View {
                 Toggle("Doppia pagina di default", isOn: $isDoublePageEnabled)
                 Toggle(isOn: $isCoverAlone) {
                     infoLabel("Copertina da sola", info: "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi.")
+                }
+                PageOrderRow()
+            }
+
+            Section(
+                header: Text("Zoom"),
+                footer: Text("\"Adatta pagina\" mostra sempre l'intera pagina. \"Adatta larghezza\" scala alla larghezza dello schermo e rende la pagina scorrevole verticalmente se più alta dello schermo.")
+            ) {
+                Picker("Pagine singole", selection: $singlePageZoomMode) {
+                    ForEach(PageZoomMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                Picker("Pagine doppie", selection: $doublePageZoomMode) {
+                    ForEach(PageZoomMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
                 }
             }
 
@@ -209,8 +240,17 @@ struct SettingsView: View {
                 #endif
             }
 
-            Section(header: Text("Aspetto")) {
-                NavigationLink("Colori", destination: ColorThemeView())
+            Section(
+                header: Text("Inattività"),
+                footer: Text("Se il lettore resta inattivo per il tempo scelto, torna automaticamente a pagina 1 — pensato per l'uso a schermo esposto (vetrina/kiosk), non per l'uso quotidiano.")
+            ) {
+                Picker(selection: $readerIdleReset) {
+                    ForEach(ReaderIdleResetOption.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                } label: {
+                    infoLabel("Riparti dalla prima pagina", info: "Difficilmente ti servirà, ma se ne hai bisogno eccolo qui.", compact: true)
+                }
             }
 
             Section(
@@ -231,16 +271,15 @@ struct SettingsView: View {
                 }
             }
 
-            Section(header: Text("Privacy")) {
-                NavigationLink("Blocco genitori", destination: ParentalLockSettingsView())
-                Toggle("Modalità Kiosk", isOn: $isKioskModeEnabled)
+            Section(header: Text("Aspetto")) {
+                NavigationLink("Colori", destination: ColorThemeView())
+                NavigationLink("Lingua", destination: AppLanguageSettings())
             }
 
             Section(
-                header: Text("Avanzate"),
+                header: Text("Libreria e sincronizzazione"),
                 footer: Text("Se disattivato, la cartella dei fumetti non viene inclusa nei backup di iCloud/iTunes — utile per risparmiare spazio se hai già una copia altrove.")
             ) {
-                NavigationLink("Diagnostica", destination: DiagnosticsView())
                 NavigationLink("Stato iCloud", destination: ICloudStatusView())
                 #if os(macOS)
                 // Without iCloud the library folder lives inside the sandbox container
@@ -257,59 +296,31 @@ struct SettingsView: View {
                         LibraryStorage.setExcludedFromBackup(!newValue)
                     }
                 ))
-                HStack {
-                    Text("Ordinamento pagine")
-                    InfoButton(text: "Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura.")
-                    Spacer()
-                    Text("Automatico")
-                        .foregroundColor(.secondary)
-                }
             }
 
-            Section(
-                header: Text("Zoom"),
-                footer: Text("\"Adatta pagina\" mostra sempre l'intera pagina. \"Adatta larghezza\" scala alla larghezza dello schermo e rende la pagina scorrevole verticalmente se più alta dello schermo.")
-            ) {
-                Picker("Pagine singole", selection: $singlePageZoomMode) {
-                    ForEach(PageZoomMode.allCases) { mode in
-                        Text(mode.label).tag(mode)
-                    }
-                }
-                Picker("Pagine doppie", selection: $doublePageZoomMode) {
-                    ForEach(PageZoomMode.allCases) { mode in
-                        Text(mode.label).tag(mode)
-                    }
-                }
+            RebuildLibrarySection()
+
+            Section(header: Text("Privacy")) {
+                NavigationLink("Blocco genitori", destination: ParentalLockSettingsView())
+                Toggle("Modalità Kiosk", isOn: $isKioskModeEnabled)
             }
 
-            Section(
-                header: Text("Inattività"),
-                footer: Text("Se il lettore resta inattivo per il tempo scelto, torna automaticamente a pagina 1 — pensato per l'uso a schermo esposto (vetrina/kiosk), non per l'uso quotidiano.")
-            ) {
-                Picker(selection: $readerIdleReset) {
-                    ForEach(ReaderIdleResetOption.allCases) { option in
-                        Text(option.label).tag(option)
-                    }
-                } label: {
-                    infoLabel("Riparti dalla prima pagina", info: "Difficilmente ti servirà, ma se ne hai bisogno eccolo qui.", compact: true)
-                }
-            }
-
-            // MetricKit, on which this feature depends, doesn't exist on macOS: showing
-            // the toggle there would mean promising something that does nothing.
-            #if os(iOS)
-            Section(
-                header: Text("Diagnostica avanzata"),
-                footer: Text("Le segnalazioni di crash restano solo su questo dispositivo (nessun server remoto): vengono aggiunte al log diagnostico e possono arrivare con qualche ritardo, generalmente solo su dispositivo fisico.")
-            ) {
+            // Support: for when something goes wrong, so after everything else.
+            Section(header: Text("Supporto"), footer: supportFooter) {
+                NavigationLink("Diagnostica", destination: DiagnosticsView())
+                // MetricKit, on which crash reports depend, doesn't exist on macOS: showing the
+                // toggle there would mean promising something that does nothing.
+                #if os(iOS)
                 Toggle(isOn: $isCrashReportingEnabled) {
                     infoLabel("Invia segnalazioni di crash", info: "Le segnalazioni di crash sono anonime, e aiutano a individuare e correggere i problemi.")
                 }
+                #endif
+                Button(action: ToolsPanelView.sendFeedbackEmail) {
+                    Label("Feedback / Segnala un problema", systemImage: "envelope")
+                }
             }
-            #endif
 
             Section(header: Text("Informazioni")) {
-                NavigationLink("Lingua", destination: AppLanguageSettings())
                 HStack {
                     Text("Versione")
                     Spacer()
@@ -331,6 +342,13 @@ struct SettingsView: View {
         .frame(maxWidth: 600)
         #endif
         .navigationTitle("Impostazioni")
+    }
+
+    @ViewBuilder
+    private var supportFooter: some View {
+        #if os(iOS)
+        Text("Le segnalazioni di crash restano solo su questo dispositivo (nessun server remoto): vengono aggiunte al log diagnostico e possono arrivare con qualche ritardo, generalmente solo su dispositivo fisico.")
+        #endif
     }
 
     private var appVersion: String {
