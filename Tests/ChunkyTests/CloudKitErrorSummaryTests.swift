@@ -15,7 +15,9 @@ struct CloudKitErrorSummaryTests {
     func partialFailureListsCauses() {
         let zone = CKRecordZone.ID(zoneName: "com.apple.coredata.cloudkit.zone", ownerName: CKCurrentUserDefaultName)
         let partials: [CKRecord.ID: Error] = [
-            CKRecord.ID(recordName: "a", zoneID: zone): ckError(.unknownItem),
+            CKRecord.ID(recordName: "a", zoneID: zone): ckError(.invalidArguments, userInfo: [
+                NSLocalizedDescriptionKey: "Cannot create or modify field 'CD_x' in record 'CD_ComicEntity' in production schema"
+            ]),
             CKRecord.ID(recordName: "b", zoneID: zone): ckError(.batchRequestFailed),
             CKRecord.ID(recordName: "c", zoneID: zone): ckError(.batchRequestFailed)
         ]
@@ -24,7 +26,10 @@ struct CloudKitErrorSummaryTests {
         let line = CloudKitErrorSummary.describe(error)
         #expect(line.hasPrefix("partialFailure su 3 record"))
         #expect(line.contains("batchRequestFailed (scartato con il resto del lotto) ×2"))
-        #expect(line.contains("unknownItem"))
+        #expect(line.contains("invalidArguments"))
+        // Il messaggio del server nomina il campo rifiutato: è quello che serve per capire la causa.
+        #expect(line.contains("Cannot create or modify field 'CD_x'"))
+        #expect(!line.contains("Batch"))
     }
 
     @Test("L'errore CloudKit annidato dentro quello di Core Data viene trovato")
@@ -32,7 +37,7 @@ struct CloudKitErrorSummaryTests {
         let wrapped = NSError(domain: NSCocoaErrorDomain, code: 134_400, userInfo: [
             NSUnderlyingErrorKey: NSError(domain: CKError.errorDomain, code: CKError.Code.quotaExceeded.rawValue)
         ])
-        #expect(CloudKitErrorSummary.describe(wrapped) == "quotaExceeded")
+        #expect(CloudKitErrorSummary.describe(wrapped).hasPrefix("quotaExceeded"))
     }
 
     @Test("Un errore non CloudKit resta la sua descrizione")

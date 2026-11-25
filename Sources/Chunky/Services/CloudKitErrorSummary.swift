@@ -14,7 +14,7 @@ enum CloudKitErrorSummary {
         guard let ckError else { return error.localizedDescription }
         guard ckError.code == .partialFailure,
               let partials = ckError.partialErrorsByItemID, !partials.isEmpty
-        else { return describeSingle(ckError) }
+        else { return describeSingle(ckError) + " — " + serverMessage(of: ckError) }
 
         // "serverRecordChanged ×3 (CD_ComicEntity)" — grouped, counted, most frequent first.
         var counts: [String: Int] = [:]
@@ -24,7 +24,27 @@ enum CloudKitErrorSummary {
         }
         let parts = counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
             .map { $0.value > 1 ? "\($0.key) ×\($0.value)" : $0.key }
-        return "partialFailure su \(partials.count) record: " + parts.joined(separator: ", ")
+        var line = "partialFailure su \(partials.count) record: " + parts.joined(separator: ", ")
+        // The server's own words for the real causes (not the batch casualties): for
+        // invalidArguments they name the field or record type it refused, which is what tells
+        // a schema gap apart from a bad value. One per distinct message, capped.
+        let messages = partials.values.compactMap { $0 as? CKError }
+            .filter { $0.code != .batchRequestFailed }
+            .map { serverMessage(of: $0) }
+        let distinct = Array(Set(messages)).sorted().prefix(3)
+        if !distinct.isEmpty {
+            line += " — " + distinct.joined(separator: " | ")
+        }
+        return line
+    }
+
+    /// The server explanation of a CloudKit error, trimmed for one log line.
+    static func serverMessage(of error: CKError) -> String {
+        let nsError = error as NSError
+        let text = (nsError.userInfo["NSDebugDescription"] as? String)
+            ?? (nsError.userInfo["ServerErrorDescription"] as? String)
+            ?? nsError.localizedDescription
+        return String(text.prefix(240))
     }
 
     /// Code name, plus the record type when CloudKit hands back the server's copy (conflicts).
