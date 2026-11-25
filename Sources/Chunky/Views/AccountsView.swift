@@ -142,7 +142,7 @@ struct AccountsView: View {
         #elseif os(macOS)
         macAccountForm
             .navigationTitle("Account")
-            .frame(minWidth: 520, idealWidth: 560, minHeight: 560)
+            .frame(minWidth: 520, idealWidth: 560, minHeight: 420)
         #else
         accountList
             .navigationTitle("Account")

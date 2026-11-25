@@ -128,7 +128,10 @@ extension View {
     /// forms (AddAccountView, ComicInfoSheet), which stay readable when wider too.
     func sheetSized() -> some View {
         #if os(macOS)
-        self.frame(minWidth: 640, idealWidth: 760, minHeight: 480, idealHeight: 680)
+        // Height kept well under the main window's default 720pt: a sheet taller than the
+        // space below the toolbar is clipped at the top by AppKit (title cut in half, seen
+        // after pushing Download and popping back in the Account sheet).
+        self.frame(minWidth: 640, idealWidth: 760, minHeight: 420, idealHeight: 560)
         #elseif os(tvOS)
         // tvOS's default sheet width is too narrow for a `.navigationTitle` at that
         // platform's larger title font size together with the toolbar's "+"/"Chiudi"
