@@ -987,7 +987,7 @@ struct ReaderContentView: View {
     /// CloudKit export transaction) per `progressSaveInterval`, with the trailing edge
     /// scheduled. The in-memory `lastReadPage` is already current — this only paces the
     /// persistence/export. Crash window: at most `progressSaveInterval` of progress.
-    /// Not logged: the exit save ("Progresso salvato all'uscita") is enough to tell who wrote last.
+    /// Not logged: reading progress syncs reliably now, and a line per save was noise.
     func scheduleProgressSave(page: Int) {
         if Date().timeIntervalSince(lastProgressSave) >= Self.progressSaveInterval {
             lastProgressSave = Date()
@@ -1011,7 +1011,6 @@ struct ReaderContentView: View {
         if context.hasChanges {
             lastProgressSave = Date()
             try? context.save()
-            DiagnosticLog.log("Progresso salvato all'uscita: pagina \(Int(comic.lastReadPage) + 1) (\(comic.title ?? "fumetto"))")
         }
         #if os(iOS)
         // Held open by a background task: called on backgrounding, where iOS would otherwise
@@ -1036,7 +1035,6 @@ struct ReaderContentView: View {
             if pendingRemotePage != nil { pendingRemotePage = nil }
             return
         }
-        DiagnosticLog.log("Progresso remoto ricevuto: pagina \(target + 1) (\(comic.title ?? "fumetto"))")
         pendingRemotePage = target
     }
 
@@ -1178,7 +1176,6 @@ struct ReaderContentView: View {
                     if comic.pageCount == 0 {
                         comic.pageCount = Int32(loaded.pageCount)
                         try? context.save()
-                        DiagnosticLog.log("Metadati completati: \(loaded.pageCount) pagine, posizione salvata \(Int(comic.lastReadPage) + 1) (\(comic.title ?? "fumetto"))")
                     }
                 }
             } catch {

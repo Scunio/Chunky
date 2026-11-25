@@ -68,7 +68,8 @@ extension LibraryViewModel {
                     collapsed += 1
                     ComicTextIndex.deleteIndex(forComicIdentifier: identifier)
                 }
-                DiagnosticLog.log("Deduplica: \(group.count) record per \"\(path)\", ne resta 1")
+                // No per-group line: a fresh device merged 87 of them in one go. The total below
+                // is enough; a page inherited from a duplicate (data that changes) still logs above.
             }
 
             if collapsed > 0 { try? context.save() }

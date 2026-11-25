@@ -236,9 +236,10 @@ final class LibraryViewModel: ObservableObject {
             if saveImmediately {
                 try? context.save()
             }
-            if isPlaceholder {
-                DiagnosticLog.log("Registrato \"\(title)\" (\(format.rawValue), da scaricare da iCloud)")
-            } else {
+            // Only a single registration is logged (a comic the user just added): bulk passes —
+            // a fresh device registering the whole library — have their own summary line
+            // ("ritrovati N"), and iCloud placeholders aren't an import at all.
+            if saveImmediately && !isPlaceholder {
                 DiagnosticLog.log("Importato \"\(title)\" (\(format.rawValue), \(pageCount) pagine)")
             }
         }

@@ -83,7 +83,6 @@ enum KeychainStore {
         AppLog.log("Keychain: canonico non verificabile (scrittura \(plain.writeStatus), lettura \(plain.readStatus)), provo moderno")
         let modern = upsertVerified(password, account: account, modern: true)
         if modern.ok {
-            AppLog.log("Keychain: salvato nel moderno (len=\(password.count))")
             return modern
         }
         AppLog.log("Keychain: salvataggio fallito (canonico \(plain.writeStatus)/\(plain.readStatus), moderno \(modern.writeStatus)/\(modern.readStatus))")
