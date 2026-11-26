@@ -134,6 +134,9 @@ struct ReaderContentView: View {
     /// that isn't newer than it is this device's own progress coming back stale, typically
     /// bounced off another device through the Core Data mirror: see `handleRemotePageChange`.
     @State var localProgress: (page: Int32, date: Date)?
+    /// `relativePath` of an iCloud-library comic, captured at open: once deduplication deletes
+    /// the row it reads back nil, and this is how the survivor is found.
+    @State private var openedLibraryPath: String?
     /// Throttles `context.save()` while paging: every page turn updates `lastReadPage`
     /// in memory immediately, but persisting (and therefore enqueueing a CloudKit
     /// export transaction) happens at most every few seconds, plus a guaranteed flush
@@ -632,6 +635,9 @@ struct ReaderContentView: View {
         .onChange(of: comic.lastReadPage) { _, newRemote in
             handleRemotePageChange(Int(newRemote))
         }
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: context)) { note in
+            handleOpenComicDeleted(note)
+        }
         .onChange(of: isDoublePageEnabled) { realignCurrentPageToSpreadStart() }
         .onChange(of: isDoublePageAutoMode) { realignCurrentPageToSpreadStart() }
         .onChange(of: viewportSize) { realignCurrentPageToSpreadStart() }
@@ -1040,6 +1046,8 @@ struct ReaderContentView: View {
     /// more pages. It then carries an older page *and* an older `dateLastOpened` than the
     /// one this reader recorded, so it is undone instead of offered as "go back".
     private func handleRemotePageChange(_ newRemote: Int) {
+        // A deleted row reads back as page 0: that's not a remote page, see `handleOpenComicDeleted`.
+        guard comic.managedObjectContext != nil, !comic.isDeleted else { return }
         guard let provider, provider.pageCount > 0 else { return }
         if let local = localProgress, let incoming = comic.dateLastOpened,
            incoming <= local.date, Int32(newRemote) != local.page {
@@ -1056,6 +1064,33 @@ struct ReaderContentView: View {
             return
         }
         pendingRemotePage = target
+    }
+
+    /// Deduplication can delete the very row this reader has open: two devices registered the
+    /// same iCloud file, and the open copy lost to the deterministic survivor. Every later page
+    /// turn would then land on a dead object, never saved nor synced, while the other devices
+    /// keep showing the survivor's old page. Hands the reader over to the survivor instead,
+    /// carrying this reader's progress when it is the fresher one.
+    private func handleOpenComicDeleted(_ note: Notification) {
+        let deletedKeys = [NSDeletedObjectsKey, NSInvalidatedObjectsKey]
+        let deleted = deletedKeys.contains { key in
+            (note.userInfo?[key] as? Set<NSManagedObject>)?.contains { $0.objectID == comic.objectID } == true
+        }
+        guard deleted, let path = openedLibraryPath else { return }
+        let request = ComicEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "relativePath == %@ AND sourceAccountID == nil", path)
+        guard let candidates = try? context.fetch(request),
+              let survivor = ComicEntity.survivor(of: candidates.filter { $0.objectID != comic.objectID })
+        else { return }
+        pendingProgressSave?.cancel()
+        pendingProgressSave = nil
+        if let local = localProgress, local.date > (survivor.dateLastOpened ?? .distantPast) {
+            survivor.lastReadPage = local.page
+            survivor.dateLastOpened = local.date
+            try? context.save()
+            RemoteProgressSync.requestPush(survivor)
+        }
+        onSwitchComic(survivor)
     }
 
     func jumpToRemotePage() {
@@ -1143,6 +1178,9 @@ struct ReaderContentView: View {
         // start happens afterward, and it's a no-op in single page.
         currentPage = max(0, startingPage)
         if let opened = comic.dateLastOpened { localProgress = (comic.lastReadPage, opened) }
+        if comic.sourceAccountID == nil, let path = comic.relativePath, !path.isEmpty {
+            openedLibraryPath = path
+        }
 
         // The iCloud download can take more than a few seconds (large files, slow
         // connection): it goes through `ComicDownloadService`, which registers it in the
