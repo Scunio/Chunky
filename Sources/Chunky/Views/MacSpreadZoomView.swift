@@ -44,7 +44,7 @@ struct MacSpreadZoomView<Content: View>: View {
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { contentSize = $0 }
                 .scaleEffect(scale)
                 .offset(offset)
-                .conditionalMotionBlur(radius: motionBlurRadius)
+                .panMotionBlur(isAttached: isMotionBlurEnabled && scale > 1, radius: motionBlurRadius)
                 .frame(width: frame.width, height: frame.height)
                 .gesture(magnifyGesture(frame: frame), including: isEnabled ? .all : .subviews)
                 // Only while zoomed: at fit size the drag must stay with the page swipe.
@@ -202,13 +202,17 @@ struct MacSpreadZoomView<Content: View>: View {
     }
 }
 
-extension View {
-    /// Applies the blur only when the radius is > 0: `.blur`, even at radius zero, forces a
-    /// Core Image pass over the whole page on every frame on macOS, and it stays attached
-    /// throughout the zoomed page's scroll/pan.
+private extension View {
+    /// The drag's motion blur, attached for the whole time the spread is zoomed and absent at fit
+    /// size (where `.blur`, even at radius zero, would cost a Core Image pass on every frame).
+    ///
+    /// The branch must not follow the radius: switching an `if` rebuilds everything inside it,
+    /// and the radius goes to zero on every drag event without movement. The pages were
+    /// recreated many times a second mid-drag, so the zoomed spread froze while dragging and
+    /// only jumped to its new place on release.
     @ViewBuilder
-    func conditionalMotionBlur(radius: CGFloat) -> some View {
-        if radius > 0 {
+    func panMotionBlur(isAttached: Bool, radius: CGFloat) -> some View {
+        if isAttached {
             self.blur(radius: radius)
         } else {
             self
