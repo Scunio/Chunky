@@ -84,6 +84,7 @@
 "Operazione non riuscita. Riprova." = "Something went wrong. Please try again.";
 "Formato non supportato: .%@" = "Unsupported file format: .%@";
 "Avanza al tocco sui bordi" = "Always Advance on Tap";
+"Toccando il bordo destro o quello sinistro si va sempre avanti: puoi sfogliare con il pollice senza raggiungere il lato opposto. La fascia centrale resta per mostrare o nascondere i controlli." = "Tapping either the right or the left edge always goes forward, so you can turn pages with your thumb without reaching the other side. The middle strip still shows or hides the controls.";
 "Con il precaricamento attivo, ogni nuovo fumetto trovato viene scaricato subito per intero invece di aspettare che tu lo apra: non è possibile leggerne titolo e copertina senza scaricare il file completo, quindi su librerie grandi può consumare parecchia banda." = "When pre-cache is on, each newly found comic is downloaded in full right away instead of waiting until you open it. Its title and cover can't be read without downloading the whole file, so large libraries may use a lot of bandwidth.";
 "Impossibile elencare le condivisioni: %@" = "Couldn't list shares: %@";
 "Inserisci l'indirizzo del NAS." = "Enter the NAS address.";
@@ -96,7 +97,6 @@
 "Importa da file" = "Import from Files";
 "Importa fumetti in formato CBZ, CBR o PDF per iniziare a leggere." = "Import comics in CBZ, CBR, or PDF format to start reading.";
 "Imposta un codice" = "Set a Passcode";
-"Inattività" = "Idle Time";
 "Informazioni" = "About";
 "INIZIATA" = "STARTED";
 "Intensità" = "Intensity";
@@ -105,7 +105,6 @@
 "L'upscaling migliora le pagine a bassa risoluzione con un filtro di qualità superiore al semplice ridimensionamento. Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni." = "Upscaling improves low-resolution pages with a higher-quality filter than simple resizing. Crop White Borders automatically removes white margins from scans.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati." = "Leave blank to use the automatic key. If the same share is configured differently on other devices (for example, an IP address on one and a .local name on another), enter the same word on each device to match reading progress.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati. La struttura delle cartelle dentro lo share deve comunque coincidere." = "Leave blank to use the automatic key. If the same share is configured differently on other devices (for example, an IP address on one and a .local name on another), enter the same word on each device to match reading progress. The folder structure inside the share must still match.";
-"Le segnalazioni di crash restano solo su questo dispositivo (nessun server remoto): vengono aggiunte al log diagnostico e possono arrivare con qualche ritardo, generalmente solo su dispositivo fisico." = "Crash reports stay on this device; nothing is sent to a remote server. Reports are added to the diagnostic log and may arrive with a delay, usually only on a physical device.";
 "Lenta" = "Slow";
 "Lettura" = "Reading";
 "Lettura pagine… %@ di %@" = "Loading pages… %@ of %@";
@@ -136,9 +135,7 @@
 "Riprendi" = "Resume";
 "Scarica da iCloud senza aprire" = "Download from iCloud without opening";
 "Scarica senza aprire" = "Download without opening";
-"Se disattivato, la cartella dei fumetti non viene inclusa nei backup di iCloud/iTunes — utile per risparmiare spazio se hai già una copia altrove." = "When off, the comics folder isn't included in iCloud or iTunes backups. This can save space if you already have another copy.";
 "Se hai già una libreria su iPhone o Mac con lo stesso Apple ID, comparirà qui automaticamente. Altrimenti apri \"Account\" per caricare fumetti da un browser sulla stessa rete." = "If you already have a library on an iPhone or Mac signed in to the same Apple Account, it will appear here automatically. Otherwise, open \"Account\" to upload comics from a browser on the same network.";
-"Se il lettore resta inattivo per il tempo scelto, torna automaticamente a pagina 1 — pensato per l'uso a schermo esposto (vetrina/kiosk), non per l'uso quotidiano." = "If the reader is idle for the selected time, it returns to page 1. Designed for display or kiosk use, not everyday reading.";
 "Serve l'accesso alla rete locale" = "Local Network Access Required";
 "Serve l'accesso alla rete locale: Impostazioni → App → Chunky → \"Rete locale\". Torna qui dopo averlo attivato." = "Local Network access is required. Go to Settings → Apps → Chunky → \"Local Network,\" then return here.";
 "Server" = "Server";
@@ -185,13 +182,6 @@
 "Scorrimento" = "Scroll";
 "Immediato" = "Instant";
 "Dissolvenza" = "Fade";
-"Mai" = "Never";
-"Dopo 10 secondi" = "After 10 seconds";
-"Dopo 20 secondi" = "After 20 seconds";
-"Dopo 30 secondi" = "After 30 seconds";
-"Dopo 1 minuto" = "After 1 minute";
-"Dopo 2 minuti" = "After 2 minutes";
-"Dopo 3 minuti" = "After 3 minutes";
 "Non fare nulla" = "Do Nothing";
 "Blocca subito" = "Lock Immediately";
 "Il server non ha risposto correttamente." = "The server returned an invalid response.";
@@ -245,15 +235,11 @@
 "Chiave" = "Key";
 "Salva" = "Save";
 "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi." = "In two-page mode, always show the first page (usually the cover) by itself instead of beside the second page. Two-page spreads start with page two.";
-"Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati. Non si applica con la modalità una mano attiva, che già unifica le due zone a modo suo (vedi sotto)." = "Tapping either edge always turns forward, regardless of which side you tap. Useful when it's awkward to reach both sides of your tablet or phone. This doesn't apply when One-Handed Mode is on, since that already combines the two zones (see below).";
-"Unifica le due zone laterali: toccare il bordo destro o sinistro fa la stessa cosa (avanza di default), così puoi sfogliare con il pollice senza dover raggiungere il lato opposto. La fascia centrale resta per mostrare/nascondere i controlli." = "Combines the two side zones: tapping either edge does the same thing (advance by default), so you can turn pages with your thumb without reaching across the screen. The center area still shows or hides the controls.";
 "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Use the corners to reach common controls without showing the toolbar. Tap the top-left corner to leave the reader, the top-right for settings, or the bottom-right to toggle two-page mode.";
-"Difficilmente ti servirà, ma se ne hai bisogno eccolo qui." = "You probably won't need this, but it's here if you do.";
 "Se attivo, puoi regolare la luminosità dello schermo trascinando su e giù con due dita nella vista di lettura." = "When enabled, drag up or down with two fingers in the reader to adjust screen brightness.";
 "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo." = "Crop white comic margins to make better use of the screen.";
 "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità." = "Corrects yellowed pages and faded ink. Leave this off for comics that are already good quality.";
 "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione." = "Intelligently sharpens artwork in low-resolution comics.";
-"Le segnalazioni di crash sono anonime, e aiutano a individuare e correggere i problemi." = "Crash reports are anonymous and help identify and fix problems.";
 "Crea una cartella Chunky nella tua iCloud Drive.\nI fumetti che ci metti dentro restano sincronizzati con la tua libreria.\n\nSe li cancelli da Chunky, vengono cancellati anche da iCloud Drive." = "Creates a Chunky folder in iCloud Drive. Comics you put there stay synced with your library.\n\nDeleting them from Chunky also deletes them from iCloud Drive.";
 "Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura." = "If a comic's pages appear in the wrong order (for example, two-page spreads are at the end), this setting may help. Leave and reopen the comic for the change to take effect.";
 "Colori" = "Colors";
@@ -281,15 +267,12 @@
 "Colore evidenziazione" = "Highlight Color";
 "Copertina da sola" = "Single Cover Page";
 "Tap-to-pan" = "Tap to Pan";
-"Modalità una mano" = "One-Handed Mode";
 "Hot corners" = "Hot Corners";
-"Riparti dalla prima pagina" = "Restart from First Page";
 "Ritaglia bordi bianchi" = "Crop White Borders";
 "Auto tint & contrasto" = "Auto Tint & Contrast";
 "Upscaling pagine a bassa risoluzione" = "Upscale Low-Resolution Pages";
 "Motion-blur" = "Motion Blur";
 "Luminosità con due dita" = "Two-Finger Brightness";
-"Invia segnalazioni di crash" = "Send Crash Reports";
 "Nuovo codice" = "New Passcode";
 "Conferma codice" = "Confirm Passcode";
 "Nome gruppo" = "Group Name";
@@ -326,7 +309,6 @@
 "Crea" = "Create";
 "Crea fumetto da cartella di immagini" = "Create Comic from Image Folder";
 "Direzione predefinita" = "Default Reading Direction";
-"Doppia pagina di default" = "Default Two-Page Mode";
 "Elimina" = "Delete";
 "Elimina account" = "Delete Account";
 "Eliminare i fumetti selezionati?" = "Delete the Selected Comics?";
@@ -351,7 +333,6 @@
 "Licenze" = "Licenses";
 "Licenze open source…" = "Open Source Licenses…";
 "Lista" = "List";
-"Modalità Kiosk" = "Kiosk Mode";
 "Mostra la cartella della libreria nel Finder" = "Show Library Folder in Finder";
 "Mostra nel Finder" = "Show in Finder";
 "Nuovi fumetti" = "New Comics";
@@ -383,7 +364,6 @@
 "Server attivo" = "Local Server";
 "Sfondo pagina" = "Page Background";
 "Sincronizza ora" = "Sync Now";
-"Sincronizza progressi di lettura" = "Sync Reading Progress";
 "Stato iCloud" = "iCloud Status";
 "Svuota log" = "Clear Log";
 "Swipe page-turn" = "Swipe Page Turn";

@@ -73,7 +73,6 @@ struct ICloudStatusSections: View {
             Section(
                 footer: Text("Invia subito i progressi di questo device e scarica quelli degli altri (anche i fumetti iCloud, non solo remoti).")
             ) {
-                RemoteProgressSyncToggle()
                 Button("Sincronizza ora") {
                     RemoteProgressSync.flushPush()
                     RemoteProgressSync.fetchAndApply(in: context, force: true)
@@ -91,18 +90,6 @@ struct ICloudStatusSections: View {
 
     private func refreshCount() {
         comicsCount = (try? context.count(for: ComicEntity.fetchRequest())) ?? 0
-    }
-}
-
-/// Shared toggle for progress sync (remote-library and iCloud-library alike): one
-/// component used by iOS/macOS (`ICloudStatusSections` above) and tvOS
-/// (`TVSettingsView`), so the setting can't drift between platforms. Reads the same
-/// key as `RemoteProgressSync.isEnabled`.
-struct RemoteProgressSyncToggle: View {
-    @AppStorage(RemoteProgressSync.enabledDefaultsKey) private var isEnabled = true
-
-    var body: some View {
-        Toggle("Sincronizza progressi di lettura", isOn: $isEnabled)
     }
 }
 

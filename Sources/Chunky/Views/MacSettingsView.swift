@@ -108,9 +108,10 @@ struct MacSettingsView: View {
 private struct ReadingSettingsTab: View {
     @AppStorage("defaultReadingDirection") private var defaultReadingDirectionRawValue = ReadingDirection.leftToRight.rawValue
     @AppStorage("doublePageMode") private var isDoublePageEnabled = false
+    @AppStorage("doublePageAutoMode") private var isDoublePageAutoMode = true
     @AppStorage("doublePageCoverAlone") private var isCoverAlone = true
-    @AppStorage("singlePageZoomMode") private var singlePageZoomMode = PageZoomMode.auto
-    @AppStorage("doublePageZoomMode") private var doublePageZoomMode = PageZoomMode.auto
+    @AppStorage("singlePageZoomMode") private var singlePageZoomMode = PageZoomMode.fitPage
+    @AppStorage("doublePageZoomMode") private var doublePageZoomMode = PageZoomMode.fitPage
 
     private var defaultReadingDirection: Binding<ReadingDirection> {
         Binding(
@@ -130,7 +131,11 @@ private struct ReadingSettingsTab: View {
                         Text(direction.label).tag(direction)
                     }
                 }
-                Toggle("Doppia pagina di default", isOn: $isDoublePageEnabled)
+                Picker("Pagine", selection: PageLayoutChoice.binding(autoMode: $isDoublePageAutoMode, doublePage: $isDoublePageEnabled)) {
+                    ForEach(PageLayoutChoice.allCases) { choice in
+                        Text(choice.label).tag(choice)
+                    }
+                }
                 Toggle(isOn: $isCoverAlone) {
                     infoLabel("Copertina da sola", info: "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi.")
                 }
@@ -162,7 +167,6 @@ private struct NavigationSettingsTab: View {
     @AppStorage("swipePageTurnStyle") private var swipePageTurnStyle = TapPageTurnStyle.slide
     @AppStorage("tapToPanEnabled") private var isTapToPanEnabled = false
     @AppStorage("hotCornersEnabled") private var isHotCornersEnabled = false
-    @AppStorage("readerIdleResetSeconds") private var readerIdleReset = ReaderIdleResetOption.never
 
     var body: some View {
         Form {
@@ -189,18 +193,6 @@ private struct NavigationSettingsTab: View {
                 }
             }
 
-            Section(
-                header: Text("Inattività"),
-                footer: Text("Se il lettore resta inattivo per il tempo scelto, torna automaticamente a pagina 1 — pensato per l'uso a schermo esposto (vetrina/kiosk), non per l'uso quotidiano.")
-            ) {
-                Picker(selection: $readerIdleReset) {
-                    ForEach(ReaderIdleResetOption.allCases) { option in
-                        Text(option.label).tag(option)
-                    }
-                } label: {
-                    infoLabel("Riparti dalla prima pagina", info: "Difficilmente ti servirà, ma se ne hai bisogno eccolo qui.", compact: true)
-                }
-            }
         }
         .formStyle(.grouped)
     }
@@ -233,14 +225,9 @@ private struct ImageQualitySettingsTab: View {
 }
 
 private struct ParentalLockSettingsTab: View {
-    @AppStorage("kioskModeEnabled") private var isKioskModeEnabled = false
-
     var body: some View {
         Form {
             ParentalLockSections()
-            Section {
-                Toggle("Modalità Kiosk", isOn: $isKioskModeEnabled)
-            }
         }
         .formStyle(.grouped)
     }

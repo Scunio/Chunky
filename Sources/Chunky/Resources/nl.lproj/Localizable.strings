@@ -84,6 +84,7 @@
 "Operazione non riuscita. Riprova." = "Er is iets misgegaan. Probeer het opnieuw.";
 "Formato non supportato: .%@" = "Niet-ondersteund bestandsformaat: .%@";
 "Avanza al tocco sui bordi" = "Vooruit bij tikken op de rand";
+"Toccando il bordo destro o quello sinistro si va sempre avanti: puoi sfogliare con il pollice senza raggiungere il lato opposto. La fascia centrale resta per mostrare o nascondere i controlli." = "Tikken op de rechter- of linkerrand gaat altijd vooruit, zodat je met je duim kunt bladeren zonder de andere kant te bereiken. De middelste strook toont of verbergt nog steeds de bediening.";
 "Con il precaricamento attivo, ogni nuovo fumetto trovato viene scaricato subito per intero invece di aspettare che tu lo apra: non è possibile leggerne titolo e copertina senza scaricare il file completo, quindi su librerie grandi può consumare parecchia banda." = "Als vooraf laden aanstaat, wordt elke nieuw gevonden strip meteen volledig gedownload in plaats van te wachten tot je hem opent. Titel en omslag zijn niet te lezen zonder het hele bestand te downloaden, dus grote bibliotheken kunnen veel data verbruiken.";
 "Impossibile elencare le condivisioni: %@" = "Gedeelde mappen konden niet worden weergegeven: %@";
 "Inserisci l'indirizzo del NAS." = "Voer het NAS-adres in.";
@@ -96,7 +97,6 @@
 "Importa da file" = "Importeren uit Bestanden";
 "Importa fumetti in formato CBZ, CBR o PDF per iniziare a leggere." = "Importeer strips in CBZ-, CBR- of PDF-formaat om te beginnen met lezen.";
 "Imposta un codice" = "Toegangscode instellen";
-"Inattività" = "Inactieve tijd";
 "Informazioni" = "Info";
 "INIZIATA" = "GESTART";
 "Intensità" = "Intensiteit";
@@ -105,7 +105,6 @@
 "L'upscaling migliora le pagine a bassa risoluzione con un filtro di qualità superiore al semplice ridimensionamento. Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni." = "Opschalen verbetert pagina's met lage resolutie met een filter van hogere kwaliteit dan simpel vergroten. ‘Witte randen bijsnijden’ verwijdert automatisch witte randen van scans.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati." = "Laat de sleutel leeg om de automatische te gebruiken. Als dezelfde gedeelde map op andere apparaten anders is ingesteld (bijvoorbeeld een IP-adres op het ene en een .local-naam op het andere), voer dan op elk apparaat hetzelfde woord in om de leesvoortgang te koppelen.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati. La struttura delle cartelle dentro lo share deve comunque coincidere." = "Laat de sleutel leeg om de automatische te gebruiken. Als dezelfde gedeelde map op andere apparaten anders is ingesteld (bijvoorbeeld een IP-adres op het ene en een .local-naam op het andere), voer dan op elk apparaat hetzelfde woord in om de leesvoortgang te koppelen. De mapstructuur binnen de gedeelde map moet ook overeenkomen.";
-"Le segnalazioni di crash restano solo su questo dispositivo (nessun server remoto): vengono aggiunte al log diagnostico e possono arrivare con qualche ritardo, generalmente solo su dispositivo fisico." = "Crashrapporten blijven op dit apparaat; er wordt niets naar een externe server verstuurd. Ze worden aan het diagnoselog toegevoegd en kunnen vertraagd verschijnen, meestal alleen op een fysiek apparaat.";
 "Lenta" = "Langzaam";
 "Lettura" = "Lezen";
 "Lettura pagine… %@ di %@" = "Pagina's laden… %@ van %@";
@@ -136,9 +135,7 @@
 "Riprendi" = "Hervatten";
 "Scarica da iCloud senza aprire" = "Downloaden van iCloud zonder te openen";
 "Scarica senza aprire" = "Downloaden zonder te openen";
-"Se disattivato, la cartella dei fumetti non viene inclusa nei backup di iCloud/iTunes — utile per risparmiare spazio se hai già una copia altrove." = "Als dit uitstaat, wordt de stripmap niet opgenomen in iCloud- of iTunes-reservekopieën. Dit kan ruimte besparen als je al een andere kopie hebt.";
 "Se hai già una libreria su iPhone o Mac con lo stesso Apple ID, comparirà qui automaticamente. Altrimenti apri \"Account\" per caricare fumetti da un browser sulla stessa rete." = "Als je al een bibliotheek hebt op een iPhone of Mac met hetzelfde Apple Account, verschijnt die hier automatisch. Open anders ‘Account’ om strips te uploaden via een browser op hetzelfde netwerk.";
-"Se il lettore resta inattivo per il tempo scelto, torna automaticamente a pagina 1 — pensato per l'uso a schermo esposto (vetrina/kiosk), non per l'uso quotidiano." = "Als de lezer gedurende de gekozen tijd inactief is, keert hij terug naar pagina 1. Bedoeld voor presentatie- of kioskschermen, niet voor dagelijks lezen.";
 "Serve l'accesso alla rete locale" = "Lokale netwerktoegang vereist";
 "Serve l'accesso alla rete locale: Impostazioni → App → Chunky → \"Rete locale\". Torna qui dopo averlo attivato." = "Toegang tot het lokale netwerk is vereist. Ga naar Instellingen → Apps → Chunky → ‘Lokaal netwerk’ en kom dan hier terug.";
 "Server" = "Server";
@@ -185,13 +182,6 @@
 "Scorrimento" = "Scrollen";
 "Immediato" = "Direct";
 "Dissolvenza" = "Vervagen";
-"Mai" = "Nooit";
-"Dopo 10 secondi" = "Na 10 seconden";
-"Dopo 20 secondi" = "Na 20 seconden";
-"Dopo 30 secondi" = "Na 30 seconden";
-"Dopo 1 minuto" = "Na 1 minuut";
-"Dopo 2 minuti" = "Na 2 minuten";
-"Dopo 3 minuti" = "Na 3 minuten";
 "Non fare nulla" = "Niets doen";
 "Blocca subito" = "Direct vergrendelen";
 "Il server non ha risposto correttamente." = "De server heeft een ongeldig antwoord geretourneerd.";
@@ -245,15 +235,11 @@
 "Chiave" = "Sleutel";
 "Salva" = "Opslaan";
 "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi." = "Toont in de modus met twee pagina's de eerste pagina (meestal de omslag) altijd apart in plaats van naast de tweede. Dubbele pagina's beginnen vanaf pagina twee.";
-"Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati. Non si applica con la modalità una mano attiva, che già unifica le due zone a modo suo (vedi sotto)." = "Tikken op een willekeurige rand gaat altijd vooruit, ongeacht aan welke kant je tikt. Handig als je beide kanten van je tablet of telefoon lastig kunt bereiken. Dit geldt niet als de modus voor één hand aanstaat, omdat die de twee zones al combineert (zie hieronder).";
-"Unifica le due zone laterali: toccare il bordo destro o sinistro fa la stessa cosa (avanza di default), così puoi sfogliare con il pollice senza dover raggiungere il lato opposto. La fascia centrale resta per mostrare/nascondere i controlli." = "Combineert de twee zijzones: tikken op de linker- of rechterrand doet hetzelfde (standaard vooruit), zodat je met je duim kunt bladeren zonder naar de andere kant te reiken. Het middengebied blijft de bedieningselementen tonen of verbergen.";
 "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Gebruik de hoeken om veelgebruikte bedieningselementen te bereiken zonder de knoppenbalk te tonen. Tik op de linkerbovenhoek om de lezer te verlaten, op de rechterbovenhoek voor instellingen of op de rechteronderhoek om de modus met twee pagina's in of uit te schakelen.";
-"Difficilmente ti servirà, ma se ne hai bisogno eccolo qui." = "Je hebt dit waarschijnlijk niet nodig, maar als het toch moet, vind je het hier.";
 "Se attivo, puoi regolare la luminosità dello schermo trascinando su e giù con due dita nella vista di lettura." = "Als dit aanstaat, sleep je met twee vingers omhoog of omlaag in de lezer om de schermhelderheid aan te passen.";
 "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo." = "Snijdt witte marges van strips bij om het scherm beter te benutten.";
 "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità." = "Corrigeert vergeelde pagina's en vervaagde inkt. Laat dit uit voor strips die al van goede kwaliteit zijn.";
 "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione." = "Verscherpt op intelligente wijze illustraties in strips met een lage resolutie.";
-"Le segnalazioni di crash sono anonime, e aiutano a individuare e correggere i problemi." = "Crashrapporten zijn anoniem en helpen bij het identificeren en oplossen van problemen.";
 "Crea una cartella Chunky nella tua iCloud Drive.\nI fumetti che ci metti dentro restano sincronizzati con la tua libreria.\n\nSe li cancelli da Chunky, vengono cancellati anche da iCloud Drive." = "Maakt een Chunky-map aan in iCloud Drive. Strips die je daarin zet, blijven gesynchroniseerd met je bibliotheek.\n\nAls je ze uit Chunky verwijdert, worden ze ook uit iCloud Drive verwijderd.";
 "Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura." = "Als de pagina's van een strip in de verkeerde volgorde verschijnen (bijvoorbeeld dubbele pagina's aan het einde), kan deze instelling helpen. Sluit de strip en open hem opnieuw om de wijziging toe te passen.";
 "Colori" = "Kleuren";
@@ -281,15 +267,12 @@
 "Colore evidenziazione" = "Markeringskleur";
 "Copertina da sola" = "Omslag apart";
 "Tap-to-pan" = "Vooruit bij tikken op de rand";
-"Modalità una mano" = "Modus voor één hand";
 "Hot corners" = "Actieve hoeken";
-"Riparti dalla prima pagina" = "Start opnieuw vanaf de eerste pagina";
 "Ritaglia bordi bianchi" = "Witte randen bijsnijden";
 "Auto tint & contrasto" = "Automatische tint en contrast";
 "Upscaling pagine a bassa risoluzione" = "Pagina's met lage resolutie opschalen";
 "Motion-blur" = "Bewegingsonscherpte";
 "Luminosità con due dita" = "Helderheid met twee vingers";
-"Invia segnalazioni di crash" = "Crashrapporten verzenden";
 "Nuovo codice" = "Nieuwe toegangscode";
 "Conferma codice" = "Bevestig toegangscode";
 "Nome gruppo" = "Groepsnaam";
@@ -326,7 +309,6 @@
 "Crea" = "Maak aan";
 "Crea fumetto da cartella di immagini" = "Maak strip van afbeeldingenmap";
 "Direzione predefinita" = "Standaard leesrichting";
-"Doppia pagina di default" = "Standaard twee pagina's";
 "Elimina" = "Verwijderen";
 "Elimina account" = "Account verwijderen";
 "Eliminare i fumetti selezionati?" = "De geselecteerde strips verwijderen?";
@@ -351,7 +333,6 @@
 "Licenze" = "Licenties";
 "Licenze open source…" = "Opensourcelicenties…";
 "Lista" = "Lijst";
-"Modalità Kiosk" = "Kioskmodus";
 "Mostra la cartella della libreria nel Finder" = "Toon bibliotheekmap in Finder";
 "Mostra nel Finder" = "Toon in Finder";
 "Nuovi fumetti" = "Nieuwe strips";
@@ -383,7 +364,6 @@
 "Server attivo" = "Lokale server";
 "Sfondo pagina" = "Pagina-achtergrond";
 "Sincronizza ora" = "Synchroniseer nu";
-"Sincronizza progressi di lettura" = "Synchroniseer leesvoortgang";
 "Stato iCloud" = "iCloud-status";
 "Svuota log" = "Logboek wissen";
 "Swipe page-turn" = "Pagina omslaan door vegen";

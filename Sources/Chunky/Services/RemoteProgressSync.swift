@@ -52,7 +52,6 @@ enum RemoteProgressSync {
     static let zoneName = "RemoteProgress"
     static let recordType = "RemoteReadingProgress"
     static let defaultsTokenKey = "ckRemoteProgressZoneToken"
-    static let enabledDefaultsKey = "remoteProgressSyncEnabled"
     /// Flag: la `CKRecordZoneSubscription` è già stata salvata lato server (una volta
     /// basta, resta lì finché la zona esiste).
     static let subscriptionSavedKey = "ckRemoteProgressSubscriptionSaved"
@@ -117,13 +116,6 @@ enum RemoteProgressSync {
         return RemoteProgressSyncKey.effectiveAccountSyncKey(
             descriptor: descriptor, override: syncKeyOverride(forAccountID: id)
         )
-    }
-
-    /// Global opt-out (Settings). Defaults to true when the user never touched it:
-    /// `AppStorage` only writes after the first toggle, so absence means enabled.
-    static var isEnabled: Bool {
-        guard UserDefaults.standard.object(forKey: enabledDefaultsKey) != nil else { return true }
-        return UserDefaults.standard.bool(forKey: enabledDefaultsKey)
     }
 
     // MARK: - Push
@@ -254,7 +246,6 @@ enum RemoteProgressSync {
     /// coalesces bursts (bulk status changes, multi-window Mac).
     @MainActor
     static func requestPush(_ comics: [ComicEntity]) {
-        guard isEnabled else { return }
         for comic in comics {
             for snapshot in snapshots(of: comic) {
                 Engine.requestPush(snapshot)
@@ -270,7 +261,6 @@ enum RemoteProgressSync {
     /// Pushes anything debounced immediately (best-effort, async). Called on exit and
     /// backgrounding so the last pages are never left only in memory.
     static func flushPush(completion: (() -> Void)? = nil) {
-        guard isEnabled else { completion?(); return }
         Engine.flush(completion: completion)
     }
 
@@ -307,7 +297,6 @@ enum RemoteProgressSync {
     /// with a completion so the AppDelegate can answer the system. `completion` reports
     /// how many comics were updated (0 also when the fetch found nothing or failed).
     static func fetchAndApply(in context: NSManagedObjectContext, force: Bool = false, completion: ((Int) -> Void)? = nil) {
-        guard isEnabled else { completion?(0); return }
         Engine.fetchAndApply(in: context, force: force, completion: completion)
     }
 

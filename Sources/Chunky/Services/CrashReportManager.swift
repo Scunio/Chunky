@@ -6,11 +6,11 @@ import MetricKit
 /// Local capture of crashes/hangs via MetricKit — no remote submission: the payloads arrive
 /// only to this app, with the delay imposed by Apple (in practice only on a physical device,
 /// almost never in the simulator). They're only appended to `DiagnosticLog`, viewable from
-/// Settings > Diagnostics. MetricKit doesn't exist on macOS: there, the toggle has no effect.
+/// Settings > Diagnostics. Always on: nothing leaves the device, so there is nothing to opt out
+/// of (the old "send crash reports" toggle promised a submission that never existed).
 enum CrashReportManager {
     static func configure() {
         #if os(iOS)
-        guard UserDefaults.standard.object(forKey: "crashReportingEnabled") as? Bool ?? true else { return }
         MXMetricManager.shared.add(Subscriber.shared)
         #endif
     }

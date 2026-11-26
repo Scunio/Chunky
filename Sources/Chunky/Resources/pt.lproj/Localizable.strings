@@ -84,6 +84,7 @@
 "Operazione non riuscita. Riprova." = "Ocorreu um erro. Tente novamente.";
 "Formato non supportato: .%@" = "Formato de ficheiro não suportado: .%@";
 "Avanza al tocco sui bordi" = "Avançar ao tocar nas margens";
+"Toccando il bordo destro o quello sinistro si va sempre avanti: puoi sfogliare con il pollice senza raggiungere il lato opposto. La fascia centrale resta per mostrare o nascondere i controlli." = "Tocar na borda direita ou esquerda avança sempre, assim pode virar as páginas com o polegar sem alcançar o outro lado. A faixa central continua a mostrar ou ocultar os controlos.";
 "Con il precaricamento attivo, ogni nuovo fumetto trovato viene scaricato subito per intero invece di aspettare che tu lo apra: non è possibile leggerne titolo e copertina senza scaricare il file completo, quindi su librerie grandi può consumare parecchia banda." = "Quando o pré-carregamento está ativado, cada nova banda desenhada encontrada é transferida na íntegra, sem esperar que a abra. Não é possível ler o título e a capa sem transferir o ficheiro completo, pelo que bibliotecas grandes podem consumir muita largura de banda.";
 "Impossibile elencare le condivisioni: %@" = "Não foi possível listar as partilhas: %@";
 "Inserisci l'indirizzo del NAS." = "Introduza o endereço do NAS.";
@@ -96,7 +97,6 @@
 "Importa da file" = "Importar de Ficheiros";
 "Importa fumetti in formato CBZ, CBR o PDF per iniziare a leggere." = "Importe bandas desenhadas em formato CBZ, CBR ou PDF para começar a ler.";
 "Imposta un codice" = "Definir código de acesso";
-"Inattività" = "Tempo de inatividade";
 "Informazioni" = "Acerca de";
 "INIZIATA" = "INICIADO";
 "Intensità" = "Intensidade";
@@ -105,7 +105,6 @@
 "L'upscaling migliora le pagine a bassa risoluzione con un filtro di qualità superiore al semplice ridimensionamento. Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni." = "O aumento de resolução melhora páginas de baixa resolução com um filtro de maior qualidade do que o redimensionamento simples. «Recortar margens brancas» remove automaticamente as margens brancas das digitalizações.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati." = "Deixe em branco para usar a chave automática. Se a mesma partilha estiver configurada de forma diferente noutros dispositivos (por exemplo, com um endereço IP num e um nome .local noutro), introduza a mesma palavra em todos para associar o progresso de leitura.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati. La struttura delle cartelle dentro lo share deve comunque coincidere." = "Deixe em branco para usar a chave automática. Se a mesma partilha estiver configurada de forma diferente noutros dispositivos (por exemplo, com um endereço IP num e um nome .local noutro), introduza a mesma palavra em todos para associar o progresso de leitura. A estrutura de pastas dentro da partilha também tem de ser igual.";
-"Le segnalazioni di crash restano solo su questo dispositivo (nessun server remoto): vengono aggiunte al log diagnostico e possono arrivare con qualche ritardo, generalmente solo su dispositivo fisico." = "Os relatórios de falha permanecem neste dispositivo; nada é enviado para um servidor remoto. São adicionados ao registo de diagnóstico e podem surgir com atraso, normalmente apenas num dispositivo físico.";
 "Lenta" = "Lenta";
 "Lettura" = "Leitura";
 "Lettura pagine… %@ di %@" = "A carregar páginas… %@ de %@";
@@ -136,9 +135,7 @@
 "Riprendi" = "Retomar";
 "Scarica da iCloud senza aprire" = "Transferir do iCloud sem abrir";
 "Scarica senza aprire" = "Transferir sem abrir";
-"Se disattivato, la cartella dei fumetti non viene inclusa nei backup di iCloud/iTunes — utile per risparmiare spazio se hai già una copia altrove." = "Quando está desativada, a pasta de bandas desenhadas não é incluída nas cópias de segurança do iCloud ou do iTunes. Isto pode poupar espaço se já tiver outra cópia.";
 "Se hai già una libreria su iPhone o Mac con lo stesso Apple ID, comparirà qui automaticamente. Altrimenti apri \"Account\" per caricare fumetti da un browser sulla stessa rete." = "Se já tiver uma biblioteca num iPhone ou Mac com sessão iniciada na mesma Conta Apple, esta aparece aqui automaticamente. Caso contrário, abra «Conta» para enviar bandas desenhadas através de um navegador na mesma rede.";
-"Se il lettore resta inattivo per il tempo scelto, torna automaticamente a pagina 1 — pensato per l'uso a schermo esposto (vetrina/kiosk), non per l'uso quotidiano." = "Se o leitor ficar inativo durante o tempo selecionado, volta à página 1. Destina-se a ecrãs de exposição ou quiosques, não à leitura do dia a dia.";
 "Serve l'accesso alla rete locale" = "É necessária autorização para a rede local";
 "Serve l'accesso alla rete locale: Impostazioni → App → Chunky → \"Rete locale\". Torna qui dopo averlo attivato." = "É necessária autorização para a rede local. Aceda a Definições → Apps → Chunky → «Rede local» e volte aqui.";
 "Server" = "Servidor";
@@ -185,13 +182,6 @@
 "Scorrimento" = "Deslocar";
 "Immediato" = "Imediato";
 "Dissolvenza" = "Esbater";
-"Mai" = "Nunca";
-"Dopo 10 secondi" = "Após 10 segundos";
-"Dopo 20 secondi" = "Após 20 segundos";
-"Dopo 30 secondi" = "Após 30 segundos";
-"Dopo 1 minuto" = "Após 1 minuto";
-"Dopo 2 minuti" = "Após 2 minutos";
-"Dopo 3 minuti" = "Após 3 minutos";
 "Non fare nulla" = "Não fazer nada";
 "Blocca subito" = "Bloquear imediatamente";
 "Il server non ha risposto correttamente." = "O servidor devolveu uma resposta inválida.";
@@ -245,15 +235,11 @@
 "Chiave" = "Chave";
 "Salva" = "Guardar";
 "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi." = "No modo de duas páginas, mostra sempre a primeira página (normalmente a capa) sozinha, em vez de a colocar ao lado da segunda. As páginas duplas começam na página dois.";
-"Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati. Non si applica con la modalità una mano attiva, che già unifica le due zone a modo suo (vedi sotto)." = "Tocar numa das margens vira sempre para a frente, independentemente do lado tocado. Útil quando é difícil chegar aos dois lados do tablet ou telemóvel. Não se aplica com o modo de uma mão ativado, pois este já combina as duas zonas (ver abaixo).";
-"Unifica le due zone laterali: toccare il bordo destro o sinistro fa la stessa cosa (avanza di default), così puoi sfogliare con il pollice senza dover raggiungere il lato opposto. La fascia centrale resta per mostrare/nascondere i controlli." = "Combina as duas zonas laterais: tocar em qualquer margem faz o mesmo (avançar, por predefinição), para poder virar páginas com o polegar sem atravessar o ecrã. A zona central continua a mostrar ou ocultar os controlos.";
 "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Use os cantos para aceder aos controlos mais usados sem mostrar a barra de ferramentas. Toque no canto superior esquerdo para sair do leitor, no superior direito para abrir as definições ou no inferior direito para alternar o modo de duas páginas.";
-"Difficilmente ti servirà, ma se ne hai bisogno eccolo qui." = "Provavelmente não vai precisar desta opção, mas fica disponível se precisar.";
 "Se attivo, puoi regolare la luminosità dello schermo trascinando su e giù con due dita nella vista di lettura." = "Quando ativada, arraste para cima ou para baixo com dois dedos no leitor para ajustar o brilho do ecrã.";
 "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo." = "Recorta as margens brancas da banda desenhada para aproveitar melhor o ecrã.";
 "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità." = "Corrige páginas amareladas e tinta desbotada. Mantenha desativada para bandas desenhadas que já tenham boa qualidade.";
 "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione." = "Aumenta a nitidez de forma inteligente nas ilustrações de bandas desenhadas de baixa resolução.";
-"Le segnalazioni di crash sono anonime, e aiutano a individuare e correggere i problemi." = "Os relatórios de falha são anónimos e ajudam a identificar e corrigir problemas.";
 "Crea una cartella Chunky nella tua iCloud Drive.\nI fumetti che ci metti dentro restano sincronizzati con la tua libreria.\n\nSe li cancelli da Chunky, vengono cancellati anche da iCloud Drive." = "Cria uma pasta Chunky no iCloud Drive. As bandas desenhadas aí guardadas permanecem sincronizadas com a biblioteca.\n\nEliminá-las no Chunky também as elimina do iCloud Drive.";
 "Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura." = "Se as páginas de uma banda desenhada aparecerem na ordem errada (por exemplo, páginas duplas no fim), esta opção pode ajudar. Feche e volte a abrir a banda desenhada para aplicar a alteração.";
 "Colori" = "Cores";
@@ -281,15 +267,12 @@
 "Colore evidenziazione" = "Cor de destaque";
 "Copertina da sola" = "Capa sozinha";
 "Tap-to-pan" = "Avançar ao tocar nas margens";
-"Modalità una mano" = "Modo de uma mão";
 "Hot corners" = "Cantos ativos";
-"Riparti dalla prima pagina" = "Recomeçar na primeira página";
 "Ritaglia bordi bianchi" = "Recortar margens brancas";
 "Auto tint & contrasto" = "Tom e contraste automáticos";
 "Upscaling pagine a bassa risoluzione" = "Aumentar resolução de páginas de baixa resolução";
 "Motion-blur" = "Desfoque de movimento";
 "Luminosità con due dita" = "Brilho com dois dedos";
-"Invia segnalazioni di crash" = "Enviar relatórios de falha";
 "Nuovo codice" = "Novo código de acesso";
 "Conferma codice" = "Confirmar código de acesso";
 "Nome gruppo" = "Nome do grupo";
@@ -326,7 +309,6 @@
 "Crea" = "Criar";
 "Crea fumetto da cartella di immagini" = "Criar banda desenhada a partir de uma pasta de imagens";
 "Direzione predefinita" = "Direção de leitura predefinida";
-"Doppia pagina di default" = "Modo de duas páginas predefinido";
 "Elimina" = "Eliminar";
 "Elimina account" = "Eliminar conta";
 "Eliminare i fumetti selezionati?" = "Eliminar as bandas desenhadas selecionadas?";
@@ -351,7 +333,6 @@
 "Licenze" = "Licenças";
 "Licenze open source…" = "Licenças de código aberto…";
 "Lista" = "Lista";
-"Modalità Kiosk" = "Modo quiosque";
 "Mostra la cartella della libreria nel Finder" = "Mostrar a pasta da biblioteca no Finder";
 "Mostra nel Finder" = "Mostrar no Finder";
 "Nuovi fumetti" = "Novas bandas desenhadas";
@@ -383,7 +364,6 @@
 "Server attivo" = "Servidor local";
 "Sfondo pagina" = "Fundo da página";
 "Sincronizza ora" = "Sincronizar agora";
-"Sincronizza progressi di lettura" = "Sincronizar progresso de leitura";
 "Stato iCloud" = "Estado do iCloud";
 "Svuota log" = "Limpar registo";
 "Swipe page-turn" = "Virar página ao deslizar";

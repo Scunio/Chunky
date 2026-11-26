@@ -177,8 +177,6 @@ private struct TVSettingsView: View {
                     .tvOSRowBackground()
                 NavigationLink("Blocco genitori") { TVPopsOnMenu { ParentalLockSettingsView() } }
                     .tvOSRowBackground()
-                RemoteProgressSyncToggle()
-                    .tvOSRowBackground()
                 NavigationLink("Lettura") { TVPopsOnMenu { TVReaderSettingsView() } }
                     .tvOSRowBackground()
                 NavigationLink("Diagnostica") {
@@ -227,7 +225,6 @@ private struct TVReaderSettingsView: View {
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
     @AppStorage("upscalingEnabled") private var isUpscalingEnabled = false
     @AppStorage("autoTintContrastEnabled") private var isAutoTintContrastEnabled = false
-    @AppStorage("readerIdleResetSeconds") private var readerIdleReset = ReaderIdleResetOption.never
 
     private var defaultReadingDirection: Binding<ReadingDirection> {
         Binding(
@@ -263,13 +260,6 @@ private struct TVReaderSettingsView: View {
                     Toggle("Tinta e contrasto automatici", isOn: $isAutoTintContrastEnabled)
                     Toggle("Upscaling pagine a bassa risoluzione", isOn: $isUpscalingEnabled)
                 }
-
-                TVOptionPickerSection(
-                    title: Text("Riparti dalla prima pagina"),
-                    footer: Text("Se il lettore resta inattivo per il tempo scelto, torna automaticamente a pagina 1 — pensato per l'uso a schermo esposto (vetrina/kiosk), non per l'uso quotidiano."),
-                    selection: $readerIdleReset,
-                    options: Array(ReaderIdleResetOption.allCases)
-                ) { Text($0.label) }
             }
         }
     }

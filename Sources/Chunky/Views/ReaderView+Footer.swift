@@ -45,14 +45,8 @@ extension ReaderContentView {
                     // "10–11 / 20") and without pre-allocating the space, the slider next to
                     // it would shift every time the page changes.
                     //
-                    // The whole column is one tap target, not just the chevron: swaps which
-                    // half (top/bottom) advances/goes back in one-handed mode. A `Button`
-                    // wrapping both, not a separate one on just the small icon — the label
-                    // alone was an easy-to-miss target compared to the rest of the bar.
-                    #if os(macOS)
-                    // On the Mac the counter opens "Go to page" instead: one-handed mode
-                    // (whose side the chevron used to flip) is a thumb affordance with no
-                    // meaning for a pointer, and the reader ignores it here.
+                    // Tapping it opens "Go to page" (it used to flip the side of the old
+                    // one-handed mode on iOS, a chevron nobody could guess the meaning of).
                     Button(action: {
                         jumpPageNumber = currentPage + 1
                         isPageJumpPresented = true
@@ -64,25 +58,12 @@ extension ReaderContentView {
                             .frame(maxHeight: .infinity)
                             .contentShape(Rectangle())
                     }
+                    #if os(macOS)
                     .frame(width: labelWidth, height: 32)
-                    .accessibilityHint(Text("Vai a pagina"))
                     #else
-                    Button(action: { isOneHandedZonesReversed.toggle() }) {
-                        VStack(spacing: 2) {
-                            Text(label)
-                                .font(.callout.monospacedDigit())
-                                .lineLimit(1)
-                                .fixedSize(horizontal: true, vertical: false)
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.bold))
-                                .rotationEffect(.degrees(isOneHandedZonesReversed ? 180 : 0))
-                        }
-                        .frame(maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                    }
                     .frame(width: labelWidth, height: 44)
-                    .accessibilityLabel(Text("Pagina \(currentPage + 1) di \(provider.pageCount)"))
                     #endif
+                    .accessibilityHint(Text("Vai a pagina"))
                     pageSlider(provider: provider)
                     if isDoublePageAllowed {
                         // Cycles single → double → automatic page.

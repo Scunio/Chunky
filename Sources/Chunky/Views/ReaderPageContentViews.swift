@@ -50,8 +50,8 @@ struct PageSpreadView: View {
     /// False for the neighbouring spreads `ReaderContentView.macPersistentPager` keeps mounted
     /// off-screen: their pages drop any zoom when they leave the screen and ignore ⌘+/⌘−/⌘0.
     var isActive: Bool = true
-    @AppStorage("singlePageZoomMode") private var singlePageZoomMode = PageZoomMode.auto
-    @AppStorage("doublePageZoomMode") private var doublePageZoomMode = PageZoomMode.auto
+    @AppStorage("singlePageZoomMode") private var singlePageZoomMode = PageZoomMode.fitPage
+    @AppStorage("doublePageZoomMode") private var doublePageZoomMode = PageZoomMode.fitPage
     /// Same choice `PageView.effectiveZoomMode` makes: "Fit width" is a plain scroll view.
     private var macZoomMode: PageZoomMode {
         pagination.pageStep > 1 ? doublePageZoomMode : singlePageZoomMode
@@ -336,8 +336,8 @@ private struct PageView: View {
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
     @AppStorage("upscalingEnabled") private var isUpscalingEnabled = false
     @AppStorage("autoTintContrastEnabled") private var isAutoTintContrastEnabled = false
-    @AppStorage("singlePageZoomMode") private var singlePageZoomMode = PageZoomMode.auto
-    @AppStorage("doublePageZoomMode") private var doublePageZoomMode = PageZoomMode.auto
+    @AppStorage("singlePageZoomMode") private var singlePageZoomMode = PageZoomMode.fitPage
+    @AppStorage("doublePageZoomMode") private var doublePageZoomMode = PageZoomMode.fitPage
     @State private var image: PlatformImage?
     @State private var loadFailed = false
     @State private var imageLoadGeneration = 0
@@ -347,7 +347,13 @@ private struct PageView: View {
     /// width and, if the result exceeds the screen's height, makes the page scrollable
     /// vertically.
     private var effectiveZoomMode: PageZoomMode {
+        #if os(iOS)
+        // A double spread is always fitted on iPhone/iPad (`SpreadPairView`), and Settings
+        // offers no double-page choice there: a lone page in double mode (the cover) follows suit.
+        let mode = isDoublePage ? .fitPage : singlePageZoomMode
+        #else
         let mode = isDoublePage ? doublePageZoomMode : singlePageZoomMode
+        #endif
         #if os(tvOS)
         // "Fit width"'s vertical `ScrollView` can never receive remote focus on tvOS, so a page
         // taller than the screen was cut off with no way to scroll it. tvOS gets the remote

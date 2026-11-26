@@ -64,13 +64,9 @@ struct ReaderContentView: View {
     /// Duration of the "Dissolvenza" (`.fade`) page-turn style's cross-dissolve — see
     /// `PageCollectionPager.fadeDuration`.
     @AppStorage("fadeTransitionDuration") var fadeTransitionDuration = 0.25
-    @AppStorage("oneHandedMode") var isOneHandedModeEnabled = false
-    @AppStorage("oneHandedZonesReversed") var isOneHandedZonesReversed = false
     @AppStorage("hotCornersEnabled") var isHotCornersEnabled = false
     @AppStorage("tapToPanEnabled") var isTapToPanEnabled = false
     @AppStorage("twoFingerBrightnessEnabled") private var isTwoFingerBrightnessEnabled = true
-    @AppStorage("readerIdleResetSeconds") private var readerIdleReset = ReaderIdleResetOption.never
-    @State private var idleResetWorkItem: DispatchWorkItem?
     /// Raised by PageView (via binding) so the pager knows whether the current page is
     /// zoomed in: with zoom active, swipe-to-change-page must be suspended, otherwise it
     /// conflicts with the drag used to move around inside the zoomed page.
@@ -268,6 +264,15 @@ struct ReaderContentView: View {
     /// Effective double page: in automatic mode it follows the available space, otherwise the manual choice.
     var effectiveDoublePage: Bool {
         isDoublePageAutoMode ? isDoublePageAllowed : (isDoublePageEnabled && isDoublePageAllowed)
+    }
+
+    /// The hot corner / click-zone shortcut: flips what is on screen now. It used to toggle
+    /// only the manual choice, which "Automatico" (the default) ignores, so the corner did nothing.
+    func toggleDoublePageShortcut() {
+        guard isDoublePageAllowed else { return }
+        let showsDouble = effectiveDoublePage
+        isDoublePageAutoMode = false
+        isDoublePageEnabled = !showsDouble
     }
 
     private var pageStep: Int { effectiveDoublePage ? 2 : 1 }
@@ -487,31 +492,17 @@ struct ReaderContentView: View {
                 // macOS shows the arrow only while the pointer hovers a zone (`PageClickZones`).
                 #if os(iOS)
                 if tapPageTurnStyle != .disabled {
-                    if isOneHandedModeEnabled {
-                        // In one-handed mode both sides do the same action, so the arrows
-                        // both point in the same direction (the shared action's) instead of
-                        // one forward and one back.
-                        let sharedSymbol = isOneHandedZonesReversed ? "arrowtriangle.left" : "arrowtriangle.right"
-                        HStack {
-                            Image(systemName: sharedSymbol)
-                            Spacer()
-                            Image(systemName: sharedSymbol)
-                        }
-                        .font(.title2)
-                        .foregroundColor(chromeForeground.opacity(0.35))
-                        .padding(.horizontal, 14)
-                        .allowsHitTesting(false)
-                    } else {
-                        HStack {
-                            Image(systemName: "arrowtriangle.left")
-                            Spacer()
-                            Image(systemName: "arrowtriangle.right")
-                        }
-                        .font(.title2)
-                        .foregroundColor(chromeForeground.opacity(0.35))
-                        .padding(.horizontal, 14)
-                        .allowsHitTesting(false)
+                    // With "Avanza al tocco sui bordi" both sides advance, so both arrows
+                    // point forward.
+                    HStack {
+                        Image(systemName: isTapToPanEnabled ? "arrowtriangle.right" : "arrowtriangle.left")
+                        Spacer()
+                        Image(systemName: "arrowtriangle.right")
                     }
+                    .font(.title2)
+                    .foregroundColor(chromeForeground.opacity(0.35))
+                    .padding(.horizontal, 14)
+                    .allowsHitTesting(false)
                 }
                 #endif
             }
@@ -578,10 +569,8 @@ struct ReaderContentView: View {
         #endif
         .onAppear {
             loadComic()
-            resetIdleTimerIfNeeded()
         }
         .onDisappear {
-            idleResetWorkItem?.cancel()
             // Guaranteed flush of the throttled progress save: exiting right after a
             // page turn must not lose it (or leave it only in memory).
             flushPendingProgressSave()
@@ -935,7 +924,6 @@ struct ReaderContentView: View {
         case .beginningReached:
             break
         case .page(let next):
-            resetIdleTimerIfNeeded()
             #if os(macOS)
             macTurnPage(to: next, style: style)
             #else
@@ -954,32 +942,12 @@ struct ReaderContentView: View {
     }
 
     func toggleControls() {
-        resetIdleTimerIfNeeded()
         withAnimation(.easeInOut(duration: 0.22)) {
             isControlsVisible.toggle()
         }
         #if os(macOS)
         if isControlsVisible { scheduleMacChromeAutoHide() } else { macChromeIdle.hideWorkItem?.cancel() }
         #endif
-    }
-
-    /// "Showcase/kiosk" timer: if the reader stays inactive for the time chosen in
-    /// Settings, it automatically returns to page 1. Every interaction (tap, page change)
-    /// restarts it.
-    private func resetIdleTimerIfNeeded() {
-        idleResetWorkItem?.cancel()
-        guard readerIdleReset.rawValue > 0 else { return }
-        let workItem = DispatchWorkItem {
-            #if os(macOS)
-            macTurnPage(to: 0, style: tapPageTurnStyle)
-            #else
-            turnStyle = tapPageTurnStyle
-            turnDirection = -1
-            withAnimation(.easeInOut(duration: 0.2)) { currentPage = 0 }
-            #endif
-        }
-        idleResetWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + Double(readerIdleReset.rawValue), execute: workItem)
     }
 
     /// The comic after the current one in the order shown in the library, if it exists.

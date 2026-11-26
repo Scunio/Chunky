@@ -75,7 +75,7 @@ extension ReaderContentView {
             onToggleControls: { toggleControls() },
             onExit: { exitReader() },
             onOpenSettings: { openTools() },
-            onToggleDoublePage: { if isDoublePageAllowed { isDoublePageEnabled.toggle() } },
+            onToggleDoublePage: { toggleDoublePageShortcut() },
             hintColor: chromeForeground,
             onPointerMoved: { macPointerMoved(to: $0) }
         ))

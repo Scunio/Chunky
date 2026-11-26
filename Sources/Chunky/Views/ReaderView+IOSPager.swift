@@ -78,8 +78,8 @@ extension ReaderContentView {
     /// zoom coordinators too — see `PageSpreadView.tapZoneOptions`.
     private var tapZoneOptions: PageTapZoneGeometry.Options {
         PageTapZoneGeometry.Options(
-            oneHanded: isOneHandedModeEnabled,
-            oneHandedReversed: isOneHandedZonesReversed,
+            oneHanded: isTapToPanEnabled,
+            oneHandedReversed: false,
             rightToLeft: comic.readingDirection == .rightToLeft,
             hotCorners: isHotCornersEnabled,
             zonesEnabled: tapPageTurnStyle != .disabled,
@@ -168,8 +168,8 @@ extension ReaderContentView {
 
     private func pageTapZonesOverlay(provider: ComicPageProvider) -> some View {
         PageTapZones(
-            oneHanded: isOneHandedModeEnabled,
-            oneHandedReversed: isOneHandedZonesReversed,
+            oneHanded: isTapToPanEnabled,
+            oneHandedReversed: false,
             hotCorners: isHotCornersEnabled,
             zonesEnabled: tapPageTurnStyle != .disabled,
             rightToLeft: comic.readingDirection == .rightToLeft,
@@ -178,14 +178,9 @@ extension ReaderContentView {
             bottomInset: isControlsVisible ? footerHeight : 0,
             isZoomed: isZoomed
         ) {
-            // With "Tap-to-pan" the "back" zone also advances: handy if you can't
-            // comfortably reach both sides of the screen. Ignored while one-handed mode is
-            // on: there both zones already share one action (`PageTapZoneGeometry.action`'s
-            // `oneHandedAction`, following `isOneHandedZonesReversed`) for the same "can't
-            // reach both sides" reason, so this would otherwise silently fight that choice
-            // — turning "one-handed, reversed" (meant to send both zones back) into "both
-            // zones forward" behind the user's back, with no indication why.
-            advancePage(isTapToPanEnabled && !isOneHandedModeEnabled ? 1 : -1, provider: provider, style: tapPageTurnStyle)
+            // With "Avanza al tocco sui bordi" both sides advance through the unified zones
+            // (`oneHanded: isTapToPanEnabled` above), so this is only ever the back zone.
+            advancePage(-1, provider: provider, style: tapPageTurnStyle)
         } onNext: {
             advancePage(1, provider: provider, style: tapPageTurnStyle)
         } onToggleControls: {
@@ -195,7 +190,7 @@ extension ReaderContentView {
         } onOpenSettings: {
             openTools()
         } onToggleDoublePage: {
-            if isDoublePageAllowed { isDoublePageEnabled.toggle() }
+            toggleDoublePageShortcut()
         }
     }
 

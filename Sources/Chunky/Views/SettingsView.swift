@@ -22,11 +22,11 @@ enum TapPageTurnStyle: String, CaseIterable, Identifiable {
     }
 }
 
-/// How the page is fitted to the screen. "Fit page" shows the whole page (current/original
-/// behavior); "Fit width" scales to the screen's width, making the page scrollable
-/// vertically if it's taller than the screen.
+/// How the page is fitted to the screen. "Fit page" shows the whole page; "Fit width" scales
+/// to the screen's width, making the page scrollable vertically if it's taller than the screen.
+/// A stored "auto" from earlier versions (it behaved exactly like "Fit page") no longer
+/// decodes, so `@AppStorage` falls back to the `.fitPage` default.
 enum PageZoomMode: String, CaseIterable, Identifiable {
-    case auto
     case fitPage
     case fitWidth
 
@@ -34,36 +34,37 @@ enum PageZoomMode: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .auto: AppLocalization.localizedString("Automatico", comment: "Page zoom mode")
         case .fitPage: AppLocalization.localizedString("Adatta pagina", comment: "Page zoom mode")
         case .fitWidth: AppLocalization.localizedString("Adatta larghezza", comment: "Page zoom mode")
         }
     }
 }
 
-/// The observed options for the reset-to-page-1 timer after inactivity (a feature designed
-/// for "showcase/kiosk" use, related to Kiosk Mode): the number is in seconds, 0 = "Never".
-enum ReaderIdleResetOption: Int, CaseIterable, Identifiable {
-    case never = 0
-    case seconds10 = 10
-    case seconds20 = 20
-    case seconds30 = 30
-    case minute1 = 60
-    case minutes2 = 120
-    case minutes3 = 180
+/// The reader's page layout, as the settings show it: the same three states the reader's own
+/// button cycles through, stored in the two keys the reader reads (`doublePageAutoMode`,
+/// `doublePageMode`). A plain "double page by default" toggle only set the second key, which
+/// "Automatico" (the default) ignores.
+enum PageLayoutChoice: String, CaseIterable, Identifiable {
+    case automatic, single, double
 
-    var id: Int { rawValue }
+    var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .never: AppLocalization.localizedString("Mai", comment: "Reader idle reset interval")
-        case .seconds10: AppLocalization.localizedString("Dopo 10 secondi", comment: "Reader idle reset interval")
-        case .seconds20: AppLocalization.localizedString("Dopo 20 secondi", comment: "Reader idle reset interval")
-        case .seconds30: AppLocalization.localizedString("Dopo 30 secondi", comment: "Reader idle reset interval")
-        case .minute1: AppLocalization.localizedString("Dopo 1 minuto", comment: "Reader idle reset interval")
-        case .minutes2: AppLocalization.localizedString("Dopo 2 minuti", comment: "Reader idle reset interval")
-        case .minutes3: AppLocalization.localizedString("Dopo 3 minuti", comment: "Reader idle reset interval")
+        case .automatic: AppLocalization.localizedString("Automatico", comment: "Page layout")
+        case .single: AppLocalization.localizedString("Pagina singola", comment: "Page layout")
+        case .double: AppLocalization.localizedString("Doppia pagina", comment: "Page layout")
         }
+    }
+
+    static func binding(autoMode: Binding<Bool>, doublePage: Binding<Bool>) -> Binding<PageLayoutChoice> {
+        Binding(
+            get: { autoMode.wrappedValue ? .automatic : (doublePage.wrappedValue ? .double : .single) },
+            set: { choice in
+                autoMode.wrappedValue = choice == .automatic
+                if choice != .automatic { doublePage.wrappedValue = choice == .double }
+            }
+        )
     }
 }
 
@@ -131,23 +132,22 @@ struct PageOrderRow: View {
 struct SettingsView: View {
     @AppStorage("defaultReadingDirection") private var defaultReadingDirectionRawValue = ReadingDirection.leftToRight.rawValue
     @AppStorage("doublePageMode") private var isDoublePageEnabled = false
+    @AppStorage("doublePageAutoMode") private var isDoublePageAutoMode = true
     @AppStorage("doublePageCoverAlone") private var isCoverAlone = true
     @AppStorage("tapPageTurnStyle") private var tapPageTurnStyle = TapPageTurnStyle.slide
     @AppStorage("swipePageTurnStyle") private var swipePageTurnStyle = TapPageTurnStyle.slide
     @AppStorage("fadeTransitionDuration") private var fadeTransitionDuration = 0.25
     @AppStorage("tapToPanEnabled") private var isTapToPanEnabled = false
-    @AppStorage("oneHandedMode") private var isOneHandedModeEnabled = false
     @AppStorage("hotCornersEnabled") private var isHotCornersEnabled = false
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
     @AppStorage("upscalingEnabled") private var isUpscalingEnabled = false
     @AppStorage("autoTintContrastEnabled") private var isAutoTintContrastEnabled = false
-    @AppStorage("kioskModeEnabled") private var isKioskModeEnabled = false
     @AppStorage("twoFingerBrightnessEnabled") private var isTwoFingerBrightnessEnabled = true
-    @AppStorage("singlePageZoomMode") private var singlePageZoomMode = PageZoomMode.auto
-    @AppStorage("doublePageZoomMode") private var doublePageZoomMode = PageZoomMode.auto
-    @AppStorage("readerIdleResetSeconds") private var readerIdleReset = ReaderIdleResetOption.never
-    @AppStorage("crashReportingEnabled") private var isCrashReportingEnabled = true
-    @AppStorage("includeInBackup") private var isIncludedInBackup = false
+    @AppStorage("singlePageZoomMode") private var singlePageZoomMode = PageZoomMode.fitPage
+    @AppStorage("doublePageZoomMode") private var doublePageZoomMode = PageZoomMode.fitPage
+    #if os(macOS)
+    @AppStorage("includeInBackup") private var isIncludedInBackup = true
+    #endif
 
     private var defaultReadingDirection: Binding<ReadingDirection> {
         Binding(
@@ -170,7 +170,11 @@ struct SettingsView: View {
                 #if os(iOS)
                 .pickerStyle(.inline)
                 #endif
-                Toggle("Doppia pagina di default", isOn: $isDoublePageEnabled)
+                Picker("Pagine", selection: PageLayoutChoice.binding(autoMode: $isDoublePageAutoMode, doublePage: $isDoublePageEnabled)) {
+                    ForEach(PageLayoutChoice.allCases) { choice in
+                        Text(choice.label).tag(choice)
+                    }
+                }
                 Toggle(isOn: $isCoverAlone) {
                     infoLabel("Copertina da sola", info: "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi.")
                 }
@@ -186,20 +190,20 @@ struct SettingsView: View {
                         Text(mode.label).tag(mode)
                     }
                 }
+                #if os(macOS)
+                // iPhone/iPad zoom a double spread as one pair (`SpreadPairView`), always
+                // fitted to the screen: a "Fit width" choice for it would do nothing there.
                 Picker("Pagine doppie", selection: $doublePageZoomMode) {
                     ForEach(PageZoomMode.allCases) { mode in
                         Text(mode.label).tag(mode)
                     }
                 }
+                #endif
             }
 
             Section(header: Text("Navigazione")) {
                 Toggle(isOn: $isTapToPanEnabled) {
-                    infoLabel("Avanza al tocco sui bordi", info: "Toccando un bordo qualsiasi si va sempre avanti, invece che indietro/avanti a seconda del lato. Comodo se tieni il tablet/telefono in una posizione scomoda per raggiungere entrambi i lati. Non si applica con la modalità una mano attiva, che già unifica le due zone a modo suo (vedi sotto).")
-                }
-                .disabled(isOneHandedModeEnabled)
-                Toggle(isOn: $isOneHandedModeEnabled) {
-                    infoLabel("Modalità una mano", info: "Unifica le due zone laterali: toccare il bordo destro o sinistro fa la stessa cosa (avanza di default), così puoi sfogliare con il pollice senza dover raggiungere il lato opposto. La fascia centrale resta per mostrare/nascondere i controlli.")
+                    infoLabel("Avanza al tocco sui bordi", info: "Toccando il bordo destro o quello sinistro si va sempre avanti: puoi sfogliare con il pollice senza raggiungere il lato opposto. La fascia centrale resta per mostrare o nascondere i controlli.")
                 }
                 .disabled(tapPageTurnStyle == .disabled)
                 Toggle(isOn: $isHotCornersEnabled) {
@@ -240,19 +244,6 @@ struct SettingsView: View {
             }
 
             Section(
-                header: Text("Inattività"),
-                footer: Text("Se il lettore resta inattivo per il tempo scelto, torna automaticamente a pagina 1 — pensato per l'uso a schermo esposto (vetrina/kiosk), non per l'uso quotidiano.")
-            ) {
-                Picker(selection: $readerIdleReset) {
-                    ForEach(ReaderIdleResetOption.allCases) { option in
-                        Text(option.label).tag(option)
-                    }
-                } label: {
-                    infoLabel("Riparti dalla prima pagina", info: "Difficilmente ti servirà, ma se ne hai bisogno eccolo qui.", compact: true)
-                }
-            }
-
-            Section(
                 header: Text("Qualità immagine"),
                 footer: Text("L'upscaling migliora le pagine a bassa risoluzione con un filtro di qualità superiore al semplice ridimensionamento. Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni.")
             ) {
@@ -272,10 +263,7 @@ struct SettingsView: View {
                 NavigationLink("Lingua", destination: AppLanguageSettings())
             }
 
-            Section(
-                header: Text("Libreria e sincronizzazione"),
-                footer: Text("Se disattivato, la cartella dei fumetti non viene inclusa nei backup di iCloud/iTunes — utile per risparmiare spazio se hai già una copia altrove.")
-            ) {
+            Section(header: Text("Libreria e sincronizzazione")) {
                 NavigationLink("Stato iCloud", destination: ICloudStatusView())
                 #if os(macOS)
                 // Without iCloud the library folder lives inside the sandbox container
@@ -284,7 +272,8 @@ struct SettingsView: View {
                 Button("Mostra la cartella della libreria nel Finder") {
                     RevealInFinder.reveal(LibraryStorage.rootFolderURL())
                 }
-                #endif
+                // Time Machine: on iPhone/iPad the library sits in iCloud Drive, which the
+                // device backup never includes anyway, so the toggle is Mac-only.
                 Toggle("Includi fumetti nel backup", isOn: Binding(
                     get: { isIncludedInBackup },
                     set: { newValue in
@@ -292,25 +281,18 @@ struct SettingsView: View {
                         LibraryStorage.setExcludedFromBackup(!newValue)
                     }
                 ))
+                #endif
             }
 
             RebuildLibrarySection()
 
             Section(header: Text("Privacy")) {
                 NavigationLink("Blocco genitori", destination: ParentalLockSettingsView())
-                Toggle("Modalità Kiosk", isOn: $isKioskModeEnabled)
             }
 
             // Support: for when something goes wrong, so after everything else.
-            Section(header: Text("Supporto"), footer: supportFooter) {
+            Section(header: Text("Supporto")) {
                 NavigationLink("Diagnostica", destination: DiagnosticsView())
-                // MetricKit, on which crash reports depend, doesn't exist on macOS: showing the
-                // toggle there would mean promising something that does nothing.
-                #if os(iOS)
-                Toggle(isOn: $isCrashReportingEnabled) {
-                    infoLabel("Invia segnalazioni di crash", info: "Le segnalazioni di crash sono anonime, e aiutano a individuare e correggere i problemi.")
-                }
-                #endif
                 Button(action: ToolsPanelView.sendFeedbackEmail) {
                     Label("Feedback / Segnala un problema", systemImage: "envelope")
                 }
@@ -338,13 +320,6 @@ struct SettingsView: View {
         .frame(maxWidth: 600)
         #endif
         .navigationTitle("Impostazioni")
-    }
-
-    @ViewBuilder
-    private var supportFooter: some View {
-        #if os(iOS)
-        Text("Le segnalazioni di crash restano solo su questo dispositivo (nessun server remoto): vengono aggiunte al log diagnostico e possono arrivare con qualche ritardo, generalmente solo su dispositivo fisico.")
-        #endif
     }
 
     private var appVersion: String {

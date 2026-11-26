@@ -23,6 +23,7 @@ struct ChunkyApp: App {
     init() {
         UITestReset.performIfRequested()
         UITestSeed.seedIfRequested()
+        RetiredSettings.clean()
         // Default: off on iOS (the library is already in iCloud Drive, and device backups
         // count against the iCloud quota), on on macOS — a Mac user expects Time Machine to
         // cover the app's data, and excluding it there is opt-out, not a silent default.

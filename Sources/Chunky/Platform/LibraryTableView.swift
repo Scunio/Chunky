@@ -6,7 +6,6 @@ import SwiftUI
 /// remains the natural idiom there anyway.
 struct LibraryTableView: View {
     let comics: [ComicEntity]
-    let allowsDeletion: Bool
     /// Passato da `LibraryView` (unica osservatrice di `ICloudDownloadTracker` per la
     /// libreria): la tabella legge il Set senza sottoscriversi al singleton per riga.
     let pendingRelativePaths: Set<String>
@@ -21,7 +20,6 @@ struct LibraryTableView: View {
 
     init(
         comics: [ComicEntity],
-        allowsDeletion: Bool,
         pendingRelativePaths: Set<String> = [],
         onSelect: @escaping (ComicEntity) -> Void,
         onDelete: @escaping (ComicEntity) -> Void,
@@ -30,7 +28,6 @@ struct LibraryTableView: View {
         onSelectionChange: @escaping ([ComicEntity]) -> Void = { _ in }
     ) {
         self.comics = comics
-        self.allowsDeletion = allowsDeletion
         self.pendingRelativePaths = pendingRelativePaths
         self.onSelect = onSelect
         self.onDelete = onDelete
@@ -88,7 +85,6 @@ struct LibraryTableView: View {
         // Delete key / Edit ▸ Delete: same confirmation as the context menu's "Rimuovi" for
         // one row, the bulk one for several (before, only the first selected row went).
         .onDeleteCommand {
-            guard allowsDeletion else { return }
             let selected = sortedComics.filter { selection.contains($0.id) }
             if selected.count == 1 {
                 onDelete(selected[0])
@@ -135,11 +131,9 @@ struct LibraryTableView: View {
                 Button(action: { revealInFinder(comic) }) {
             Label("Mostra nel Finder", systemImage: "folder")
         }
-        if allowsDeletion {
-            Divider()
-            Button(role: .destructive, action: { onDelete(comic) }) {
-                Label("Rimuovi", systemImage: "trash")
-            }
+        Divider()
+        Button(role: .destructive, action: { onDelete(comic) }) {
+            Label("Rimuovi", systemImage: "trash")
         }
     }
 

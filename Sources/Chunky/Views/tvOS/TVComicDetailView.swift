@@ -9,8 +9,6 @@ import SwiftUI
 /// depend on the cover looking good stretched full-screen.
 struct TVComicDetailView: View {
     @ObservedObject var comic: ComicEntity
-    /// False in kiosk mode — same rule as the grid's own context menu (`ComicCell.allowsDeletion`).
-    var allowsDeletion = true
     let onRead: () -> Void
     /// Pops this screen and deletes the comic (owned by `LibraryView`, which pops first so
     /// this view never observes a deleted object). Asked for only after the confirmation below.
@@ -93,7 +91,7 @@ struct TVComicDetailView: View {
                     } else {
                         secondaryButton("Segna come letto", systemImage: "checkmark.circle", action: { markStatus(.finished) })
                     }
-                    if allowsDeletion, onDelete != nil {
+                    if onDelete != nil {
                         secondaryButton("Elimina", systemImage: "trash", action: { isConfirmingDelete = true })
                     }
                 }

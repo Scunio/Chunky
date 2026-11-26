@@ -33,7 +33,6 @@ struct LibraryView: View {
     /// osservasse il singleton, ogni update di `NSMetadataQuery` invaliderebbe tutte le
     /// celle (vedi `ComicCell.isPendingDownload`, calcolato qui e passato giù come Bool).
     @ObservedObject private var downloadTracker = ICloudDownloadTracker.shared
-    @AppStorage("kioskModeEnabled") private var isKioskModeEnabled = false
     @State private var isShowingFileImporter = false
     #if os(iOS)
     // On Mac the reader lives in its own window (see `openComic`); on tvOS it is a root
@@ -259,12 +258,8 @@ struct LibraryView: View {
                         favoritesFilterButton
                         downloadedFilterButton
                         sourcesMenu
-                        if !isKioskModeEnabled {
-                            accountsLink
-                            toolsMenu
-                        } else {
-                            settingsLink
-                        }
+                        accountsLink
+                        toolsMenu
                     }
                 }
                 #else
@@ -327,7 +322,6 @@ struct LibraryView: View {
             .navigationDestination(item: $detailComic) { comic in
                 TVComicDetailView(
                     comic: comic,
-                    allowsDeletion: !isKioskModeEnabled,
                     // "Continuare con:" proposes the next comic in *display* order (series
                     // sections, then title — what the grid shows), not the flat title order.
                     onRead: { openReader(comic, libraryComics: LibraryGrouping.sections(for: filtered).flatMap(\.comics)) },
@@ -481,22 +475,18 @@ struct LibraryView: View {
         if !selectedIDs.isEmpty {
             ToolbarItem { statusMenu.help("Stato") }
             ToolbarItem { groupMenu.help("Gruppo") }
-            if !isKioskModeEnabled {
-                ToolbarItem {
-                    Button(action: deleteSelected) {
-                        Label("Rimuovi", systemImage: "trash")
-                    }
-                    .help("Rimuovi")
+            ToolbarItem {
+                Button(action: deleteSelected) {
+                    Label("Rimuovi", systemImage: "trash")
                 }
+                .help("Rimuovi")
             }
         }
         ToolbarItem { sourcesMenu.help("Sorgenti e filtri") }
         ToolbarItem { addButton.help("Importa fumetti…") }
         ToolbarItem { newComicsButton.help("Novità") }
         ToolbarItem { nowReadingButton.help("Ora in lettura") }
-        if !isKioskModeEnabled {
-            ToolbarItem { accountsLink.help("Account") }
-        }
+        ToolbarItem { accountsLink.help("Account") }
     }
 
     /// Click on a cover: plain click selects only it, ⌘-click toggles it in the selection,
@@ -529,7 +519,6 @@ struct LibraryView: View {
     /// Delete key / Edit ▸ Delete: same confirmations as the context menu (one comic) and the
     /// toolbar trash (several).
     private func macDeleteSelection(in filtered: [ComicEntity]) {
-        guard !isKioskModeEnabled else { return }
         let targets = filtered.filter { selectedIDs.contains($0.objectID) }
         if targets.count == 1 {
             comicToDelete = targets[0]
@@ -726,7 +715,6 @@ struct LibraryView: View {
                 if usesTableLayout {
                     LibraryTableView(
                         comics: filtered,
-                        allowsDeletion: !isKioskModeEnabled,
                         pendingRelativePaths: downloadTracker.pendingRelativePaths,
                         onSelect: openComic,
                         onDelete: { comicToDelete = $0 },
@@ -1218,7 +1206,6 @@ struct LibraryView: View {
             comic: comic,
             isEditing: isEditing,
             isSelected: selectedIDs.contains(comic.objectID),
-            allowsDeletion: !isKioskModeEnabled,
             existingGroupNames: names,
             isPendingDownload: downloadTracker.pendingRelativePaths.contains(comic.relativePath ?? ""),
             onSelect: { handleTap(on: comic) },
@@ -1352,12 +1339,6 @@ struct LibraryView: View {
         }
     }
 
-    private var settingsLink: some View {
-        NavigationLink(destination: SettingsView()) {
-            Label("Impostazioni", systemImage: "gearshape")
-        }
-    }
-
     private var emptyState: some View {
         ContentUnavailableView {
             Label("La tua libreria è vuota", systemImage: "books.vertical")
@@ -1406,7 +1387,6 @@ private struct ComicCell: View {
     let comic: ComicEntity
     let isEditing: Bool
     let isSelected: Bool
-    let allowsDeletion: Bool
     let existingGroupNames: [String]
     /// Calcolato da `LibraryView` (unica osservatrice di `ICloudDownloadTracker`):
     /// osservare il singleton in ogni cella faceva ridisegnare l'intera griglia a ogni
@@ -1569,11 +1549,9 @@ private struct ComicCell: View {
                     Label("Mostra nel Finder", systemImage: "folder")
                 }
                 #endif
-                if allowsDeletion {
-                    Divider()
-                }
+                Divider()
             }
-            if !isEditing && allowsDeletion {
+            if !isEditing {
                 Button(role: .destructive, action: onDelete) {
                     Label("Rimuovi", systemImage: "trash")
                 }
