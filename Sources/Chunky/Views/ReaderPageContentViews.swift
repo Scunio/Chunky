@@ -50,6 +50,12 @@ struct PageSpreadView: View {
     /// False for the neighbouring spreads `ReaderContentView.macPersistentPager` keeps mounted
     /// off-screen: their pages drop any zoom when they leave the screen and ignore ⌘+/⌘−/⌘0.
     var isActive: Bool = true
+    @AppStorage("singlePageZoomMode") private var singlePageZoomMode = PageZoomMode.auto
+    @AppStorage("doublePageZoomMode") private var doublePageZoomMode = PageZoomMode.auto
+    /// Same choice `PageView.effectiveZoomMode` makes: "Fit width" is a plain scroll view.
+    private var macZoomMode: PageZoomMode {
+        pagination.pageStep > 1 ? doublePageZoomMode : singlePageZoomMode
+    }
     #endif
     #if os(macOS) || os(iOS)
     /// The upscaling target for each page, computed once by `ReaderContentView` and shared
@@ -99,19 +105,29 @@ struct PageSpreadView: View {
                 )
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
             }
-            #else
-            HStack(spacing: 0) {
-                pageView(index: leadingIndex, pairedHeight: showsSecondPage ? proxy.size.height : nil)
-                if showsSecondPage {
-                    pageView(index: leadingIndex + 1, pairedHeight: proxy.size.height)
-                }
+            #elseif os(macOS)
+            // One zoom for the whole spread: both pages grow and pan together.
+            MacSpreadZoomView(isEnabled: macZoomMode != .fitWidth, isActive: isActive, isZoomed: isZoomed) {
+                spreadPages(height: proxy.size.height)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
+            #else
+            spreadPages(height: proxy.size.height)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
             #endif
         }
     }
 
     #if !os(iOS)
+    private func spreadPages(height: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            pageView(index: leadingIndex, pairedHeight: showsSecondPage ? height : nil)
+            if showsSecondPage {
+                pageView(index: leadingIndex + 1, pairedHeight: height)
+            }
+        }
+    }
+
     private func pageView(index: Int, pairedHeight: CGFloat?) -> PageView {
         var view = PageView(
             provider: provider, index: index, isDoublePage: pagination.pageStep > 1,
@@ -292,22 +308,6 @@ private struct SpreadPairView: View {
 }
 #endif
 
-#if os(macOS)
-/// Applica il blur solo quando il raggio è > 0: il modificatore `.blur`, anche a raggio
-/// zero, forza un passaggio CoreImage sull'intera pagina a ogni frame su macOS — ed è
-/// sempre attaccato durante lo scroll/pan della pagina zoomata.
-private extension View {
-    @ViewBuilder
-    func conditionalMotionBlur(radius: CGFloat) -> some View {
-        if radius > 0 {
-            self.blur(radius: radius)
-        } else {
-            self
-        }
-    }
-}
-#endif
-
 private struct PageView: View {
     let provider: ComicPageProvider
     let index: Int
@@ -320,8 +320,7 @@ private struct PageView: View {
     var pairedHeight: CGFloat?
     /// iOS only: true only for the page that's actually shown, not for the nearby ones kept
     /// alive by the pager for swiping — see the comment on `PageSpreadView.isActive`.
-    /// Ignored on macOS, where this preloading doesn't exist and zoom stays on ordinary
-    /// SwiftUI gestures.
+    /// On macOS zoom belongs to the whole spread (`MacSpreadZoomView`), which reads its own flag.
     var isActive: Bool = true
     #if os(iOS)
     var tapZoneOptions = PageTapZoneGeometry.Options(
@@ -333,26 +332,15 @@ private struct PageView: View {
     /// See `PageSpreadView.upscaleTargetSize`. `nil` falls back to the laid-out size.
     var upscaleTargetSizeOverride: CGSize?
     #endif
-    #if os(macOS)
-    @Environment(\.readerZoomCommand) private var zoomCommand
-    #endif
     @ObservedObject private var theme = AppTheme.shared
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
     @AppStorage("upscalingEnabled") private var isUpscalingEnabled = false
     @AppStorage("autoTintContrastEnabled") private var isAutoTintContrastEnabled = false
     @AppStorage("singlePageZoomMode") private var singlePageZoomMode = PageZoomMode.auto
     @AppStorage("doublePageZoomMode") private var doublePageZoomMode = PageZoomMode.auto
-    @AppStorage("motionBlurEnabled") private var isMotionBlurEnabled = true
     @State private var image: PlatformImage?
     @State private var loadFailed = false
     @State private var imageLoadGeneration = 0
-    @State private var scale: CGFloat = 1
-    @State private var lastScale: CGFloat = 1
-    @State private var offset: CGSize = .zero
-    @State private var lastOffset: CGSize = .zero
-    /// Slightly blurs the image in proportion to the drag speed while panning on a zoomed
-    /// page — not a permanent aesthetic filter, it disappears at the end of the gesture.
-    @State private var motionBlurRadius: CGFloat = 0
 
     /// "Automatic"/"Fit page" show the whole page (historical behavior, unchanged).
     /// "Fit width" is the only case that changes the layout: it scales to the available
@@ -381,26 +369,7 @@ private struct PageView: View {
     }
 
     var body: some View {
-        #if os(macOS)
         pageBody
-            .onChange(of: zoomCommand) { _, command in
-                // Neighbouring pages kept mounted off-screen see the same command (so becoming
-                // the visible page isn't a "change" that replays the last one) but ignore it.
-                if let command, isActive { applyZoomCommand(command.kind) }
-            }
-            // A page that leaves the screen comes back at fit size, as it did when every turn
-            // rebuilt it from scratch (see `macPersistentPager`).
-            .onChange(of: isActive) { _, active in
-                guard !active, scale != 1 || offset != .zero else { return }
-                scale = 1
-                lastScale = 1
-                offset = .zero
-                lastOffset = .zero
-                motionBlurRadius = 0
-            }
-        #else
-        pageBody
-        #endif
     }
 
     @ViewBuilder
@@ -442,21 +411,12 @@ private struct PageView: View {
                                 .frame(width: proxy.size.width, height: proxy.size.height)
                                 .overlay(tintOverlay)
                             #else
+                            // Zoom and pan belong to the whole spread: `MacSpreadZoomView`.
                             image.asSwiftUIImage
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: proxy.size.width, height: proxy.size.height)
-                                .scaleEffect(scale)
-                                .offset(offset)
-                                .conditionalMotionBlur(radius: motionBlurRadius)
                                 .overlay(tintOverlay)
-                                .gesture(magnifyGesture)
-                                // Active only when zoomed in: at scale 1 it must not intercept the
-                                // drag, otherwise it steals the touch from the page swipe underneath
-                                // even though it then does nothing (guard scale > 1).
-                                .gesture(dragGesture, including: scale > 1 ? .all : .subviews)
-                                .onTapGesture(count: 2) { toggleZoom() }
-                                .background(zoomedScrollPanMonitor(size: proxy.size))
                             #endif
                         }
                     } else {
@@ -503,18 +463,12 @@ private struct PageView: View {
                     .frame(height: height)
                     .overlay(tintOverlay)
                 #else
+                // Zoom and pan belong to the whole spread: `MacSpreadZoomView`.
                 image.asSwiftUIImage
                     .resizable()
                     .scaledToFit()
                     .frame(height: height)
-                    .scaleEffect(scale)
-                    .offset(offset)
-                    .conditionalMotionBlur(radius: motionBlurRadius)
                     .overlay(tintOverlay)
-                    .gesture(magnifyGesture)
-                    .gesture(dragGesture, including: scale > 1 ? .all : .subviews)
-                    .onTapGesture(count: 2) { toggleZoom() }
-                    .background(zoomedScrollPanMonitor(size: CGSize(width: height * image.size.width / max(image.size.height, 1), height: height)))
                 #endif
             } else {
                 pageSlot(targetSize: CGSize(width: estimatedWidth, height: height)) {
@@ -533,10 +487,6 @@ private struct PageView: View {
         imageLoadGeneration += 1
         image = nil
         loadFailed = false
-        scale = 1
-        lastScale = 1
-        offset = .zero
-        lastOffset = .zero
         loadImage(targetSize: targetSize)
     }
 
@@ -659,115 +609,5 @@ private struct PageView: View {
                 self.image = loaded
             }
         }
-    }
-
-    #if os(macOS)
-    private var magnifyGesture: some Gesture {
-        MagnificationGesture()
-            .onChanged { value in
-                scale = min(max(lastScale * value, 1), 5)
-                syncZoomedState()
-            }
-            .onEnded { _ in
-                lastScale = scale
-                if scale == 1 { offset = .zero; lastOffset = .zero }
-                syncZoomedState()
-            }
-    }
-    #endif
-
-    private func syncZoomedState() {
-        isZoomed.wrappedValue = scale > 1.01
-    }
-
-    #if os(macOS)
-    /// Two-finger trackpad scrolling (or the mouse wheel) pans a zoomed page, the way it
-    /// scrolls any oversized content on the Mac — click-dragging alone was the only way
-    /// before. Mounted only while zoomed: at fit size the same scroll events turn the page
-    /// (`ScrollSwipeMonitor`, which ignores them while zoomed). The deltas are applied as-is
-    /// (they already follow the user's "natural scrolling" preference) and the offset is
-    /// clamped so the page edge never leaves the frame.
-    @ViewBuilder
-    private func zoomedScrollPanMonitor(size: CGSize) -> some View {
-        if scale > 1 {
-            ScrollPanMonitor { dx, dy in
-                let maxX = max(size.width * (scale - 1) / 2, 0)
-                let maxY = max(size.height * (scale - 1) / 2, 0)
-                offset = CGSize(
-                    width: min(max(offset.width + dx, -maxX), maxX),
-                    height: min(max(offset.height + dy, -maxY), maxY)
-                )
-                lastOffset = offset
-            }
-        }
-    }
-    #endif
-
-    #if os(macOS)
-    private var dragGesture: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                guard scale > 1 else { return }
-                let newOffset = CGSize(
-                    width: lastOffset.width + value.translation.width,
-                    height: lastOffset.height + value.translation.height
-                )
-                if isMotionBlurEnabled {
-                    let dx = newOffset.width - offset.width
-                    let dy = newOffset.height - offset.height
-                    let speed = (dx * dx + dy * dy).squareRoot()
-                    motionBlurRadius = min(speed * 0.3, 6)
-                }
-                offset = newOffset
-            }
-            .onEnded { _ in
-                lastOffset = offset
-                withAnimation(.easeOut(duration: 0.15)) { motionBlurRadius = 0 }
-            }
-    }
-    #endif
-
-    #if os(macOS)
-    /// ⌘+ / ⌘− / ⌘0 from the View menu: same 1…5 range as the pinch.
-    private func applyZoomCommand(_ kind: ReaderZoomCommand.Kind) {
-        // Only where the pinch zoom itself applies: not in "Fit width" (a plain scroll view,
-        // no `scaleEffect` — zooming there would flag `isZoomed` and suspend page turns with
-        // nothing visibly zoomed), not before the image exists, and not on the two halves of
-        // a spread (each would zoom around its own center and overlap the other).
-        guard image != nil, effectiveZoomMode != .fitWidth, pairedHeight == nil else { return }
-        withAnimation(.easeInOut(duration: 0.15)) {
-            switch kind {
-            case .zoomIn: scale = min(scale * 1.25, 5)
-            case .zoomOut: scale = max(scale / 1.25, 1)
-            case .reset: scale = 1
-            }
-            if scale <= 1.01 {
-                scale = 1
-                offset = .zero
-                lastOffset = .zero
-            } else {
-                // Keep the current pan inside the new, possibly smaller, overflow.
-                offset = CGSize(width: offset.width * scale / max(lastScale, 1), height: offset.height * scale / max(lastScale, 1))
-                lastOffset = offset
-            }
-            lastScale = scale
-        }
-        syncZoomedState()
-    }
-    #endif
-
-    private func toggleZoom() {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            if scale > 1 {
-                scale = 1
-                lastScale = 1
-                offset = .zero
-                lastOffset = .zero
-            } else {
-                scale = 2.5
-                lastScale = 2.5
-            }
-        }
-        syncZoomedState()
     }
 }
