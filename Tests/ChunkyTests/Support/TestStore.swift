@@ -38,6 +38,23 @@ enum TestStore {
     }
 
     static func makeContext() throws -> NSManagedObjectContext {
+        testContext(for: try makeContainer())
+    }
+
+    /// A main-queue context, for `@MainActor` suites exercising code the app only ever calls on
+    /// the main thread with the main-queue view context (`ComicDownloadService` from the reader).
+    /// There a private-queue context is the wrong kind: the code reads it straight from the main
+    /// thread, outside its queue, and Core Data crashed intermittently on CI (bad pointer inside
+    /// the `fetch` in `downloadRemotePlaceholder`). A main-queue context used only on the main
+    /// actor has a single thread, like the private one in the background suites.
+    @MainActor
+    static func makeMainQueueContext() throws -> NSManagedObjectContext {
+        let context = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        context.persistentStoreCoordinator = try makeContainer().persistentStoreCoordinator
+        return context
+    }
+
+    private static func makeContainer() throws -> NSPersistentContainer {
         let container = NSPersistentContainer(name: "Chunky", managedObjectModel: try model())
         let storeID = UUID().uuidString
         let defaultDescription = NSPersistentStoreDescription()
@@ -54,7 +71,7 @@ enum TestStore {
         var loadError: Error?
         container.loadPersistentStores { _, error in loadError = error }
         if let loadError { throw loadError }
-        return testContext(for: container)
+        return container
     }
 
     /// A private-queue context on the container's coordinator, never `viewContext`.

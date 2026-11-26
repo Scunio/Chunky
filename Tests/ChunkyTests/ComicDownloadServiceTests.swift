@@ -82,7 +82,7 @@ struct ComicDownloadServiceTests {
         ComicDownloadService.makeBrowser = { _ in browser }
         defer { ComicDownloadService.makeBrowser = previous }
 
-        let context = try TestStore.makeContext()
+        let context = try TestStore.makeMainQueueContext()
         let comic = try makeComic(in: context)
         let relativePath = comic.relativePath ?? ""
         let sourcePath = comic.sourceRelativePath ?? ""
