@@ -74,6 +74,11 @@ struct LibraryView: View {
     @State private var isEditing = false
     @State private var selectedIDs: Set<NSManagedObjectID> = []
     @State private var comicToDelete: ComicEntity?
+    /// iOS: the confirmation for `comicToDelete` hangs off its own cover (see `ComicCell`), not
+    /// off the whole library. Since iOS 26 a confirmation dialog is a popover pointing at the
+    /// view it's attached to: attached here it popped up at the top of the screen, over the
+    /// toolbar, pointing at nothing, whichever cover had been long-pressed.
+    @State private var isDeleteAnchoredToCell = false
     @State private var isConfirmingBulkDelete = false
     @State private var collapsedGroups: Set<String> = []
     @State private var isNowReadingPresented = false
@@ -251,6 +256,11 @@ struct LibraryView: View {
                             Image(systemName: "trash")
                         }
                         .disabled(selectedIDs.isEmpty)
+                        // Attached to the button it confirms, so the popover points at it.
+                        .confirmationDialog("Eliminare i fumetti selezionati?", isPresented: $isConfirmingBulkDelete, titleVisibility: .visible) {
+                            Button("Elimina", role: .destructive, action: performDeleteSelected)
+                            Button("Annulla", role: .cancel) { }
+                        }
                     } else {
                         addButton
                         newComicsButton
@@ -290,27 +300,26 @@ struct LibraryView: View {
                 Text(viewModel.importError ?? "")
             }
             #endif
+            // Deletions that don't start from a cover (Mac list and Delete key, tvOS): on the Mac
+            // this is a sheet on the window, so where it's attached doesn't matter.
             .confirmationDialog(
                 "Eliminare questo fumetto?",
                 isPresented: Binding(
-                    get: { comicToDelete != nil },
-                    set: { if !$0 { comicToDelete = nil } }
+                    get: { comicToDelete != nil && !isDeleteAnchoredToCell },
+                    set: { if !$0 { cancelDeleteComic() } }
                 ),
                 titleVisibility: .visible
             ) {
-                Button("Elimina", role: .destructive) {
-                    if let comicToDelete {
-                        selectedIDs.remove(comicToDelete.objectID)
-                        viewModel.delete(comicToDelete, from: context)
-                    }
-                    comicToDelete = nil
-                }
-                Button("Annulla", role: .cancel) { comicToDelete = nil }
+                Button("Elimina", role: .destructive, action: confirmDeleteComic)
+                Button("Annulla", role: .cancel, action: cancelDeleteComic)
             }
+            #if !os(iOS)
+            // On iOS it hangs off the toolbar's trash button instead (see there).
             .confirmationDialog("Eliminare i fumetti selezionati?", isPresented: $isConfirmingBulkDelete, titleVisibility: .visible) {
                 Button("Elimina", role: .destructive, action: performDeleteSelected)
                 Button("Annulla", role: .cancel) { }
             }
+            #endif
             // .sheet would leave a card with rounded corners that doesn't cover the whole screen.
             // On Mac the reader lives in its own window (see openComic), so there's
             // nothing to present here.
@@ -1210,7 +1219,17 @@ struct LibraryView: View {
             isPendingDownload: downloadTracker.pendingRelativePaths.contains(comic.relativePath ?? ""),
             onSelect: { handleTap(on: comic) },
             onOpen: { openComic(comic) },
-            onDelete: { comicToDelete = comic },
+            onDelete: {
+                comicToDelete = comic
+                #if os(iOS)
+                isDeleteAnchoredToCell = true
+                #endif
+            },
+            isConfirmingDelete: Binding(
+                get: { isDeleteAnchoredToCell && comicToDelete?.objectID == comic.objectID },
+                set: { if !$0 { cancelDeleteComic() } }
+            ),
+            onConfirmDelete: confirmDeleteComic,
             onAssignGroup: { assignGroup($0, to: comic) },
             onShowInfo: {
                 #if os(macOS)
@@ -1284,7 +1303,21 @@ struct LibraryView: View {
             isNewGroupPromptPresented = false
             isConfirmingBulkDelete = false
             comicToDelete = nil
+            isDeleteAnchoredToCell = false
         }
+    }
+
+    private func confirmDeleteComic() {
+        if let comicToDelete {
+            selectedIDs.remove(comicToDelete.objectID)
+            viewModel.delete(comicToDelete, from: context)
+        }
+        cancelDeleteComic()
+    }
+
+    private func cancelDeleteComic() {
+        comicToDelete = nil
+        isDeleteAnchoredToCell = false
     }
 
     private func deleteSelected() {
@@ -1397,6 +1430,10 @@ private struct ComicCell: View {
     /// already opens through `onSelect`, so this is the same action.
     let onOpen: () -> Void
     let onDelete: () -> Void
+    /// iOS: true while this cover's own delete confirmation is up (see
+    /// `LibraryView.isDeleteAnchoredToCell`), so the popover points at this cover.
+    let isConfirmingDelete: Binding<Bool>
+    let onConfirmDelete: () -> Void
     let onAssignGroup: (String?) -> Void
     /// Mac only: opens the comic's info sheet from the context menu.
     var onShowInfo: (() -> Void)?
@@ -1484,6 +1521,12 @@ private struct ComicCell: View {
         // non dentro: dentro, il gesture del bottone mangerebbe il tap.
         cellButton
             .overlay(remoteDownloadControl, alignment: .bottomTrailing)
+            #if os(iOS)
+            .confirmationDialog("Eliminare questo fumetto?", isPresented: isConfirmingDelete, titleVisibility: .visible) {
+                Button("Elimina", role: .destructive, action: onConfirmDelete)
+                Button("Annulla", role: .cancel) { isConfirmingDelete.wrappedValue = false }
+            }
+            #endif
         #endif
     }
 
