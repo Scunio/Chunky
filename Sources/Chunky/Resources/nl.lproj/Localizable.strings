@@ -74,7 +74,6 @@
 "Cambio pagina con scorrimento" = "Pagina omslaan door vegen";
 "Angoli attivi" = "Actieve hoeken";
 "Tinta e contrasto automatici" = "Automatische tint en contrast";
-"Sfocatura del movimento" = "Bewegingsonscherpte";
 "Precaricamento di dettagli e copertine" = "Details en omslagen vooraf laden";
 "Precaricamento" = "Vooraf laden";
 "Nessuna condivisione trovata." = "Geen gedeelde mappen gevonden.";
@@ -254,7 +253,6 @@
 "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo." = "Snijdt witte marges van strips bij om het scherm beter te benutten.";
 "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità." = "Corrigeert vergeelde pagina's en vervaagde inkt. Laat dit uit voor strips die al van goede kwaliteit zijn.";
 "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione." = "Verscherpt op intelligente wijze illustraties in strips met een lage resolutie.";
-"Rende più fluido il movimento quando scorri con il dito una pagina ingrandita." = "Maakt de beweging vloeiender wanneer je een ingezoomde pagina sleept.";
 "Le segnalazioni di crash sono anonime, e aiutano a individuare e correggere i problemi." = "Crashrapporten zijn anoniem en helpen bij het identificeren en oplossen van problemen.";
 "Crea una cartella Chunky nella tua iCloud Drive.\nI fumetti che ci metti dentro restano sincronizzati con la tua libreria.\n\nSe li cancelli da Chunky, vengono cancellati anche da iCloud Drive." = "Maakt een Chunky-map aan in iCloud Drive. Strips die je daarin zet, blijven gesynchroniseerd met je bibliotheek.\n\nAls je ze uit Chunky verwijdert, worden ze ook uit iCloud Drive verwijderd.";
 "Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura." = "Als de pagina's van een strip in de verkeerde volgorde verschijnen (bijvoorbeeld dubbele pagina's aan het einde), kan deze instelling helpen. Sluit de strip en open hem opnieuw om de wijziging toe te passen.";
@@ -485,7 +483,6 @@
 "Facendo clic su un bordo qualsiasi della pagina si va sempre avanti, invece che indietro o avanti a seconda del lato." = "Klikken op een willekeurige rand van de pagina gaat altijd vooruit, in plaats van terug of vooruit afhankelijk van de kant.";
 "Cambio pagina al clic" = "Pagina omslaan door klikken";
 "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Fai clic nell'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Gebruik de hoeken om veelgebruikte bedieningselementen te bereiken zonder de knoppenbalk te tonen. Klik op de linkerbovenhoek om de lezer te verlaten, op de rechterbovenhoek voor instellingen of op de rechteronderhoek om de modus met twee pagina's in of uit te schakelen.";
-"Rende più fluido il movimento quando trascini una pagina ingrandita." = "Maakt de beweging vloeiender wanneer je een ingezoomde pagina sleept.";
 "Se disattivato, la cartella dei fumetti viene esclusa dai backup, Time Machine compreso — utile per risparmiare spazio se hai già una copia altrove." = "Als dit uitstaat, wordt de stripmap uitgesloten van reservekopieën, ook van Time Machine. Dit kan ruimte besparen als je al een andere kopie hebt.";
 "Usa Touch ID" = "Gebruik Touch ID";
 "Sblocca con Touch ID" = "Ontgrendel met Touch ID";

@@ -140,7 +140,6 @@ struct SettingsView: View {
     @AppStorage("hotCornersEnabled") private var isHotCornersEnabled = false
     @AppStorage("autoCropEnabled") private var isAutoCropEnabled = false
     @AppStorage("upscalingEnabled") private var isUpscalingEnabled = false
-    @AppStorage("motionBlurEnabled") private var isMotionBlurEnabled = true
     @AppStorage("autoTintContrastEnabled") private var isAutoTintContrastEnabled = false
     @AppStorage("kioskModeEnabled") private var isKioskModeEnabled = false
     @AppStorage("twoFingerBrightnessEnabled") private var isTwoFingerBrightnessEnabled = true
@@ -265,9 +264,6 @@ struct SettingsView: View {
                 }
                 Toggle(isOn: $isUpscalingEnabled) {
                     infoLabel("Upscaling pagine a bassa risoluzione", info: "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione.")
-                }
-                Toggle(isOn: $isMotionBlurEnabled) {
-                    infoLabel("Sfocatura del movimento", info: "Rende più fluido il movimento quando scorri con il dito una pagina ingrandita.")
                 }
             }
 

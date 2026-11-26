@@ -74,7 +74,6 @@
 "Cambio pagina con scorrimento" = "Swipe page-turn";
 "Angoli attivi" = "Hot corners";
 "Tinta e contrasto automatici" = "Auto tint & contrast";
-"Sfocatura del movimento" = "Motion blur";
 "Precaricamento di dettagli e copertine" = "Pre-cache details and covers";
 "Precaricamento" = "Pre-cache";
 "Nessuna condivisione trovata." = "No shares found.";
@@ -254,7 +253,6 @@
 "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo." = "Crop white comic margins to make better use of the screen.";
 "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità." = "Corrects yellowed pages and faded ink. Leave this off for comics that are already good quality.";
 "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione." = "Intelligently sharpens artwork in low-resolution comics.";
-"Rende più fluido il movimento quando scorri con il dito una pagina ingrandita." = "Smooths movement when you drag a zoomed-in page.";
 "Le segnalazioni di crash sono anonime, e aiutano a individuare e correggere i problemi." = "Crash reports are anonymous and help identify and fix problems.";
 "Crea una cartella Chunky nella tua iCloud Drive.\nI fumetti che ci metti dentro restano sincronizzati con la tua libreria.\n\nSe li cancelli da Chunky, vengono cancellati anche da iCloud Drive." = "Creates a Chunky folder in iCloud Drive. Comics you put there stay synced with your library.\n\nDeleting them from Chunky also deletes them from iCloud Drive.";
 "Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura." = "If a comic's pages appear in the wrong order (for example, two-page spreads are at the end), this setting may help. Leave and reopen the comic for the change to take effect.";
@@ -485,7 +483,6 @@
 "Facendo clic su un bordo qualsiasi della pagina si va sempre avanti, invece che indietro o avanti a seconda del lato." = "Clicking either edge of the page always moves forward, instead of going back or forward depending on the side.";
 "Cambio pagina al clic" = "Click page-turn";
 "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Fai clic nell'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Use the corners to reach common controls without showing the toolbar. Click the top-left corner to leave the reader, the top-right for settings, or the bottom-right to toggle two-page mode.";
-"Rende più fluido il movimento quando trascini una pagina ingrandita." = "Smooths movement when you drag a zoomed-in page.";
 "Se disattivato, la cartella dei fumetti viene esclusa dai backup, Time Machine compreso — utile per risparmiare spazio se hai già una copia altrove." = "When off, the comics folder is excluded from backups, including Time Machine. This can save space if you already have another copy.";
 "Usa Touch ID" = "Use Touch ID";
 "Sblocca con Touch ID" = "Unlock with Touch ID";

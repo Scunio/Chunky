@@ -21,7 +21,6 @@ struct MacSpreadZoomView<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     @Environment(\.readerZoomCommand) private var zoomCommand
-    @AppStorage("motionBlurEnabled") private var isMotionBlurEnabled = true
     @State private var scale: CGFloat = 1
     @State private var offset: CGSize = .zero
     /// Scale and offset when the current pinch began: the pinch is relative to them.
@@ -32,7 +31,6 @@ struct MacSpreadZoomView<Content: View>: View {
     @State private var contentSize: CGSize = .zero
     /// The window area, for the menu commands, which arrive without a gesture's frame.
     @State private var frameSize: CGSize = .zero
-    @State private var motionBlurRadius: CGFloat = 0
 
     static var maxScale: CGFloat { 5 }
     private static var doubleClickScale: CGFloat { 2.5 }
@@ -44,7 +42,6 @@ struct MacSpreadZoomView<Content: View>: View {
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { contentSize = $0 }
                 .scaleEffect(scale)
                 .offset(offset)
-                .panMotionBlur(isAttached: isMotionBlurEnabled && scale > 1, radius: motionBlurRadius)
                 .frame(width: frame.width, height: frame.height)
                 // Only while zoomed: at fit size the drag must stay with the page swipe.
                 .gesture(dragGesture(frame: frame), including: isEnabled && scale > 1 ? .all : .subviews)
@@ -118,17 +115,10 @@ struct MacSpreadZoomView<Content: View>: View {
                     CGSize(width: start.width + value.translation.width, height: start.height + value.translation.height),
                     frame: frame
                 )
-                if isMotionBlurEnabled {
-                    let speed = hypot(newOffset.width - offset.width, newOffset.height - offset.height)
-                    motionBlurRadius = min(speed * 0.3, 6)
-                }
                 offset = newOffset
             }
             .onEnded { _ in
                 dragStartOffset = nil
-                if motionBlurRadius > 0 {
-                    withAnimation(.easeOut(duration: 0.15)) { motionBlurRadius = 0 }
-                }
             }
     }
 
@@ -175,7 +165,6 @@ struct MacSpreadZoomView<Content: View>: View {
     private func reset() {
         pinchStart = nil
         dragStartOffset = nil
-        motionBlurRadius = 0
         if scale != 1 || offset != .zero {
             scale = 1
             offset = .zero
@@ -207,23 +196,6 @@ struct MacSpreadZoomView<Content: View>: View {
     }
 }
 
-private extension View {
-    /// The drag's motion blur, attached for the whole time the spread is zoomed and absent at fit
-    /// size (where `.blur`, even at radius zero, would cost a Core Image pass on every frame).
-    ///
-    /// The branch must not follow the radius: switching an `if` rebuilds everything inside it,
-    /// and the radius goes to zero on every drag event without movement. The pages were
-    /// recreated many times a second mid-drag, so the zoomed spread froze while dragging and
-    /// only jumped to its new place on release.
-    @ViewBuilder
-    func panMotionBlur(isAttached: Bool, radius: CGFloat) -> some View {
-        if isAttached {
-            self.blur(radius: radius)
-        } else {
-            self
-        }
-    }
-}
 #endif
 
 /// The pure geometry of `MacSpreadZoomView`, kept platform-neutral so the tests run everywhere.

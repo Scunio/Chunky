@@ -74,7 +74,6 @@
 "Cambio pagina con scorrimento" = "Virar página ao deslizar";
 "Angoli attivi" = "Cantos ativos";
 "Tinta e contrasto automatici" = "Tom e contraste automáticos";
-"Sfocatura del movimento" = "Desfoque de movimento";
 "Precaricamento di dettagli e copertine" = "Pré-carregar detalhes e capas";
 "Precaricamento" = "Pré-carregar";
 "Nessuna condivisione trovata." = "Não foram encontradas partilhas.";
@@ -254,7 +253,6 @@
 "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo." = "Recorta as margens brancas da banda desenhada para aproveitar melhor o ecrã.";
 "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità." = "Corrige páginas amareladas e tinta desbotada. Mantenha desativada para bandas desenhadas que já tenham boa qualidade.";
 "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione." = "Aumenta a nitidez de forma inteligente nas ilustrações de bandas desenhadas de baixa resolução.";
-"Rende più fluido il movimento quando scorri con il dito una pagina ingrandita." = "Suaviza o movimento ao arrastar uma página ampliada.";
 "Le segnalazioni di crash sono anonime, e aiutano a individuare e correggere i problemi." = "Os relatórios de falha são anónimos e ajudam a identificar e corrigir problemas.";
 "Crea una cartella Chunky nella tua iCloud Drive.\nI fumetti che ci metti dentro restano sincronizzati con la tua libreria.\n\nSe li cancelli da Chunky, vengono cancellati anche da iCloud Drive." = "Cria uma pasta Chunky no iCloud Drive. As bandas desenhadas aí guardadas permanecem sincronizadas com a biblioteca.\n\nEliminá-las no Chunky também as elimina do iCloud Drive.";
 "Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura." = "Se as páginas de uma banda desenhada aparecerem na ordem errada (por exemplo, páginas duplas no fim), esta opção pode ajudar. Feche e volte a abrir a banda desenhada para aplicar a alteração.";
@@ -485,7 +483,6 @@
 "Facendo clic su un bordo qualsiasi della pagina si va sempre avanti, invece che indietro o avanti a seconda del lato." = "Clicar em qualquer margem da página avança sempre, em vez de recuar ou avançar consoante o lado.";
 "Cambio pagina al clic" = "Virar página ao clicar";
 "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Fai clic nell'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Use os cantos para aceder aos controlos mais usados sem mostrar a barra de ferramentas. Clique no canto superior esquerdo para sair do leitor, no superior direito para abrir as definições ou no inferior direito para alternar o modo de duas páginas.";
-"Rende più fluido il movimento quando trascini una pagina ingrandita." = "Suaviza o movimento ao arrastar uma página ampliada.";
 "Se disattivato, la cartella dei fumetti viene esclusa dai backup, Time Machine compreso — utile per risparmiare spazio se hai già una copia altrove." = "Quando está desativada, a pasta de bandas desenhadas é excluída das cópias de segurança, incluindo o Time Machine. Isto pode poupar espaço se já tiver outra cópia.";
 "Usa Touch ID" = "Usar Touch ID";
 "Sblocca con Touch ID" = "Desbloquear com Touch ID";
