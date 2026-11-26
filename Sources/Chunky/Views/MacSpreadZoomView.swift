@@ -46,13 +46,18 @@ struct MacSpreadZoomView<Content: View>: View {
                 .offset(offset)
                 .panMotionBlur(isAttached: isMotionBlurEnabled && scale > 1, radius: motionBlurRadius)
                 .frame(width: frame.width, height: frame.height)
-                .gesture(magnifyGesture(frame: frame), including: isEnabled ? .all : .subviews)
                 // Only while zoomed: at fit size the drag must stay with the page swipe.
                 .gesture(dragGesture(frame: frame), including: isEnabled && scale > 1 ? .all : .subviews)
-                .gesture(
+                // Simultaneous, not plain `.gesture`: stacked on the same view, the double-click
+                // recognizer held the drag back until it gave up, which on the Mac is only at
+                // mouse-up, so the zoomed spread stood still while dragging and jumped there on
+                // release. A double-click doesn't move (no drag starts), a drag does (no
+                // double-click), so the two never fire for the same input.
+                .simultaneousGesture(
                     SpatialTapGesture(count: 2).onEnded { toggleZoom(at: $0.location, frame: frame) },
                     including: isEnabled ? .all : .subviews
                 )
+                .simultaneousGesture(magnifyGesture(frame: frame), including: isEnabled ? .all : .subviews)
                 .background {
                     // Mounted only while zoomed: at fit size the same scroll events turn the
                     // page (`ScrollSwipeMonitor`, which ignores them while zoomed).
