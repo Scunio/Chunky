@@ -71,7 +71,7 @@ struct ICloudStatusSections: View {
                 )
             ) { EmptyView() }
             Section(
-                footer: Text("Invia subito i progressi di questo device e scarica quelli degli altri (anche i fumetti iCloud, non solo remoti).")
+                footer: Text("Invia subito i progressi di lettura di questo dispositivo e scarica quelli degli altri.")
             ) {
                 Button("Sincronizza ora") {
                     RemoteProgressSync.flushPush()

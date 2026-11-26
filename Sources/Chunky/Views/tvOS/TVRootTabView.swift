@@ -238,7 +238,7 @@ private struct TVReaderSettingsView: View {
             Form {
                 TVOptionPickerSection(
                     title: Text("Direzione predefinita"),
-                    footer: Text("Si applica ai nuovi fumetti importati. Puoi comunque cambiare la direzione per ogni fumetto dal lettore, con il pulsante Info."),
+                    footer: Text("La direzione predefinita si applica ai nuovi fumetti importati. Puoi comunque cambiarla per ogni fumetto dal lettore, con il pulsante Info."),
                     selection: defaultReadingDirection,
                     options: Array(ReadingDirection.allCases)
                 ) { Text($0.label) }

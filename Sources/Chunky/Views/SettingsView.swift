@@ -115,20 +115,6 @@ func labelWithInfo(_ title: LocalizedStringKey, info: LocalizedStringKey, compac
     infoLabel(title, info: info, compact: compact)
 }
 
-/// "Ordinamento pagine": shown with the reading settings (it's about how a comic's pages are
-/// read), not in a catch-all "Avanzate" group.
-struct PageOrderRow: View {
-    var body: some View {
-        HStack {
-            Text("Ordinamento pagine")
-            InfoButton(text: "Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura.")
-            Spacer()
-            Text("Automatico")
-                .foregroundColor(.secondary)
-        }
-    }
-}
-
 struct SettingsView: View {
     @AppStorage("defaultReadingDirection") private var defaultReadingDirectionRawValue = ReadingDirection.leftToRight.rawValue
     @AppStorage("doublePageMode") private var isDoublePageEnabled = false
@@ -160,7 +146,7 @@ struct SettingsView: View {
         Form {
             Section(
                 header: Text("Lettura"),
-                footer: Text("Si applica ai nuovi fumetti importati. Puoi comunque cambiare la direzione per ogni fumetto dal lettore.")
+                footer: Text("La direzione predefinita si applica ai nuovi fumetti importati. Puoi comunque cambiarla per ogni fumetto dal lettore.")
             ) {
                 Picker("Direzione predefinita", selection: defaultReadingDirection) {
                     ForEach(ReadingDirection.allCases) { direction in
@@ -178,7 +164,6 @@ struct SettingsView: View {
                 Toggle(isOn: $isCoverAlone) {
                     infoLabel("Copertina da sola", info: "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi.")
                 }
-                PageOrderRow()
             }
 
             Section(
@@ -207,7 +192,7 @@ struct SettingsView: View {
                 }
                 .disabled(tapPageTurnStyle == .disabled)
                 Toggle(isOn: $isHotCornersEnabled) {
-                    infoLabel("Angoli attivi", info: "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina.")
+                    infoLabel("Angoli attivi", info: "Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per gli strumenti, in basso a destra per alternare la doppia pagina.")
                 }
                 .disabled(tapPageTurnStyle == .disabled)
                 #if os(iOS)
@@ -244,8 +229,7 @@ struct SettingsView: View {
             }
 
             Section(
-                header: Text("Qualità immagine"),
-                footer: Text("L'upscaling migliora le pagine a bassa risoluzione con un filtro di qualità superiore al semplice ridimensionamento. Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni.")
+                header: Text("Qualità immagine")
             ) {
                 Toggle(isOn: $isAutoCropEnabled) {
                     infoLabel("Ritaglia bordi bianchi", info: "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo.")
@@ -254,7 +238,7 @@ struct SettingsView: View {
                     infoLabel("Tinta e contrasto automatici", info: "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità.")
                 }
                 Toggle(isOn: $isUpscalingEnabled) {
-                    infoLabel("Upscaling pagine a bassa risoluzione", info: "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione.")
+                    infoLabel("Upscaling pagine a bassa risoluzione", info: "Ingrandisce le pagine a bassa risoluzione con un filtro di qualità invece del semplice ridimensionamento, per tavole più nitide.")
                 }
             }
 

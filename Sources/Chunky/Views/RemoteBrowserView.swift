@@ -104,7 +104,7 @@ struct RemoteBrowserView: View {
                     }
                     .disabled(isLoading || isRefreshingLibrary)
                     .accessibilityLabel("Aggiorna libreria da qui")
-                    .help("Cerca le novità sul NAS e ricarica (con il pre-cache spento non scarica niente)")
+                    .help("Cerca le novità sul NAS e ricarica (con il precaricamento spento non scarica niente)")
                 }
                 if startURL == nil {
                     ToolbarItem {

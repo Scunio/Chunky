@@ -13,7 +13,7 @@
 "Apre il selettore file del sistema: i servizi cloud compaiono lì solo se hai le loro app installate." = "Opens the system file picker. Cloud services appear there only if their apps are installed.";
 "Assegna a gruppo" = "Assign to Group";
 "Aggiorna libreria da qui" = "Refresh Library from Here";
-"Cerca le novità sul NAS e ricarica (con il pre-cache spento non scarica niente)" = "Check the NAS for new comics and refresh (nothing is downloaded when pre-cache is off)";
+"Cerca le novità sul NAS e ricarica (con il precaricamento spento non scarica niente)" = "Check the NAS for new comics and reload (with pre-caching off, nothing is downloaded)";
 "Apri" = "Open";
 "Aspetto" = "Appearance";
 "Attiva iCloud Drive nelle Impostazioni di sistema per usare questa funzione." = "Turn on iCloud Drive in System Settings to use this feature.";
@@ -101,8 +101,7 @@
 "INIZIATA" = "STARTED";
 "Intensità" = "Intensity";
 "Ignora" = "Skip";
-"Invia subito i progressi di questo device e scarica quelli degli altri (anche i fumetti iCloud, non solo remoti)." = "Send this device's reading progress now and download progress from your other devices, including iCloud comics.";
-"L'upscaling migliora le pagine a bassa risoluzione con un filtro di qualità superiore al semplice ridimensionamento. Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni." = "Upscaling improves low-resolution pages with a higher-quality filter than simple resizing. Crop White Borders automatically removes white margins from scans.";
+"Invia subito i progressi di lettura di questo dispositivo e scarica quelli degli altri." = "Sends this device's reading progress now and fetches the others'.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati." = "Leave blank to use the automatic key. If the same share is configured differently on other devices (for example, an IP address on one and a .local name on another), enter the same word on each device to match reading progress.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati. La struttura delle cartelle dentro lo share deve comunque coincidere." = "Leave blank to use the automatic key. If the same share is configured differently on other devices (for example, an IP address on one and a .local name on another), enter the same word on each device to match reading progress. The folder structure inside the share must still match.";
 "Lenta" = "Slow";
@@ -119,14 +118,13 @@
 "Non serve indovinare il nome: premi il pulsante con le credenziali compilate e scegli dall'elenco reale del NAS." = "No need to guess the name: enter your credentials, tap the button, and choose from the NAS's actual list.";
 "Nuovi" = "New";
 "Ora in lettura" = "Now Reading";
-"Ordinamento pagine" = "Page Order";
 "Pagina %@ di %@" = "Page %@ of %@";
 "Pagina %@ su un altro dispositivo" = "Page %@ on Another Device";
 "Percorso: Impostazioni → App → Chunky → \"Rete locale\"." = "Go to Settings → Apps → Chunky → \"Local Network.\"";
 "Percorso: Impostazioni → Privacy e sicurezza → Rete locale → Chunky." = "Go to Settings → Privacy & Security → Local Network → Chunky.";
 "Percorso: Impostazioni di Sistema → Privacy e sicurezza → Rete locale → Chunky." = "Go to System Settings → Privacy & Security → Local Network → Chunky.";
 "Personalizza i colori della libreria. \"Predefinito\" segue la modalità chiara/scura di sistema." = "Customize the library colors. \"Default\" follows the system's light or dark appearance.";
-"Personalizza i colori della libreria. Lascia \"Automatico\" per seguire la modalità chiara/scura di sistema." = "Customize the library colors. Leave this on \"Automatic\" to follow the system's light or dark appearance.";
+"Personalizza i colori della libreria. La freccia accanto a un colore lo riporta a quello di sistema, che segue la modalità chiara/scura." = "Customize the library's colors. The arrow next to a color resets it to the system one, which follows light/dark mode.";
 "Potrebbe essere stato rimosso dalla libreria." = "It may have been removed from the library.";
 "Privacy" = "Privacy";
 "Qualità immagine" = "Image Quality";
@@ -140,8 +138,7 @@
 "Serve l'accesso alla rete locale: Impostazioni → App → Chunky → \"Rete locale\". Torna qui dopo averlo attivato." = "Local Network access is required. Go to Settings → Apps → Chunky → \"Local Network,\" then return here.";
 "Server" = "Server";
 "Server locale" = "Local Server";
-"Server web spento" = "Web Server Off";
-"Si applica ai nuovi fumetti importati. Puoi comunque cambiare la direzione per ogni fumetto dal lettore." = "Applies to newly imported comics. You can still change the direction for each comic in the reader.";
+"La direzione predefinita si applica ai nuovi fumetti importati. Puoi comunque cambiarla per ogni fumetto dal lettore." = "The default direction applies to newly imported comics. You can still change it for each comic from the reader.";
 "Si è verificato un problema con l'archivio dati locale. Prova a toccare Riprova (spesso basta, se era la rete); se il problema persiste, condividi il log per l'assistenza: la libreria potrebbe dover essere ricreata." = "There was a problem with the local data store. Tap Try Again (often enough if the issue was the network). If the problem persists, share the log with support; the library may need to be rebuilt.";
 "Sincronizzazione progressi" = "Reading Progress Sync";
 "Sovrappone una leggera tinta alle pagine mentre leggi: utile per correggere pagine ingiallite o per una modalità notte più riposante." = "Adds a light tint to pages as you read. Useful for correcting yellowed pages or creating a more comfortable night mode.";
@@ -149,11 +146,11 @@
 "Strumenti" = "Tools";
 "Sync Folder" = "Sync Folder";
 "Tint pagina (lettore)" = "Page Tint (Reader)";
-"Mostra solo i fumetti scaricati sul device" = "Show only comics downloaded to this device";
+"Mostra solo i fumetti scaricati su questo dispositivo" = "Show only comics downloaded to this device";
 "Download in corso" = "Downloading";
 "Tipo di account" = "Account Type";
 "Tocca il NAS in \"Trovati in rete\" se compare, altrimenti scrivi l'indirizzo a mano. Poi premi \"Sfoglia condivisioni\" e scegli dall'elenco reale del NAS." = "Tap the NAS under \"Found on Network\" if it appears, or enter its address manually. Then tap \"Browse Shares\" and choose from the NAS's actual list.";
-"Tocca il NAS se compare sopra, altrimenti scrivi l'indirizzo a mano (es. 192.168.1.10). Alla prima ricerca l'iPhone chiede \"Rete locale\": serve Consenti, altrimenti blocca tutto qui." = "Tap the NAS above if it appears, or enter its address manually (for example, 192.168.1.10). The first search asks for Local Network access on iPhone; tap Allow or browsing will be blocked.";
+"Scegli il NAS se compare sopra, altrimenti scrivi l'indirizzo a mano (es. 192.168.1.10). Alla prima ricerca il sistema chiede l'accesso alla \"Rete locale\": scegli Consenti, altrimenti Chunky non può raggiungere il NAS." = "Choose the NAS if it appears above, otherwise type its address (e.g. 192.168.1.10). On the first search the system asks for \"Local Network\" access: choose Allow, otherwise Chunky can't reach the NAS.";
 "Trascina per selezionare un'area da condividere" = "Drag to select an area to share";
 "Trovati in rete" = "Found on Network";
 "TUTTI I FUMETTI (%@)" = "ALL COMICS (%@)";
@@ -235,13 +232,12 @@
 "Chiave" = "Key";
 "Salva" = "Save";
 "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi." = "In two-page mode, always show the first page (usually the cover) by itself instead of beside the second page. Two-page spreads start with page two.";
-"Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Use the corners to reach common controls without showing the toolbar. Tap the top-left corner to leave the reader, the top-right for settings, or the bottom-right to toggle two-page mode.";
+"Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per gli strumenti, in basso a destra per alternare la doppia pagina." = "Corners for quick access to common controls without showing the toolbar. Tap the top-left corner to leave the reader, the top-right for tools, or the bottom-right to toggle two-page mode.";
 "Se attivo, puoi regolare la luminosità dello schermo trascinando su e giù con due dita nella vista di lettura." = "When enabled, drag up or down with two fingers in the reader to adjust screen brightness.";
 "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo." = "Crop white comic margins to make better use of the screen.";
 "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità." = "Corrects yellowed pages and faded ink. Leave this off for comics that are already good quality.";
-"Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione." = "Intelligently sharpens artwork in low-resolution comics.";
+"Ingrandisce le pagine a bassa risoluzione con un filtro di qualità invece del semplice ridimensionamento, per tavole più nitide." = "Enlarges low-resolution pages with a high-quality filter instead of plain resizing, for sharper artwork.";
 "Crea una cartella Chunky nella tua iCloud Drive.\nI fumetti che ci metti dentro restano sincronizzati con la tua libreria.\n\nSe li cancelli da Chunky, vengono cancellati anche da iCloud Drive." = "Creates a Chunky folder in iCloud Drive. Comics you put there stay synced with your library.\n\nDeleting them from Chunky also deletes them from iCloud Drive.";
-"Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura." = "If a comic's pages appear in the wrong order (for example, two-page spreads are at the end), this setting may help. Leave and reopen the comic for the change to take effect.";
 "Colori" = "Colors";
 "Blocco genitori" = "Parental Lock";
 "Diagnostica" = "Diagnostics";
@@ -439,7 +435,7 @@
 "Segna come visti" = "Mark as Seen";
 "Seleziona il NAS in \"Trovati in rete\" se compare, altrimenti scrivi l'indirizzo a mano. Poi premi \"Sfoglia condivisioni\" e scegli dall'elenco reale del NAS." = "Select the NAS under \"Found on Network\" if it appears; otherwise enter its address. Then choose \"Browse Shares\" and pick from the NAS's actual list.";
 "Sfoglia condivisioni" = "Browse Shares";
-"Si applica ai nuovi fumetti importati. Puoi comunque cambiare la direzione per ogni fumetto dal lettore, con il pulsante Info." = "Applies to newly imported comics. You can still change the direction for each comic in the reader with the ⓘ button.";
+"La direzione predefinita si applica ai nuovi fumetti importati. Puoi comunque cambiarla per ogni fumetto dal lettore, con il pulsante Info." = "The default direction applies to newly imported comics. You can still change it for each comic from the reader, with the Info button.";
 "Si è verificato un problema con l'archivio dati locale. Seleziona Riprova (spesso basta, se era la rete); se il problema persiste, annota il dettaglio qui sotto per l'assistenza: la libreria potrebbe dover essere ricreata." = "There was a problem with the local data store. Select Try Again (often enough if it was the network). If the problem persists, note the details below for support; the library may need to be recreated.";
 "Sincronizzazione…" = "Syncing…";
 "Sinistra e destra cambiano pagina, Play/Pausa o Select ingrandiscono e tornano alla pagina intera" = "Left and right turn the page. Play/Pause or Select zooms in and returns to the full page.";
@@ -494,3 +490,5 @@
 "Mostra gli account in «Tutti i fumetti»" = "Show accounts in “All Comics”";
 "Supporto" = "Support";
 "Libreria e sincronizzazione" = "Library & Sync";
+
+"Carica fumetti da un browser" = "Upload comics from a browser";

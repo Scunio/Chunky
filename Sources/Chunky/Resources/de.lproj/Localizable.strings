@@ -13,7 +13,7 @@
 "Apre il selettore file del sistema: i servizi cloud compaiono lì solo se hai le loro app installate." = "Öffnet die Dateiauswahl des Systems. Cloud-Dienste erscheinen dort nur, wenn ihre Apps installiert sind.";
 "Assegna a gruppo" = "Gruppe zuweisen";
 "Aggiorna libreria da qui" = "Bibliothek hier aktualisieren";
-"Cerca le novità sul NAS e ricarica (con il pre-cache spento non scarica niente)" = "Sucht auf dem NAS nach neuen Comics und aktualisiert (ohne Vorladen wird nichts heruntergeladen)";
+"Cerca le novità sul NAS e ricarica (con il precaricamento spento non scarica niente)" = "Auf dem NAS nach Neuem suchen und neu laden (bei ausgeschaltetem Vorladen wird nichts heruntergeladen)";
 "Apri" = "Öffnen";
 "Aspetto" = "Erscheinungsbild";
 "Attiva iCloud Drive nelle Impostazioni di sistema per usare questa funzione." = "Aktiviere iCloud Drive in den Systemeinstellungen, um diese Funktion zu nutzen.";
@@ -101,8 +101,7 @@
 "INIZIATA" = "BEGONNEN";
 "Intensità" = "Intensität";
 "Ignora" = "Überspringen";
-"Invia subito i progressi di questo device e scarica quelli degli altri (anche i fumetti iCloud, non solo remoti)." = "Sende den Lesefortschritt dieses Geräts jetzt und lade den Fortschritt deiner anderen Geräte herunter, auch für iCloud-Comics.";
-"L'upscaling migliora le pagine a bassa risoluzione con un filtro di qualità superiore al semplice ridimensionamento. Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni." = "Die Hochskalierung verbessert Seiten mit niedriger Auflösung durch einen hochwertigeren Filter als einfaches Vergrößern. „Weiße Ränder zuschneiden“ entfernt automatisch weiße Ränder von Scans.";
+"Invia subito i progressi di lettura di questo dispositivo e scarica quelli degli altri." = "Sendet den Lesefortschritt dieses Geräts sofort und lädt den der anderen.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati." = "Lass den Schlüssel leer, um den automatischen zu verwenden. Wenn dieselbe Freigabe auf anderen Geräten unterschiedlich eingerichtet ist (z. B. IP-Adresse auf einem und .local-Name auf einem anderen), gib auf allen Geräten dasselbe Wort ein, um den Lesefortschritt zuzuordnen.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati. La struttura delle cartelle dentro lo share deve comunque coincidere." = "Lass den Schlüssel leer, um den automatischen zu verwenden. Wenn dieselbe Freigabe auf anderen Geräten unterschiedlich eingerichtet ist (z. B. IP-Adresse auf einem und .local-Name auf einem anderen), gib auf allen Geräten dasselbe Wort ein, um den Lesefortschritt zuzuordnen. Die Ordnerstruktur innerhalb der Freigabe muss ebenfalls übereinstimmen.";
 "Lenta" = "Langsam";
@@ -119,14 +118,13 @@
 "Non serve indovinare il nome: premi il pulsante con le credenziali compilate e scegli dall'elenco reale del NAS." = "Du musst den Namen nicht erraten: Gib deine Anmeldedaten ein, tippe auf die Taste und wähle aus der tatsächlichen Liste des NAS.";
 "Nuovi" = "Neu";
 "Ora in lettura" = "Wird gerade gelesen";
-"Ordinamento pagine" = "Seitenreihenfolge";
 "Pagina %@ di %@" = "Seite %@ von %@";
 "Pagina %@ su un altro dispositivo" = "Seite %@ auf einem anderen Gerät";
 "Percorso: Impostazioni → App → Chunky → \"Rete locale\"." = "Öffne Einstellungen → Apps → Chunky → „Lokales Netzwerk“.";
 "Percorso: Impostazioni → Privacy e sicurezza → Rete locale → Chunky." = "Öffne Einstellungen → Datenschutz & Sicherheit → Lokales Netzwerk → Chunky.";
 "Percorso: Impostazioni di Sistema → Privacy e sicurezza → Rete locale → Chunky." = "Öffne Systemeinstellungen → Datenschutz & Sicherheit → Lokales Netzwerk → Chunky.";
 "Personalizza i colori della libreria. \"Predefinito\" segue la modalità chiara/scura di sistema." = "Passe die Farben der Bibliothek an. „Standard“ folgt dem hellen oder dunklen Erscheinungsbild des Systems.";
-"Personalizza i colori della libreria. Lascia \"Automatico\" per seguire la modalità chiara/scura di sistema." = "Passe die Farben der Bibliothek an. Belasse die Einstellung auf „Automatisch“, um dem hellen oder dunklen Erscheinungsbild des Systems zu folgen.";
+"Personalizza i colori della libreria. La freccia accanto a un colore lo riporta a quello di sistema, che segue la modalità chiara/scura." = "Passe die Farben der Bibliothek an. Der Pfeil neben einer Farbe setzt sie auf die Systemfarbe zurück, die dem hellen/dunklen Modus folgt.";
 "Potrebbe essere stato rimosso dalla libreria." = "Möglicherweise wurde er aus der Bibliothek entfernt.";
 "Privacy" = "Datenschutz";
 "Qualità immagine" = "Bildqualität";
@@ -140,8 +138,7 @@
 "Serve l'accesso alla rete locale: Impostazioni → App → Chunky → \"Rete locale\". Torna qui dopo averlo attivato." = "Zugriff auf das lokale Netzwerk ist erforderlich. Öffne Einstellungen → Apps → Chunky → „Lokales Netzwerk“ und kehre dann hierher zurück.";
 "Server" = "Server";
 "Server locale" = "Lokaler Server";
-"Server web spento" = "Webserver aus";
-"Si applica ai nuovi fumetti importati. Puoi comunque cambiare la direzione per ogni fumetto dal lettore." = "Gilt für neu importierte Comics. Du kannst die Richtung für jeden Comic trotzdem im Reader ändern.";
+"La direzione predefinita si applica ai nuovi fumetti importati. Puoi comunque cambiarla per ogni fumetto dal lettore." = "Die Standardrichtung gilt für neu importierte Comics. Du kannst sie für jeden Comic im Reader ändern.";
 "Si è verificato un problema con l'archivio dati locale. Prova a toccare Riprova (spesso basta, se era la rete); se il problema persiste, condividi il log per l'assistenza: la libreria potrebbe dover essere ricreata." = "Beim lokalen Datenspeicher ist ein Problem aufgetreten. Tippe auf „Erneut versuchen“ (reicht oft, wenn es am Netzwerk lag). Besteht das Problem weiter, teile das Protokoll mit dem Support: Die Bibliothek muss eventuell neu erstellt werden.";
 "Sincronizzazione progressi" = "Synchronisierung des Lesefortschritts";
 "Sovrappone una leggera tinta alle pagine mentre leggi: utile per correggere pagine ingiallite o per una modalità notte più riposante." = "Legt beim Lesen einen leichten Farbton über die Seiten. Nützlich, um vergilbte Seiten zu korrigieren oder für einen angenehmeren Nachtmodus.";
@@ -149,11 +146,11 @@
 "Strumenti" = "Werkzeuge";
 "Sync Folder" = "Sync-Ordner";
 "Tint pagina (lettore)" = "Seitentönung (Reader)";
-"Mostra solo i fumetti scaricati sul device" = "Nur auf dieses Gerät heruntergeladene Comics anzeigen";
+"Mostra solo i fumetti scaricati su questo dispositivo" = "Nur auf dieses Gerät heruntergeladene Comics anzeigen";
 "Download in corso" = "Wird heruntergeladen";
 "Tipo di account" = "Kontotyp";
 "Tocca il NAS in \"Trovati in rete\" se compare, altrimenti scrivi l'indirizzo a mano. Poi premi \"Sfoglia condivisioni\" e scegli dall'elenco reale del NAS." = "Tippe unter „Im Netzwerk gefunden“ auf das NAS, falls es angezeigt wird, oder gib seine Adresse manuell ein. Tippe dann auf „Freigaben durchsuchen“ und wähle aus der tatsächlichen Liste des NAS.";
-"Tocca il NAS se compare sopra, altrimenti scrivi l'indirizzo a mano (es. 192.168.1.10). Alla prima ricerca l'iPhone chiede \"Rete locale\": serve Consenti, altrimenti blocca tutto qui." = "Tippe oben auf das NAS, falls es angezeigt wird, oder gib seine Adresse manuell ein (z. B. 192.168.1.10). Bei der ersten Suche fragt das iPhone nach Zugriff auf das lokale Netzwerk. Tippe auf „Erlauben“, sonst wird die Suche blockiert.";
+"Scegli il NAS se compare sopra, altrimenti scrivi l'indirizzo a mano (es. 192.168.1.10). Alla prima ricerca il sistema chiede l'accesso alla \"Rete locale\": scegli Consenti, altrimenti Chunky non può raggiungere il NAS." = "Wähle das NAS, wenn es oben erscheint, sonst gib die Adresse ein (z. B. 192.168.1.10). Bei der ersten Suche fragt das System nach Zugriff auf das „Lokale Netzwerk“: wähle Erlauben, sonst kann Chunky das NAS nicht erreichen.";
 "Trascina per selezionare un'area da condividere" = "Ziehe, um einen Bereich zum Teilen auszuwählen";
 "Trovati in rete" = "Im Netzwerk gefunden";
 "TUTTI I FUMETTI (%@)" = "ALLE COMICS (%@)";
@@ -235,13 +232,12 @@
 "Chiave" = "Schlüssel";
 "Salva" = "Speichern";
 "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi." = "Zeigt im Doppelseitenmodus die erste Seite (meist das Cover) immer einzeln statt neben der zweiten Seite an. Doppelseiten beginnen ab Seite zwei.";
-"Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Nutze die Ecken, um häufig verwendete Steuerelemente zu erreichen, ohne die Symbolleiste einzublenden. Tippe auf die obere linke Ecke, um den Reader zu verlassen, auf die obere rechte für die Einstellungen oder auf die untere rechte, um den Doppelseitenmodus umzuschalten.";
+"Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per gli strumenti, in basso a destra per alternare la doppia pagina." = "Ecken für den schnellen Zugriff auf häufige Funktionen, ohne die Steuerelemente einzublenden. Tippe oben links, um den Reader zu verlassen, oben rechts für die Werkzeuge, unten rechts, um die Doppelseite umzuschalten.";
 "Se attivo, puoi regolare la luminosità dello schermo trascinando su e giù con due dita nella vista di lettura." = "Wenn aktiviert, kannst du im Reader mit zwei Fingern nach oben oder unten ziehen, um die Bildschirmhelligkeit anzupassen.";
 "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo." = "Schneidet weiße Ränder von Comics ab, um den Bildschirm besser zu nutzen.";
 "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità." = "Korrigiert vergilbte Seiten und verblasste Tinte. Lass die Option bei Comics in guter Qualität deaktiviert.";
-"Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione." = "Schärft Grafiken in Comics mit niedriger Auflösung auf intelligente Weise.";
+"Ingrandisce le pagine a bassa risoluzione con un filtro di qualità invece del semplice ridimensionamento, per tavole più nitide." = "Vergrößert Seiten mit niedriger Auflösung mit einem Qualitätsfilter statt einfacher Skalierung, für schärfere Zeichnungen.";
 "Crea una cartella Chunky nella tua iCloud Drive.\nI fumetti che ci metti dentro restano sincronizzati con la tua libreria.\n\nSe li cancelli da Chunky, vengono cancellati anche da iCloud Drive." = "Erstellt einen Chunky-Ordner in iCloud Drive. Comics, die du dort ablegst, bleiben mit deiner Bibliothek synchronisiert.\n\nWenn du sie aus Chunky löschst, werden sie auch aus iCloud Drive gelöscht.";
-"Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura." = "Wenn die Seiten eines Comics in falscher Reihenfolge erscheinen (z. B. Doppelseiten am Ende), kann diese Einstellung helfen. Schließe den Comic und öffne ihn erneut, damit die Änderung wirksam wird.";
 "Colori" = "Farben";
 "Blocco genitori" = "Kindersicherung";
 "Diagnostica" = "Diagnose";
@@ -439,7 +435,7 @@
 "Segna come visti" = "Als gesehen markieren";
 "Seleziona il NAS in \"Trovati in rete\" se compare, altrimenti scrivi l'indirizzo a mano. Poi premi \"Sfoglia condivisioni\" e scegli dall'elenco reale del NAS." = "Wähle das NAS unter „Im Netzwerk gefunden“, falls es erscheint; sonst gib die Adresse ein. Wähle dann „Freigaben durchsuchen“ und wähle aus der tatsächlichen Liste des NAS.";
 "Sfoglia condivisioni" = "Freigaben durchsuchen";
-"Si applica ai nuovi fumetti importati. Puoi comunque cambiare la direzione per ogni fumetto dal lettore, con il pulsante Info." = "Gilt für neu importierte Comics. Die Richtung jedes Comics kannst du im Reader trotzdem über die Taste ⓘ ändern.";
+"La direzione predefinita si applica ai nuovi fumetti importati. Puoi comunque cambiarla per ogni fumetto dal lettore, con il pulsante Info." = "Die Standardrichtung gilt für neu importierte Comics. Du kannst sie für jeden Comic im Reader über die Info-Taste ändern.";
 "Si è verificato un problema con l'archivio dati locale. Seleziona Riprova (spesso basta, se era la rete); se il problema persiste, annota il dettaglio qui sotto per l'assistenza: la libreria potrebbe dover essere ricreata." = "Beim lokalen Datenspeicher ist ein Problem aufgetreten. Wähle „Erneut versuchen“ (reicht oft, wenn es am Netzwerk lag). Besteht das Problem weiter, notiere die Details unten für den Support: Die Bibliothek muss eventuell neu erstellt werden.";
 "Sincronizzazione…" = "Synchronisieren…";
 "Sinistra e destra cambiano pagina, Play/Pausa o Select ingrandiscono e tornano alla pagina intera" = "Links und rechts blättern um, Wiedergabe/Pause oder die Auswahltaste zoomen hinein und zurück zur ganzen Seite.";
@@ -494,3 +490,5 @@
 "Mostra gli account in «Tutti i fumetti»" = "Accounts in „Alle Comics“ zeigen";
 "Supporto" = "Support";
 "Libreria e sincronizzazione" = "Bibliothek & Synchronisierung";
+
+"Carica fumetti da un browser" = "Comics über einen Browser hochladen";

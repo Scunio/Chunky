@@ -124,7 +124,7 @@ private struct ReadingSettingsTab: View {
         Form {
             Section(
                 header: Text("Lettura"),
-                footer: Text("Si applica ai nuovi fumetti importati. Puoi comunque cambiare la direzione per ogni fumetto dal lettore.")
+                footer: Text("La direzione predefinita si applica ai nuovi fumetti importati. Puoi comunque cambiarla per ogni fumetto dal lettore.")
             ) {
                 Picker("Direzione predefinita", selection: defaultReadingDirection) {
                     ForEach(ReadingDirection.allCases) { direction in
@@ -139,7 +139,6 @@ private struct ReadingSettingsTab: View {
                 Toggle(isOn: $isCoverAlone) {
                     infoLabel("Copertina da sola", info: "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi.")
                 }
-                PageOrderRow()
             }
 
             Section(
@@ -206,8 +205,7 @@ private struct ImageQualitySettingsTab: View {
     var body: some View {
         Form {
             Section(
-                header: Text("Qualità immagine"),
-                footer: Text("L'upscaling migliora le pagine a bassa risoluzione con un filtro di qualità superiore al semplice ridimensionamento. Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni.")
+                header: Text("Qualità immagine")
             ) {
                 Toggle(isOn: $isAutoCropEnabled) {
                     infoLabel("Ritaglia bordi bianchi", info: "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo.")
@@ -216,7 +214,7 @@ private struct ImageQualitySettingsTab: View {
                     infoLabel("Tinta e contrasto automatici", info: "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità.")
                 }
                 Toggle(isOn: $isUpscalingEnabled) {
-                    infoLabel("Upscaling pagine a bassa risoluzione", info: "Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione.")
+                    infoLabel("Upscaling pagine a bassa risoluzione", info: "Ingrandisce le pagine a bassa risoluzione con un filtro di qualità invece del semplice ridimensionamento, per tavole più nitide.")
                 }
             }
         }

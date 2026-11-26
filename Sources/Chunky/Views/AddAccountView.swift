@@ -295,7 +295,7 @@ struct AddAccountView: View {
 
                 Section(
                     header: Text("1. Server NAS"),
-                    footer: Text("Tocca il NAS se compare sopra, altrimenti scrivi l'indirizzo a mano (es. 192.168.1.10). Alla prima ricerca l'iPhone chiede \"Rete locale\": serve Consenti, altrimenti blocca tutto qui.")
+                    footer: Text("Scegli il NAS se compare sopra, altrimenti scrivi l'indirizzo a mano (es. 192.168.1.10). Alla prima ricerca il sistema chiede l'accesso alla \"Rete locale\": scegli Consenti, altrimenti Chunky non può raggiungere il NAS.")
                 ) {
                     TextField("Indirizzo", text: $smbHost)
                         #if os(iOS)

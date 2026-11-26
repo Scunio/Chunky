@@ -837,7 +837,7 @@ struct LibraryView: View {
             Button(action: { isDownloadedOnly.toggle() }) {
                 Label("Scaricati", systemImage: isDownloadedOnly ? "arrow.down.circle.fill" : "arrow.down.circle")
             }
-            .help("Mostra solo i fumetti scaricati sul device")
+            .help("Mostra solo i fumetti scaricati su questo dispositivo")
         }
     }
 

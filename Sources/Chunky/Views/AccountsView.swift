@@ -176,7 +176,7 @@ struct AccountsView: View {
                     macRow(Text("Download"), systemImage: "arrow.down.circle", tint: .blue)
                 }
                 NavigationLink(destination: LocalUploadView()) {
-                    macRow(Text("Web"), systemImage: "globe", tint: .teal, subtitle: AppLocalization.localizedString("Server web spento", comment: "Web upload server status"))
+                    macRow(Text("Web"), systemImage: "globe", tint: .teal, subtitle: AppLocalization.localizedString("Carica fumetti da un browser", comment: "Web upload row subtitle"))
                 }
                 NavigationLink(destination: ICloudSyncFolderView()) {
                     macRow(Text("iCloud Drive"), systemImage: "icloud", tint: .cyan)
@@ -280,7 +280,7 @@ struct AccountsView: View {
 
     private var accountList: some View {
         List {
-            Section(footer: Text("Server web spento")) {
+            Section {
                 NavigationLink(destination: DownloadsView()) {
                     rowLabel("Download", systemImage: "arrow.down.circle")
                 }

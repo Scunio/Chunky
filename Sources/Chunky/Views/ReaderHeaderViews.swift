@@ -117,7 +117,7 @@ extension ReaderContentView {
             Button(action: { isNewComicsPresented = true }) {
                 Label("Nuovi fumetti", systemImage: "envelope")
             }
-            .help("Nuovi fumetti")
+            .help("Novità")
             .popover(isPresented: $isNewComicsPresented, arrowEdge: .bottom) {
                 NewComicsView(comics: recentComics) {
                     isNewComicsPresented = false

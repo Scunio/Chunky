@@ -87,7 +87,7 @@ struct ColorThemeView: View {
                 themePresetButton(name: "Notte", backgroundHex: "#0A1A2F", textHex: "#E8EEF7", accentHex: "#4C8DFF")
             }
             #else
-            Section(footer: Text("Personalizza i colori della libreria. Lascia \"Automatico\" per seguire la modalità chiara/scura di sistema.")) {
+            Section(footer: Text("Personalizza i colori della libreria. La freccia accanto a un colore lo riporta a quello di sistema, che segue la modalità chiara/scura.")) {
                 // Each row has a different fallback color when it hasn't been customized yet
                 // (empty hex = "Automatic"): showing them all as .primary made them identical
                 // and black, indistinguishable from one another despite representing different things.

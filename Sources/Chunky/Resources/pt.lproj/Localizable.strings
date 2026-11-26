@@ -13,7 +13,7 @@
 "Apre il selettore file del sistema: i servizi cloud compaiono lì solo se hai le loro app installate." = "Abre o seletor de ficheiros do sistema. Os serviços na nuvem só aparecem se as respetivas apps estiverem instaladas.";
 "Assegna a gruppo" = "Atribuir ao grupo";
 "Aggiorna libreria da qui" = "Atualizar a biblioteca a partir daqui";
-"Cerca le novità sul NAS e ricarica (con il pre-cache spento non scarica niente)" = "Procura novas bandas desenhadas no NAS e atualiza (não transfere nada se o pré-carregamento estiver desativado)";
+"Cerca le novità sul NAS e ricarica (con il precaricamento spento non scarica niente)" = "Procurar novidades no NAS e recarregar (com o pré-carregamento desligado não transfere nada)";
 "Apri" = "Abrir";
 "Aspetto" = "Aspeto";
 "Attiva iCloud Drive nelle Impostazioni di sistema per usare questa funzione." = "Ative o iCloud Drive nas Definições do Sistema para usar esta funcionalidade.";
@@ -101,8 +101,7 @@
 "INIZIATA" = "INICIADO";
 "Intensità" = "Intensidade";
 "Ignora" = "Ignorar";
-"Invia subito i progressi di questo device e scarica quelli degli altri (anche i fumetti iCloud, non solo remoti)." = "Envie agora o progresso de leitura deste dispositivo e transfira o progresso dos outros dispositivos, incluindo as bandas desenhadas do iCloud.";
-"L'upscaling migliora le pagine a bassa risoluzione con un filtro di qualità superiore al semplice ridimensionamento. Il ritaglio bordi rimuove automaticamente i margini bianchi delle scansioni." = "O aumento de resolução melhora páginas de baixa resolução com um filtro de maior qualidade do que o redimensionamento simples. «Recortar margens brancas» remove automaticamente as margens brancas das digitalizações.";
+"Invia subito i progressi di lettura di questo dispositivo e scarica quelli degli altri." = "Envia já o progresso de leitura deste dispositivo e transfere o dos outros.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati." = "Deixe em branco para usar a chave automática. Se a mesma partilha estiver configurada de forma diferente noutros dispositivos (por exemplo, com um endereço IP num e um nome .local noutro), introduza a mesma palavra em todos para associar o progresso de leitura.";
 "Lascia vuoto per la chiave automatica. Se lo stesso share è configurato diversamente sugli altri dispositivi (es. IP su uno, nome .local sull'altro), scrivi qui la stessa parola su tutti e i progressi verranno abbinati. La struttura delle cartelle dentro lo share deve comunque coincidere." = "Deixe em branco para usar a chave automática. Se a mesma partilha estiver configurada de forma diferente noutros dispositivos (por exemplo, com um endereço IP num e um nome .local noutro), introduza a mesma palavra em todos para associar o progresso de leitura. A estrutura de pastas dentro da partilha também tem de ser igual.";
 "Lenta" = "Lenta";
@@ -119,14 +118,13 @@
 "Non serve indovinare il nome: premi il pulsante con le credenziali compilate e scegli dall'elenco reale del NAS." = "Não precisa de adivinhar o nome: introduza as credenciais, toque no botão e escolha na lista do próprio NAS.";
 "Nuovi" = "Novas";
 "Ora in lettura" = "A ler agora";
-"Ordinamento pagine" = "Ordem das páginas";
 "Pagina %@ di %@" = "Página %@ de %@";
 "Pagina %@ su un altro dispositivo" = "Página %@ noutro dispositivo";
 "Percorso: Impostazioni → App → Chunky → \"Rete locale\"." = "Aceda a Definições → Apps → Chunky → «Rede local».";
 "Percorso: Impostazioni → Privacy e sicurezza → Rete locale → Chunky." = "Aceda a Definições → Privacidade e segurança → Rede local → Chunky.";
 "Percorso: Impostazioni di Sistema → Privacy e sicurezza → Rete locale → Chunky." = "Aceda a Definições do Sistema → Privacidade e segurança → Rede local → Chunky.";
 "Personalizza i colori della libreria. \"Predefinito\" segue la modalità chiara/scura di sistema." = "Personalize as cores da biblioteca. «Predefinido» segue o aspeto claro ou escuro do sistema.";
-"Personalizza i colori della libreria. Lascia \"Automatico\" per seguire la modalità chiara/scura di sistema." = "Personalize as cores da biblioteca. Mantenha «Automático» para seguir o aspeto claro ou escuro do sistema.";
+"Personalizza i colori della libreria. La freccia accanto a un colore lo riporta a quello di sistema, che segue la modalità chiara/scura." = "Personalize as cores da biblioteca. A seta junto a uma cor repõe a do sistema, que segue o modo claro/escuro.";
 "Potrebbe essere stato rimosso dalla libreria." = "Pode ter sido removida da biblioteca.";
 "Privacy" = "Privacidade";
 "Qualità immagine" = "Qualidade de imagem";
@@ -140,8 +138,7 @@
 "Serve l'accesso alla rete locale: Impostazioni → App → Chunky → \"Rete locale\". Torna qui dopo averlo attivato." = "É necessária autorização para a rede local. Aceda a Definições → Apps → Chunky → «Rede local» e volte aqui.";
 "Server" = "Servidor";
 "Server locale" = "Servidor local";
-"Server web spento" = "Servidor Web desativado";
-"Si applica ai nuovi fumetti importati. Puoi comunque cambiare la direzione per ogni fumetto dal lettore." = "Aplica-se às bandas desenhadas importadas a partir de agora. Pode alterar a direção de cada banda desenhada no leitor.";
+"La direzione predefinita si applica ai nuovi fumetti importati. Puoi comunque cambiarla per ogni fumetto dal lettore." = "A direção predefinida aplica-se às novas BD importadas. Pode alterá-la para cada BD no leitor.";
 "Si è verificato un problema con l'archivio dati locale. Prova a toccare Riprova (spesso basta, se era la rete); se il problema persiste, condividi il log per l'assistenza: la libreria potrebbe dover essere ricreata." = "Ocorreu um problema no armazenamento de dados local. Toque em «Tentar novamente» (normalmente basta se o problema for da rede). Se o problema persistir, partilhe o registo com o suporte; pode ser necessário reconstruir a biblioteca.";
 "Sincronizzazione progressi" = "Sincronização do progresso de leitura";
 "Sovrappone una leggera tinta alle pagine mentre leggi: utile per correggere pagine ingiallite o per una modalità notte più riposante." = "Aplica uma tonalidade ligeira às páginas enquanto lê. Útil para corrigir páginas amareladas ou criar um modo noturno mais confortável.";
@@ -149,11 +146,11 @@
 "Strumenti" = "Ferramentas";
 "Sync Folder" = "Pasta de sincronização";
 "Tint pagina (lettore)" = "Tonalidade das páginas (leitor)";
-"Mostra solo i fumetti scaricati sul device" = "Mostrar apenas bandas desenhadas transferidas para este dispositivo";
+"Mostra solo i fumetti scaricati su questo dispositivo" = "Mostrar apenas bandas desenhadas transferidas para este dispositivo";
 "Download in corso" = "A transferir";
 "Tipo di account" = "Tipo de conta";
 "Tocca il NAS in \"Trovati in rete\" se compare, altrimenti scrivi l'indirizzo a mano. Poi premi \"Sfoglia condivisioni\" e scegli dall'elenco reale del NAS." = "Toque no NAS em «Encontrados na rede», se aparecer, ou introduza o endereço manualmente. Depois, toque em «Procurar partilhas» e escolha na lista do próprio NAS.";
-"Tocca il NAS se compare sopra, altrimenti scrivi l'indirizzo a mano (es. 192.168.1.10). Alla prima ricerca l'iPhone chiede \"Rete locale\": serve Consenti, altrimenti blocca tutto qui." = "Toque no NAS acima, se aparecer, ou introduza o endereço manualmente (por exemplo, 192.168.1.10). A primeira pesquisa pede autorização para a rede local no iPhone; toque em Permitir ou a pesquisa será bloqueada.";
+"Scegli il NAS se compare sopra, altrimenti scrivi l'indirizzo a mano (es. 192.168.1.10). Alla prima ricerca il sistema chiede l'accesso alla \"Rete locale\": scegli Consenti, altrimenti Chunky non può raggiungere il NAS." = "Escolha o NAS se aparecer acima; caso contrário, escreva o endereço (ex. 192.168.1.10). Na primeira pesquisa, o sistema pede acesso à \"Rede local\": escolha Permitir, senão o Chunky não consegue chegar ao NAS.";
 "Trascina per selezionare un'area da condividere" = "Arraste para selecionar uma área para partilhar";
 "Trovati in rete" = "Encontrados na rede";
 "TUTTI I FUMETTI (%@)" = "TODAS AS BANDAS DESENHADAS (%@)";
@@ -235,13 +232,12 @@
 "Chiave" = "Chave";
 "Salva" = "Guardar";
 "In doppia pagina, mostra sempre la prima pagina (di solito la copertina) da sola invece che affiancata alla seconda. L'accoppiamento a due pagine riprende dalla seconda pagina in poi." = "No modo de duas páginas, mostra sempre a primeira página (normalmente a capa) sozinha, em vez de a colocar ao lado da segunda. As páginas duplas começam na página dois.";
-"Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per le impostazioni, in basso a destra per alternare la doppia pagina." = "Use os cantos para aceder aos controlos mais usados sem mostrar a barra de ferramentas. Toque no canto superior esquerdo para sair do leitor, no superior direito para abrir as definições ou no inferior direito para alternar o modo de duas páginas.";
+"Angoli per raggiungere velocemente alcuni controlli comuni senza richiamare i controlli. Tocca l'angolo in alto a sinistra per uscire dalla lettura, in alto a destra per gli strumenti, in basso a destra per alternare la doppia pagina." = "Cantos para chegar depressa a controlos comuns sem mostrar a barra. Toque no canto superior esquerdo para sair do leitor, no superior direito para as ferramentas e no inferior direito para alternar a página dupla.";
 "Se attivo, puoi regolare la luminosità dello schermo trascinando su e giù con due dita nella vista di lettura." = "Quando ativada, arraste para cima ou para baixo com dois dedos no leitor para ajustar o brilho do ecrã.";
 "Ritaglia i margini bianchi dei fumetti per sfruttare al meglio lo spazio sullo schermo." = "Recorta as margens brancas da banda desenhada para aproveitar melhor o ecrã.";
 "Corregge pagine ingiallite e inchiostro sbiadito. Lascialo disattivato per fumetti già di buona qualità." = "Corrige páginas amareladas e tinta desbotada. Mantenha desativada para bandas desenhadas que já tenham boa qualidade.";
-"Migliora in modo intelligente la nitidezza delle tavole nei fumetti a bassa risoluzione." = "Aumenta a nitidez de forma inteligente nas ilustrações de bandas desenhadas de baixa resolução.";
+"Ingrandisce le pagine a bassa risoluzione con un filtro di qualità invece del semplice ridimensionamento, per tavole più nitide." = "Amplia as páginas de baixa resolução com um filtro de qualidade em vez de um simples redimensionamento, para pranchas mais nítidas.";
 "Crea una cartella Chunky nella tua iCloud Drive.\nI fumetti che ci metti dentro restano sincronizzati con la tua libreria.\n\nSe li cancelli da Chunky, vengono cancellati anche da iCloud Drive." = "Cria uma pasta Chunky no iCloud Drive. As bandas desenhadas aí guardadas permanecem sincronizadas com a biblioteca.\n\nEliminá-las no Chunky também as elimina do iCloud Drive.";
-"Se le pagine di un fumetto appaiono in un ordine strano (es. le doppie pagine finiscono in fondo), questa impostazione può aiutare a risolvere il problema. Per avere effetto devi uscire e rientrare nella lettura." = "Se as páginas de uma banda desenhada aparecerem na ordem errada (por exemplo, páginas duplas no fim), esta opção pode ajudar. Feche e volte a abrir a banda desenhada para aplicar a alteração.";
 "Colori" = "Cores";
 "Blocco genitori" = "Bloqueio parental";
 "Diagnostica" = "Diagnóstico";
@@ -439,7 +435,7 @@
 "Segna come visti" = "Marcar como vistos";
 "Seleziona il NAS in \"Trovati in rete\" se compare, altrimenti scrivi l'indirizzo a mano. Poi premi \"Sfoglia condivisioni\" e scegli dall'elenco reale del NAS." = "Selecione o NAS em «Encontrados na rede», se aparecer; caso contrário, escreva o endereço. Depois, escolha «Procurar partilhas» e selecione na lista do próprio NAS.";
 "Sfoglia condivisioni" = "Procurar partilhas";
-"Si applica ai nuovi fumetti importati. Puoi comunque cambiare la direzione per ogni fumetto dal lettore, con il pulsante Info." = "Aplica-se às bandas desenhadas importadas a partir de agora. Pode mudar a direção de cada banda desenhada no leitor, com o botão ⓘ.";
+"La direzione predefinita si applica ai nuovi fumetti importati. Puoi comunque cambiarla per ogni fumetto dal lettore, con il pulsante Info." = "A direção predefinida aplica-se às novas BD importadas. Pode alterá-la para cada BD no leitor, com o botão Info.";
 "Si è verificato un problema con l'archivio dati locale. Seleziona Riprova (spesso basta, se era la rete); se il problema persiste, annota il dettaglio qui sotto per l'assistenza: la libreria potrebbe dover essere ricreata." = "Ocorreu um problema com o armazenamento de dados local. Selecione Tentar novamente (muitas vezes basta, se foi a rede); se o problema persistir, anote o detalhe abaixo para o suporte: a biblioteca pode ter de ser recriada.";
 "Sincronizzazione…" = "A sincronizar…";
 "Sinistra e destra cambiano pagina, Play/Pausa o Select ingrandiscono e tornano alla pagina intera" = "Esquerda e direita mudam de página; Reproduzir/Pausa ou Selecionar ampliam e voltam à página inteira.";
@@ -494,3 +490,5 @@
 "Mostra gli account in «Tutti i fumetti»" = "Mostrar as contas em «Todas as bandas desenhadas»";
 "Supporto" = "Suporte";
 "Libreria e sincronizzazione" = "Biblioteca e sincronização";
+
+"Carica fumetti da un browser" = "Carregue BD a partir de um navegador";
