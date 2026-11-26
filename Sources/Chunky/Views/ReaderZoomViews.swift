@@ -30,6 +30,28 @@ import UIKit
 /// Several `PageView`s can be alive at the same time (the pager caches adjacent pages for
 /// smooth swiping): each recognizer only acts if the gesture's point falls within its own
 /// scroll view's bounds, so only the page that's actually visible responds.
+private extension UIScrollView {
+    /// Centers content smaller than the viewport with `contentInset`, never by moving the zoomed
+    /// view's frame. A centering offset baked into the frame got scaled along with the zoom while
+    /// `contentSize` didn't include it, so part of the page (usually the bottom or the right edge)
+    /// ended up outside the scrollable range and could never be reached by panning.
+    func centerContentWithInsets() {
+        let horizontal = max((bounds.width - contentSize.width) / 2, 0)
+        let vertical = max((bounds.height - contentSize.height) / 2, 0)
+        let insets = UIEdgeInsets(top: vertical, left: horizontal, bottom: vertical, right: horizontal)
+        if contentInset != insets { contentInset = insets }
+    }
+
+    /// `offset` clamped to the scrollable range, insets included.
+    func clampedContentOffset(_ offset: CGPoint) -> CGPoint {
+        let minX = -contentInset.left
+        let minY = -contentInset.top
+        let maxX = max(contentSize.width - bounds.width + contentInset.right, minX)
+        let maxY = max(contentSize.height - bounds.height + contentInset.bottom, minY)
+        return CGPoint(x: min(max(offset.x, minX), maxX), y: min(max(offset.y, minY), maxY))
+    }
+}
+
 private final class ZoomingScrollView: UIScrollView {
     weak var coordinator: ZoomableImageView.Coordinator?
 
@@ -266,27 +288,24 @@ struct ZoomableImageView: UIViewRepresentable {
             } else {
                 fitSize.height = boundsSize.width / aspect
             }
-            if imageView.bounds.size != fitSize {
-                imageView.bounds = CGRect(origin: .zero, size: fitSize)
+            if imageView.frame != CGRect(origin: .zero, size: fitSize) {
+                imageView.frame = CGRect(origin: .zero, size: fitSize)
                 scrollView.contentSize = fitSize
             }
-            center(imageView, in: scrollView)
-        }
-
-        private func center(_ imageView: UIImageView, in scrollView: UIScrollView) {
-            let boundsSize = scrollView.bounds.size
-            var frame = imageView.frame
-            frame.origin.x = frame.width < boundsSize.width ? (boundsSize.width - frame.width) / 2 : 0
-            frame.origin.y = frame.height < boundsSize.height ? (boundsSize.height - frame.height) / 2 : 0
-            imageView.frame = frame
+            scrollView.centerContentWithInsets()
+            scrollView.contentOffset = scrollView.clampedContentOffset(scrollView.contentOffset)
         }
 
         func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
 
         func scrollViewDidZoom(_ scrollView: UIScrollView) {
-            // Only when not zoomed: while zoomed, re-centering here would fight against the
-            // user's pan exactly as in `layOutImage` — see the comment there.
-            if let imageView, scrollView.zoomScale <= 1.01 { center(imageView, in: scrollView) }
+            // At every scale: the insets only depend on how the content compares with the
+            // viewport, so (unlike the old frame shift) they never fight the user's pan.
+            scrollView.centerContentWithInsets()
+            // A pinch sets `zoomScale` directly: when the page shrinks back, the old offset can
+            // fall outside the new range, leaving the page off-centre or showing empty space.
+            let clamped = scrollView.clampedContentOffset(scrollView.contentOffset)
+            if clamped != scrollView.contentOffset { scrollView.contentOffset = clamped }
             let zoomed = scrollView.zoomScale > 1.01
             if isZoomed.wrappedValue != zoomed { isZoomed.wrappedValue = zoomed }
         }
@@ -336,11 +355,7 @@ struct ZoomableImageView: UIViewRepresentable {
                 var offset = scrollView.contentOffset
                 offset.x -= translation.x
                 offset.y -= translation.y
-                let maxX = max(scrollView.contentSize.width - scrollView.bounds.width, 0)
-                let maxY = max(scrollView.contentSize.height - scrollView.bounds.height, 0)
-                offset.x = min(max(offset.x, 0), maxX)
-                offset.y = min(max(offset.y, 0), maxY)
-                scrollView.contentOffset = offset
+                scrollView.contentOffset = scrollView.clampedContentOffset(offset)
                 recognizer.setTranslation(.zero, in: scrollView)
             default:
                 break
@@ -504,25 +519,23 @@ struct SpreadZoomableImageView: UIViewRepresentable {
             trailingImageView.frame = CGRect(x: leadingWidth, y: 0, width: trailingWidth, height: boundsHeight)
 
             let contentSize = CGSize(width: leadingWidth + trailingWidth, height: boundsHeight)
-            if container.bounds.size != contentSize {
-                container.bounds = CGRect(origin: .zero, size: contentSize)
+            if container.frame != CGRect(origin: .zero, size: contentSize) {
+                container.frame = CGRect(origin: .zero, size: contentSize)
                 scrollView.contentSize = contentSize
             }
-            center(container, in: scrollView)
-        }
-
-        private func center(_ container: UIView, in scrollView: UIScrollView) {
-            let boundsSize = scrollView.bounds.size
-            var frame = container.frame
-            frame.origin.x = frame.width < boundsSize.width ? (boundsSize.width - frame.width) / 2 : 0
-            frame.origin.y = frame.height < boundsSize.height ? (boundsSize.height - frame.height) / 2 : 0
-            container.frame = frame
+            scrollView.centerContentWithInsets()
+            scrollView.contentOffset = scrollView.clampedContentOffset(scrollView.contentOffset)
         }
 
         func viewForZooming(in scrollView: UIScrollView) -> UIView? { container }
 
         func scrollViewDidZoom(_ scrollView: UIScrollView) {
-            if let container, scrollView.zoomScale <= 1.01 { center(container, in: scrollView) }
+            // See `ZoomableImageView.Coordinator.scrollViewDidZoom`.
+            scrollView.centerContentWithInsets()
+            // A pinch sets `zoomScale` directly: when the page shrinks back, the old offset can
+            // fall outside the new range, leaving the page off-centre or showing empty space.
+            let clamped = scrollView.clampedContentOffset(scrollView.contentOffset)
+            if clamped != scrollView.contentOffset { scrollView.contentOffset = clamped }
             let zoomed = scrollView.zoomScale > 1.01
             if isZoomed.wrappedValue != zoomed { isZoomed.wrappedValue = zoomed }
         }
@@ -569,11 +582,7 @@ struct SpreadZoomableImageView: UIViewRepresentable {
                 var offset = scrollView.contentOffset
                 offset.x -= translation.x
                 offset.y -= translation.y
-                let maxX = max(scrollView.contentSize.width - scrollView.bounds.width, 0)
-                let maxY = max(scrollView.contentSize.height - scrollView.bounds.height, 0)
-                offset.x = min(max(offset.x, 0), maxX)
-                offset.y = min(max(offset.y, 0), maxY)
-                scrollView.contentOffset = offset
+                scrollView.contentOffset = scrollView.clampedContentOffset(offset)
                 recognizer.setTranslation(.zero, in: scrollView)
             default:
                 break
