@@ -130,6 +130,10 @@ struct ReaderContentView: View {
     /// local page hasn't followed it. Shown as a "Vai alla pagina" banner instead of
     /// jumping automatically — see `handleRemotePageChange`.
     @State var pendingRemotePage: Int?
+    /// Progress this reader last recorded itself (page and `dateLastOpened`). A remote change
+    /// that isn't newer than it is this device's own progress coming back stale, typically
+    /// bounced off another device through the Core Data mirror: see `handleRemotePageChange`.
+    @State var localProgress: (page: Int32, date: Date)?
     /// Throttles `context.save()` while paging: every page turn updates `lastReadPage`
     /// in memory immediately, but persisting (and therefore enqueueing a CloudKit
     /// export transaction) happens at most every few seconds, plus a guaranteed flush
@@ -607,7 +611,9 @@ struct ReaderContentView: View {
             #else
             comic.lastReadPage = Int32(min(max(newValue, 0), provider.pageCount - 1))
             #endif
-            comic.dateLastOpened = Date()
+            let now = Date()
+            comic.dateLastOpened = now
+            localProgress = (comic.lastReadPage, now)
             scheduleProgressSave(page: Int(comic.lastReadPage))
             // Cross-device progress for remote-library comics (no-op for local ones):
             // `Task { @MainActor in }` because `onChange` is a synchronous context.
@@ -1027,8 +1033,22 @@ struct ReaderContentView: View {
     /// `loadComic`, so without this the reader would keep showing the old page until
     /// exit/reopen. Local page turns already set both to the same value, so they fall
     /// into the `target == currentPage` early return and never raise the banner.
+    ///
+    /// Not every such change is another device's reading, though. When the iPad's own
+    /// progress reaches another device, that device writes it into its row, and the Core
+    /// Data mirror sends that row back here, possibly after the user has already turned
+    /// more pages. It then carries an older page *and* an older `dateLastOpened` than the
+    /// one this reader recorded, so it is undone instead of offered as "go back".
     private func handleRemotePageChange(_ newRemote: Int) {
         guard let provider, provider.pageCount > 0 else { return }
+        if let local = localProgress, let incoming = comic.dateLastOpened,
+           incoming <= local.date, Int32(newRemote) != local.page {
+            comic.lastReadPage = local.page
+            comic.dateLastOpened = local.date
+            scheduleProgressSave(page: Int(local.page))
+            if pendingRemotePage != nil { pendingRemotePage = nil }
+            return
+        }
         let clamped = min(max(newRemote, 0), provider.pageCount - 1)
         let target = pagination(pageCount: provider.pageCount).realigned(clamped)
         guard target != currentPage else {
@@ -1122,6 +1142,7 @@ struct ReaderContentView: View {
         // first swipe works). Here the page count isn't known yet: alignment to the spread
         // start happens afterward, and it's a no-op in single page.
         currentPage = max(0, startingPage)
+        if let opened = comic.dateLastOpened { localProgress = (comic.lastReadPage, opened) }
 
         // The iCloud download can take more than a few seconds (large files, slow
         // connection): it goes through `ComicDownloadService`, which registers it in the

@@ -127,7 +127,9 @@ extension ReaderContentView {
         let last = Int32(max(pageCount - 1, 0))
         guard comic.lastReadPage < last else { return }
         comic.lastReadPage = last
-        comic.dateLastOpened = Date()
+        let now = Date()
+        comic.dateLastOpened = now
+        localProgress = (last, now)
         scheduleProgressSave(page: Int(last))
         Task { @MainActor in RemoteProgressSync.requestPush(comic) }
     }
