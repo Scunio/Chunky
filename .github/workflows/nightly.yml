@@ -71,8 +71,33 @@ jobs:
             xcrun simctl list devices available
             exit 1
           fi
-          echo "Simulatore scelto: $name"
-          echo "DESTINATION=platform=iOS Simulator,name=$name,OS=latest" >> "$GITHUB_ENV"
+          # Lo stesso nome esiste in più runtime: si prende il simulatore del runtime più
+          # recente, confrontando le versioni come numeri ("18-10" dopo "18-5").
+          udid=$(xcrun simctl list devices available -j \
+            | jq -r --arg n "$name" '[.devices | to_entries[]
+                | select(.key | test("iOS")) | .key as $rt | .value[]
+                | select(.name == $n)
+                | {udid, v: ($rt | capture("iOS-(?<v>[0-9-]+)").v | split("-") | map(tonumber))}]
+              | sort_by(.v) | last | .udid // empty')
+          if [ -z "$udid" ]; then
+            echo "::error::Nessun UDID per il simulatore '$name'"
+            exit 1
+          fi
+          echo "Simulatore scelto: $name ($udid)"
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+          # Per UDID e non per nome: i test devono girare sul simulatore acceso al passo dopo.
+          echo "DESTINATION=platform=iOS Simulator,id=$udid" >> "$GITHUB_ENV"
+
+      # Se è xcodebuild ad accendere il simulatore, il primo test paga i lavori di primo
+      # avvio del sistema: il 27/11 sull'iPad l'app non ha segnalato l'idle per 60s e
+      # XCTest ha rinunciato al lancio, mentre gli altri 4 test sono passati. Acceso qui e
+      # atteso fino al boot completo, il primo test trova un simulatore già a regime.
+      - name: Accendi il simulatore
+        if: env.SIMULATOR_UDID != ''
+        run: |
+          set -euo pipefail
+          xcrun simctl boot "$SIMULATOR_UDID" || true  # già acceso non è un errore
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
       - name: UI test
         run: |
