@@ -11,10 +11,20 @@ Commands:
       Upload one or more screenshots, appended to the set for displayType
       (e.g. APP_IPHONE_67, APP_IPAD_PRO_3GEN_129, APP_DESKTOP). Creates the
       set if it doesn't exist yet.
+  sales [from] [to]                  Downloads from the daily sales reports, per app and per month
+      (first downloads, redownloads, updates, in-app purchases). Dates are YYYY-MM-DD,
+      Pacific time like the reports; defaults to the last 30 available days.
+      Needs ASC_VENDOR_NUMBER and a key with the Sales role. Reports are cached in
+      build/sales-reports/, one file per day.
 
 Credentials come from Config/appstoreconnect.env (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH).
 """
 import base64
+import collections
+import csv
+import datetime
+import gzip
+import io
 import hashlib
 import json
 import os
@@ -223,7 +233,98 @@ def cmd_upload_screenshots(platform, version_string, locale, display_type, *file
         print(f"caricato: {file_name} -> {display_type}")
 
 
+# Product Type Identifiers of the sales reports, grouped the way App Store Connect shows them.
+# https://developer.apple.com/help/app-store-connect/reference/product-type-identifiers
+SALES_KINDS = {
+    "primi download": {"1", "1F", "1T", "F1"},
+    "ripetuti": {"3", "3F", "3T", "F3"},
+    "aggiornamenti": {"7", "7F", "7T", "F7"},
+    "in-app": {"IA1", "IA9", "IAY", "IAC", "FI1", "IA1-M", "IA9-M", "IAY-M", "IAC-M"},
+}
+SALES_CACHE = os.path.join(ROOT, "build", "sales-reports")
+
+
+def fetch_sales_day(day):
+    """Rows of the daily SALES SUMMARY report for one day, cached on disk. [] when Apple has none."""
+    os.makedirs(SALES_CACHE, exist_ok=True)
+    path = os.path.join(SALES_CACHE, f"{day}.tsv")
+    if not os.path.exists(path):
+        vendor = os.environ.get("ASC_VENDOR_NUMBER") or sys.exit(
+            f"error: manca ASC_VENDOR_NUMBER (vedi {ENV_FILE})"
+        )
+        url = (
+            f"{API_BASE}/salesReports?filter[frequency]=DAILY&filter[reportType]=SALES"
+            f"&filter[reportSubType]=SUMMARY&filter[version]=1_1"
+            f"&filter[vendorNumber]={vendor}&filter[reportDate]={day}"
+        )
+        req = urllib.request.Request(url)
+        req.add_header("Authorization", f"Bearer {make_jwt()}")
+        req.add_header("Accept", "application/a-gzip")
+        try:
+            with urllib.request.urlopen(req) as resp:
+                text = gzip.decompress(resp.read()).decode()
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            if e.code != 404:
+                print(body, file=sys.stderr)
+                raise
+            # 404 means no sales that day. Don't cache days Apple may not have published yet.
+            if day >= datetime.date.today() - datetime.timedelta(days=3):
+                return []
+            text = ""
+        with open(path, "w") as f:
+            f.write(text)
+    with open(path) as f:
+        text = f.read()
+    return list(csv.DictReader(io.StringIO(text), delimiter="\t")) if text else []
+
+
+def cmd_sales(start=None, end=None):
+    # Daily reports for day D are published the morning after (Pacific), so yesterday may be missing.
+    end_day = datetime.date.fromisoformat(end) if end else datetime.date.today() - datetime.timedelta(days=2)
+    start_day = datetime.date.fromisoformat(start) if start else end_day - datetime.timedelta(days=29)
+    if start_day > end_day:
+        sys.exit("error: la data iniziale viene dopo quella finale")
+
+    totals = collections.defaultdict(collections.Counter)    # app -> kind -> units
+    monthly = collections.defaultdict(collections.Counter)   # (app, month) -> kind -> units
+    devices = collections.defaultdict(collections.Counter)   # app -> device -> first downloads
+    other = collections.Counter()                             # unknown product types
+    day = start_day
+    while day <= end_day:
+        for row in fetch_sales_day(day):
+            app, ptype, units = row["Title"], row["Product Type Identifier"], int(row["Units"])
+            kind = next((k for k, ids in SALES_KINDS.items() if ptype in ids), None)
+            if kind is None:
+                other[ptype] += units
+                continue
+            totals[app][kind] += units
+            monthly[(app, day.strftime("%Y-%m"))][kind] += units
+            if kind == "primi download":
+                devices[app][row["Device"]] += units
+        day += datetime.timedelta(days=1)
+
+    print(f"Report vendite dal {start_day} al {end_day} (ora del Pacifico)\n")
+    kinds = list(SALES_KINDS)
+    header = f"{'':<12}" + "".join(f"{k:>16}" for k in kinds)
+    for app in sorted(totals, key=lambda a: -totals[a]["primi download"]):
+        print(app)
+        print(header)
+        for (a, month), counts in sorted(monthly.items()):
+            if a == app:
+                print(f"{month:<12}" + "".join(f"{counts[k]:>16}" for k in kinds))
+        print(f"{'totale':<12}" + "".join(f"{totals[app][k]:>16}" for k in kinds))
+        print("  primi download per dispositivo: "
+              + ", ".join(f"{d} {n}" for d, n in devices[app].most_common()))
+        print()
+    if not totals:
+        print("nessun download nel periodo")
+    if other:
+        print("tipi non classificati: " + ", ".join(f"{t} {n}" for t, n in other.most_common()))
+
+
 COMMANDS = {
+    "sales": cmd_sales,
     "get-version": cmd_get_version,
     "set-notes": cmd_set_notes,
     "set-description": cmd_set_description,
